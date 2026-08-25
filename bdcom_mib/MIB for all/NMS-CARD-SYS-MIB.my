@@ -1,0 +1,426 @@
+-- *****************************************************************
+-- NMS-CARD-SYS-MIB.my: NMS Card SYSTEM MIB
+--
+-- January 2010
+-- Edit by LIUQIANG
+-- Copyright (c) 2010 by NMS, Inc.
+-- All rights reserved.
+-- *****************************************************************
+
+
+NMS-CARD-SYS-MIB DEFINITIONS ::= BEGIN 
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE
+                                                FROM SNMPv2-SMI
+    TEXTUAL-CONVENTION, TimeStamp
+                                                FROM SNMPv2-TC
+    MODULE-COMPLIANCE, OBJECT-GROUP,
+    NOTIFICATION-GROUP                          FROM SNMPv2-CONF
+    nmsMgmt                                     FROM NMS-SMI
+    DisplayString				FROM RFC1213-MIB
+    nmscardIndex,nmscardDescr,nmscardType          FROM NMS-CHASSIS;
+
+--definition of NMS device card related operations and trap related values
+
+               cardSys         OBJECT IDENTIFIER ::= { nmsMgmt 181 }
+
+	        
+
+               cardSystemSetTable OBJECT-TYPE
+                   SYNTAX  SEQUENCE OF CardSystemSetEntry
+                   ACCESS  not-accessible
+                   STATUS  mandatory
+                   DESCRIPTION
+                            "A list of cards system related set value entries."
+                   ::= { cardSys 1 }
+
+               cardSystemSetEntry OBJECT-TYPE
+                   SYNTAX  CardSystemSetEntry
+                   ACCESS  not-accessible
+                   STATUS  mandatory
+                   DESCRIPTION
+                            "A collection of cards to be reset."
+                   INDEX { nmscardIndex }
+               ::= { cardSystemSetTable 1 }
+
+               CardSystemSetEntry ::=
+                   SEQUENCE {
+                       cardSysIndex
+                           INTEGER,
+                       cardSysDescr
+                           DisplayString,
+                       cardSysType
+                       	   INTEGER,
+                       cardCPUUtilThreshold
+                       	   INTEGER,
+                       cardMemUtilThreshold
+                       	   INTEGER,
+                       cardCPUTempThreshold
+                       	   INTEGER,
+                       cardCPUTempCurr
+                       	   INTEGER,
+                       cardCPUTempThresholdLow
+                       	   INTEGER,
+                       cardCPUTempStatus
+                       	   INTEGER,
+                       cardMemUtilThresholdMax
+                       	   INTEGER,
+                       cardSystemTemperatureNodeNumber
+                     	   INTEGER
+                  }
+
+
+               cardSysIndex OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Index into cardTable (not physical chassis
+                           slot number), the same with the nmscardIndex of nmscardTable in NMS-CHASSIS-MIB."
+                   ::= { cardSystemSetEntry 1 }
+
+               cardSysDescr OBJECT-TYPE
+                   SYNTAX  DisplayString
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "the same with the nmscardDescr of nmscardTable in NMS-CHASSIS-MIB."
+                   ::= { cardSystemSetEntry 2 }
+
+               cardSysType OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "the same with the nmscardType of nmscardTable in NMS-CHASSIS-MIB."
+                   ::= { cardSystemSetEntry 3 }
+
+               cardCPUUtilThreshold OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-write
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Card CPU utilization upper limit value."
+                   ::= { cardSystemSetEntry 4 }
+
+               cardMemUtilThreshold OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-write
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Card memory utilization upper limit value."
+                   ::= { cardSystemSetEntry 5 }
+
+
+               cardCPUTempThreshold OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-write
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Card CPU temperature upper limit value."
+                   ::= { cardSystemSetEntry 6 }
+
+               cardCPUTempCurr OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Card CPU current temperature."
+                   ::= { cardSystemSetEntry 7 }
+
+               cardCPUTempThresholdLow OBJECT-TYPE
+                   SYNTAX  INTEGER(-125..125)
+                   ACCESS  read-write
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Minimal threshold of card CPU temperature. The range is (-125~+125)."
+                   ::= { cardSystemSetEntry 8 }
+
+
+               cardCPUTempStatus OBJECT-TYPE
+                   SYNTAX  INTEGER{ 
+                                   normal(1),
+                                   alarm(2)
+                                  }
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "The card CPU temperature status, 1 means normal, 2 means alarm. "
+                   ::= { cardSystemSetEntry 9 }
+
+
+               cardMemUtilThresholdMax OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Maximal value of card memory utilization . For example, 60 means the maxmial value of memory 
+                           utilization is 60%, maximal value is 100."
+                   ::= { cardSystemSetEntry 10 }
+
+               cardSystemTemperatureNodeNumber OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Total number of  temperature Node."
+                   ::= { cardSystemSetEntry 11 }
+
+
+
+	        
+               cardElementStatus OBJECT-TYPE
+                   SYNTAX  INTEGER{
+                   		normal(1),
+                   		warning(2)
+                   }
+                   ACCESS  not-accessible
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Card element status, only use for variable binding in card system notifications."
+                   ::= { cardSys 2 }
+
+               cardElementType OBJECT-TYPE
+                   SYNTAX  INTEGER{
+                   		cpu(1),
+                   		memory(2),
+                   		cpu-temperature(3)
+                   }
+                   ACCESS  not-accessible
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Card element status, only use for variable binding in card system notifications."
+                   ::= { cardSys 3 }
+
+
+-- Notifications   --cardCPUUtil
+	cardSysNotifications OBJECT IDENTIFIER
+                                ::= { cardSys 4 }
+
+
+	cardSysNotification NOTIFICATION-TYPE
+    		OBJECTS {
+        		nmscardIndex,
+        		nmscardType,
+        		nmscardDescr,
+        		cardElementStatus,
+        		cardElementType
+    		}
+    		STATUS      current
+    		DESCRIPTION
+        	"The agent generates this notification when certain card element value exceeds upper limit defined above. "
+    		::= { cardSysNotifications 1 }
+
+
+-- cardSystemTemperatureNodeTable(板卡温度节点温度列表)
+
+
+               cardSystemTemperatureNodeTable OBJECT-TYPE
+                   SYNTAX  SEQUENCE OF CardSystemTemperatureNodeEntry
+                   ACCESS  not-accessible
+                   STATUS  mandatory
+                   DESCRIPTION
+                            "A list of cards system temparature related set value entries."
+                   ::= { cardSys 5 }
+
+               cardSystemTemperatureNodeEntry OBJECT-TYPE
+                   SYNTAX  CardSystemTemperatureNodeEntry
+                   ACCESS  not-accessible
+                   STATUS  mandatory
+                   DESCRIPTION
+                            "A collection of cards to be reset."
+                   INDEX { cardSysTempIndex, temperatureNodeIndex}
+               ::= { cardSystemTemperatureNodeTable 1 }
+
+               CardSystemTemperatureNodeEntry::=
+                   SEQUENCE {
+                       cardSysTempIndex
+                           INTEGER,
+                       temperatureNodeIndex
+                           INTEGER,
+                       temperatureNodeDescr
+                       	   DisplayString,
+                       temperatureNodeCur
+                       	   INTEGER,
+                       temperatureNodeType
+                       	   INTEGER,
+                       temperatureNodeThresholdUp
+                       	   INTEGER,
+                       temperatureNodeThresholdLow
+                       	   INTEGER,
+                       temperatureNodeStatus   
+                       	   INTEGER
+                       
+                  }
+
+
+               cardSysTempIndex OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Index of slot. "
+                   ::= { cardSystemTemperatureNodeEntry 1 }
+
+               temperatureNodeIndex OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Index of temperature node. "
+                   ::= { cardSystemTemperatureNodeEntry 2 }
+
+               temperatureNodeDescr OBJECT-TYPE
+                   SYNTAX  DisplayString
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Descript of temperature node. "
+                   ::= { cardSystemTemperatureNodeEntry 3 }
+
+               temperatureNodeCur OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Current temperature of temperature node. "
+                   ::= { cardSystemTemperatureNodeEntry 4 }
+
+               temperatureNodeType OBJECT-TYPE
+                   SYNTAX  INTEGER{
+                                    cpu(1),
+                                    switch_chip(2),
+                                    eviornment(3),
+                                    other(4)
+                                    }
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Current temperature type. "
+                   ::= { cardSystemTemperatureNodeEntry 5 }
+
+
+               temperatureNodeThresholdUp OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Current temperature of temperature node upper threshold. "
+                   ::= { cardSystemTemperatureNodeEntry 6 }
+
+
+               temperatureNodeThresholdLow OBJECT-TYPE
+                   SYNTAX  INTEGER
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Current temperature of temperature node lower threshold. "
+                   ::= { cardSystemTemperatureNodeEntry 7 }
+                   
+               temperatureNodeStatus OBJECT-TYPE
+                   SYNTAX  INTEGER{
+                   	            normal(1),
+                   	            upper(2),
+                   	            lower(3)
+                                   }
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Current temperature of temperature node status. "
+                   ::= { cardSystemTemperatureNodeEntry 8 }
+                   
+               
+
+
+
+-- Notifications   --temperature
+	sysTempNotifications OBJECT IDENTIFIER
+                                ::= { cardSys 6 }
+
+
+	sysTempNotification NOTIFICATION-TYPE
+    		OBJECTS {
+        		cardSysTempIndex,
+        		temperatureNodeIndex,
+        		temperatureNodeDescr,
+        		temperatureNodeCur,
+        		cardElementType
+    		}
+    		STATUS      current
+    		DESCRIPTION
+        	"The agent generates this notification when certain temperature value exceeds upper/lower limit defined above. "
+    		::= { sysTempNotifications 1 }
+
+-- Notifications --PHY
+
+	phy OBJECT IDENTIFIER   ::= { cardSys 7 }
+
+               phyStatus OBJECT-TYPE
+                   SYNTAX  INTEGER{
+                   	            normal(1),
+                   	            warning(2)
+                                   }
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "Current temperature of PHY status. "
+                   ::= { phy 1 }
+	phyNotifications OBJECT IDENTIFIER  ::= { phy 2 }
+
+	phyStatusNotification NOTIFICATION-TYPE
+    		OBJECTS {
+        		ifIndex,
+        		ifDescr,
+        		phyStatus
+        		}
+    		STATUS      current
+    		DESCRIPTION
+        	"The agent generates this notification when PHY is abnormal or its status changed. "
+    		::= { phyNotifications 1 }                     
+    		
+    		
+
+              phyStatusTable OBJECT-TYPE
+                   SYNTAX  SEQUENCE OF PhyStatusEntry
+                   ACCESS  not-accessible
+                   STATUS  mandatory
+                   DESCRIPTION
+                            "A list of cards system temparature related set value entries."
+                   ::= { phy 3 }
+
+               phyStatusEntry OBJECT-TYPE
+                   SYNTAX  PhyStatusEntry
+                   ACCESS  not-accessible
+                   STATUS  mandatory
+                   DESCRIPTION
+                            "A collection of cards to be reset."
+                   INDEX { ifIndex}
+               ::= { phyStatusTable 1 }
+
+               PhyStatusEntry::=
+                   SEQUENCE {
+                            phyStatusForPort    
+                               INTEGER
+                                     }
+
+
+               phyStatusForPort OBJECT-TYPE
+                   SYNTAX  INTEGER{
+                   	            normal(1),
+                   	            warning(2)
+                                   }
+                   ACCESS  read-only
+                   STATUS  mandatory
+                   DESCRIPTION
+                           "PHY Status. "
+                   ::= { phyStatusEntry 1 }
+
+    		
+
+
+
+    		
+
+
+END
