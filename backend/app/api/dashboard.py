@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+import asyncio
 import re
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,12 +108,22 @@ async def dashboard_summary(db: AsyncSession = Depends(get_db)):
     # router's MAC learned on the PON port) resolved to its vendor brand.
     brand_counts: dict[str, int] = {}
     if onus:
-        brand_map = await vendor_map(db, (o.last_mac or o.mac for o in onus))
-        for o in onus:
-            mac = o.last_mac or o.mac
-            brand = brand_map.get(mac.lower(), "") if mac else ""
-            if brand:
-                brand_counts[brand] = brand_counts.get(brand, 0) + 1
+        try:
+            brand_map = await asyncio.wait_for(
+                vendor_map(db, (o.last_mac or o.mac for o in onus)),
+                timeout=5.0,
+            )
+            for o in onus:
+                mac = o.last_mac or o.mac
+                brand = brand_map.get(mac.lower(), "") if mac else ""
+                if brand:
+                    brand_counts[brand] = brand_counts.get(brand, 0) + 1
+        except (asyncio.TimeoutError, Exception):
+            brand_map = {}
+            for o in onus:
+                mac = o.last_mac or o.mac
+                if mac:
+                    brand_counts["Unknown"] = brand_counts.get("Unknown", 0) + 1
     brand_total = sum(brand_counts.values())
     router_brands = [
         BrandBucket(

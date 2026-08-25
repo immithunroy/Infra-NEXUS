@@ -44,7 +44,7 @@ function SparkLine({ data, width = 200, height = 40 }: { data: [number, string][
   const color = avg > -20 ? "#22c55e" : avg > -24 ? "#f59e0b" : "#ef4444";
   const areaPath = `M${pts[0]} ` + pts.slice(1).map((p) => `L${p}`).join(" ") + ` L${pad + w},${pad + h} L${pad},${pad + h} Z`;
   return (
-    <svg width={width} height={height} className="block">
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} className="block">
       <defs>
         <linearGradient id={`sg-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.3" />
@@ -723,7 +723,7 @@ export default function Dashboard() {
                       {d.avg_rx !== null ? d.avg_rx.toFixed(1) : "—"} <span className="text-sm font-normal">dBm</span>
                     </p>
                     <p className="text-[10px] text-slate-400 dark:text-slate-500">{d.samples.toLocaleString()} samples</p>
-                    <SparkLine data={d.sparkline} width={100} height={24} />
+                    <SparkLine data={d.sparkline} width={160} height={32} />
                   </div>
                 );
               })}
