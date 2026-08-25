@@ -1598,18 +1598,20 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         className: "",
         html: `<div style="position:relative;width:27px;height:27px">
           <svg viewBox="0 0 36 36" width="27" height="27" fill="none">
-            <rect x="8" y="6" width="20" height="28" rx="2" fill="#ea580c" stroke="#fed7aa" stroke-width="1.5"/>
-            <rect x="12" y="2" width="12" height="6" rx="2" fill="#c2410c" stroke="#fed7aa" stroke-width="1"/>
-            <rect x="11" y="10" width="6" height="5" rx="1" fill="#fb923c"/>
-            <rect x="19" y="10" width="6" height="5" rx="1" fill="#fb923c"/>
-            <rect x="11" y="17" width="6" height="5" rx="1" fill="#fb923c"/>
-            <rect x="19" y="17" width="6" height="5" rx="1" fill="#fb923c"/>
-            <rect x="11" y="24" width="6" height="5" rx="1" fill="#f97316"/>
-            <rect x="19" y="24" width="6" height="5" rx="1" fill="#f97316"/>
-            <circle cx="14" cy="12.5" r="1" fill="#22c55e"/>
-            <circle cx="22" cy="12.5" r="1" fill="#22c55e"/>
-            <circle cx="14" cy="19.5" r="1" fill="#22c55e"/>
-            <circle cx="22" cy="19.5" r="1" fill="#facc15"/>
+            <polygon points="18,1 22,14 14,14" fill="#ea580c" stroke="#fed7aa" stroke-width="1"/>
+            <rect x="16" y="14" width="4" height="16" fill="#c2410c"/>
+            <circle cx="18" cy="5" r="3" fill="#fb923c" stroke="#fff" stroke-width="0.8"/>
+            <circle cx="18" cy="5" r="1.2" fill="#22c55e"/>
+            <line x1="10" y1="10" x2="18" y2="5" stroke="#f97316" stroke-width="1" stroke-dasharray="2,1"/>
+            <line x1="26" y1="10" x2="18" y2="5" stroke="#f97316" stroke-width="1" stroke-dasharray="2,1"/>
+            <line x1="6" y1="14" x2="18" y2="5" stroke="#f97316" stroke-width="0.8" stroke-dasharray="2,1"/>
+            <line x1="30" y1="14" x2="18" y2="5" stroke="#f97316" stroke-width="0.8" stroke-dasharray="2,1"/>
+            <rect x="10" y="30" width="16" height="4" rx="1" fill="#ea580c" stroke="#fed7aa" stroke-width="0.8"/>
+            <rect x="14" y="14" width="8" height="6" rx="1" fill="#f97316"/>
+            <rect x="15" y="15.5" width="2.5" height="1" rx="0.5" fill="#fdba74"/>
+            <rect x="15" y="17.5" width="2.5" height="1" rx="0.5" fill="#fdba74"/>
+            <rect x="18.5" y="15.5" width="2.5" height="1" rx="0.5" fill="#fdba74"/>
+            <rect x="18.5" y="17.5" width="2.5" height="1" rx="0.5" fill="#fdba74"/>
           </svg>
         </div>`,
         iconSize: [27, 27],

@@ -226,6 +226,18 @@ export interface SignalBucket {
   count: number;
 }
 
+export interface OpticalAverage {
+  avg_rx: number | null;
+  samples: number;
+  sparkline: [number, string][];
+}
+
+export interface OpticalAverages {
+  "1d": OpticalAverage;
+  "1m": OpticalAverage;
+  "3m": OpticalAverage;
+}
+
 export interface WeakOnu {
   olt_id: number;
   olt_name: string;

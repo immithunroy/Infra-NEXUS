@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, downloadFile } from "../api/client";
-import { BrandBucket, DashboardSummary, MassDownPort, OltUsage, PortUsage, WeakOnu, WeakSignalReport } from "../api/types";
+import { BrandBucket, DashboardSummary, MassDownPort, OpticalAverages, OltUsage, PortUsage, WeakOnu, WeakSignalReport } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
 import { fmtTime } from "../lib/time";
 
@@ -23,6 +23,37 @@ function GlowBar({ p, height = "h-2" }: { p: number; height?: string }) {
         style={{ width: `${Math.max(p, 2)}%` }}
       />
     </div>
+  );
+}
+
+function SparkLine({ data, width = 200, height = 40 }: { data: [number, string][]; width?: number; height?: number }) {
+  if (data.length < 2) return null;
+  const vals = data.map((d) => d[0]);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const range = max - min || 1;
+  const pad = 4;
+  const w = width - pad * 2;
+  const h = height - pad * 2;
+  const pts = vals.map((v, i) => {
+    const x = pad + (i / (vals.length - 1)) * w;
+    const y = pad + h - ((v - min) / range) * h;
+    return `${x},${y}`;
+  });
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const color = avg > -20 ? "#22c55e" : avg > -24 ? "#f59e0b" : "#ef4444";
+  const areaPath = `M${pts[0]} ` + pts.slice(1).map((p) => `L${p}`).join(" ") + ` L${pad + w},${pad + h} L${pad},${pad + h} Z`;
+  return (
+    <svg width={width} height={height} className="block">
+      <defs>
+        <linearGradient id={`sg-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#sg-${color.replace("#", "")})`} />
+      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -493,6 +524,7 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [liveMassDowns, setLiveMassDowns] = useState<MassDownPort[]>([]);
   const [massDownsUpdated, setMassDownsUpdated] = useState<Date | null>(null);
+  const [optAvg, setOptAvg] = useState<OpticalAverages | null>(null);
 
   const load = useCallback(() => {
     api.get<DashboardSummary>("/dashboard").then(setData).catch((e) => setError(String(e)));
@@ -504,13 +536,19 @@ export default function Dashboard() {
     setMassDownsUpdated(new Date());
   }, []);
 
+  const loadOptAvg = useCallback(() => {
+    api.get<OpticalAverages>("/dashboard/optical-averages").then(setOptAvg).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     load();
     loadMassDowns();
+    loadOptAvg();
     const dashId = setInterval(load, 60000);
-    const massId = setInterval(loadMassDowns, 300000); // 5 minutes
-    return () => { clearInterval(dashId); clearInterval(massId); };
-  }, [load, loadMassDowns]);
+    const massId = setInterval(loadMassDowns, 300000);
+    const optId = setInterval(loadOptAvg, 300000);
+    return () => { clearInterval(dashId); clearInterval(massId); clearInterval(optId); };
+  }, [load, loadMassDowns, loadOptAvg]);
 
   const stateSegments = useMemo(() => {
     if (!data) return [];
@@ -672,6 +710,25 @@ export default function Dashboard() {
         <div className="card p-5">
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">ONU State Distribution</h3>
           <Donut segments={stateSegments} center={String(data.onu_total)} sub="total ONUs" />
+          {optAvg && (
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {(["1d", "1m", "3m"] as const).map((key) => {
+                const label = key === "1d" ? "1 Day" : key === "1m" ? "1 Month" : "3 Months";
+                const d = optAvg[key];
+                const color = d.avg_rx === null ? "text-slate-400" : d.avg_rx > -20 ? "text-emerald-500" : d.avg_rx > -24 ? "text-amber-500" : "text-red-500";
+                return (
+                  <div key={key} className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
+                    <p className={`mt-1 text-2xl font-bold ${color}`}>
+                      {d.avg_rx !== null ? d.avg_rx.toFixed(1) : "—"} <span className="text-sm font-normal">dBm</span>
+                    </p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{d.samples.toLocaleString()} samples</p>
+                    <SparkLine data={d.sparkline} width={100} height={24} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="card p-5">

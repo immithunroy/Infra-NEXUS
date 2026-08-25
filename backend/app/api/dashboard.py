@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import Binding, MacEntry, MikrotikDevice, OLTDevice, Onu, OnuOutage, PppActiveEntry, PortArea, ScanLog, User
+from ..models import Binding, MacEntry, MikrotikDevice, OLTDevice, Onu, OnuOutage, OnuTelemetry, PppActiveEntry, PortArea, ScanLog, User
 from ..schemas import BrandBucket, DashboardSummary, MassDownPort, OltUsage, PortUsage, ScanLogOut, SignalBucket, WeakOnu
 from ..security import get_current_user
 from ..services.mac_vendor import vendor_map
@@ -243,3 +243,51 @@ async def live_mass_downs(db: AsyncSession = Depends(get_db)):
 async def list_scans(limit: int = 50, db: AsyncSession = Depends(get_db)):
     q = select(ScanLog).order_by(ScanLog.started_at.desc()).limit(min(limit, 500))
     return (await db.execute(q)).scalars().all()
+
+
+@router.get("/dashboard/optical-averages")
+async def optical_averages(db: AsyncSession = Depends(get_db)):
+    from datetime import timedelta
+    from sqlalchemy import text
+
+    result = {}
+    windows = [
+        ("1d", timedelta(days=1), "hour"),
+        ("1m", timedelta(days=30), "day"),
+        ("3m", timedelta(days=90), "day"),
+    ]
+
+    for key, delta, trunc in windows:
+        since = utcnow() - delta
+        rows = (await db.execute(
+            text("""
+                SELECT
+                    date_trunc(:trunc, sampled_at) AS bucket,
+                    AVG(rx_power) AS avg_rx,
+                    COUNT(*) AS cnt
+                FROM onu_telemetry
+                WHERE rx_power IS NOT NULL AND sampled_at >= :since
+                GROUP BY bucket
+                ORDER BY bucket
+            """),
+            {"trunc": trunc, "since": since},
+        )).all()
+
+        sparkline = []
+        total_samples = 0
+        vals = []
+        for r in rows:
+            if r.avg_rx is not None:
+                sparkline.append([round(float(r.avg_rx), 2), r.bucket.isoformat()])
+                vals.append(float(r.avg_rx))
+                total_samples += r.cnt
+
+        avg_all = round(sum(vals) / len(vals), 2) if vals else None
+
+        result[key] = {
+            "avg_rx": avg_all,
+            "samples": total_samples,
+            "sparkline": sparkline,
+        }
+
+    return result

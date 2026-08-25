@@ -316,9 +316,9 @@ async def collect_telemetry(session: AsyncSession, olt_id: int) -> int:
         stored += 1
 
     if stored:
-        # Keep the profile graph manageable (~30 days of 5-minute samples).
+        # Keep the profile graph manageable (~90 days of 5-minute samples).
         await session.execute(
-            delete(OnuTelemetry).where(OnuTelemetry.sampled_at < utcnow() - timedelta(days=30))
+            delete(OnuTelemetry).where(OnuTelemetry.sampled_at < utcnow() - timedelta(days=90))
         )
 
     device.status = "reachable"
