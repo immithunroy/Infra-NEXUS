@@ -6,11 +6,11 @@ services:
     environment:
       POSTGRES_USER: olt
       POSTGRES_PASSWORD: oltpassword
-      POSTGRES_DB: olt_commander
+      POSTGRES_DB: infra_nexus
     volumes:
       - nexus_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U olt -d olt_commander"]
+      test: ["CMD-SHELL", "pg_isready -U olt -d infra_nexus"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,7 +22,7 @@ services:
     container_name: infra-nexus-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://olt:oltpassword@db:5432/olt_commander
+      DATABASE_URL: postgresql+asyncpg://olt:oltpassword@db:5432/infra_nexus
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: admin123
