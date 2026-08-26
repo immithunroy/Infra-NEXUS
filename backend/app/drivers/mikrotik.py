@@ -7,11 +7,13 @@ table is the single authoritative source of subscriber ID + MAC: the
 Mikrotik has already validated the PPPoE secret, so the caller-id MAC is
 definitely that subscriber's router. DHCP lease and ARP tables are
 intentionally NOT used - PPPoE is the only subscriber source.
+
+Also collects BGP session and route data when available.
 """
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from librouteros import connect
 
@@ -26,6 +28,27 @@ class ActiveSession:
     ip: str
     interface: str
     subscriber_id: str = ""
+
+
+@dataclass
+class BgpSessionInfo:
+    remote_as: int = 0
+    remote_ip: str = ""
+    local_ip: str = ""
+    state: str = "idle"
+    uptime: str = ""
+    prefix_count: int = 0
+    advertised_count: int = 0
+    routes: list["BgpRouteInfo"] = field(default_factory=list)
+
+
+@dataclass
+class BgpRouteInfo:
+    prefix: str = ""
+    nexthop: str = ""
+    metric: int = 0
+    community: str = ""
+    received: bool = True
 
 
 class MikrotikDriver:
@@ -98,3 +121,63 @@ class MikrotikDriver:
                 )
             )
         return sessions, len(secrets), len(ppp_active)
+
+    def _collect_bgp(self) -> tuple[list[dict], list[dict]]:
+        api = self._connect()
+        try:
+            sessions = list(api("/routing/bgp/session/print"))
+            advertisements = list(api("/routing/bgp/advertisements/print"))
+        finally:
+            try:
+                api.close()
+            except Exception:
+                pass
+        return sessions, advertisements
+
+    async def collect_bgp(self) -> tuple[list[BgpSessionInfo], int, int]:
+        """Return (BGP sessions, total prefix count, established count)."""
+        try:
+            raw_sessions, raw_advs = await asyncio.to_thread(self._collect_bgp)
+        except Exception as exc:
+            raise DriverError(f"BGP collection failed: {exc}") from exc
+
+        adv_by_peer: dict[str, int] = {}
+        for adv in raw_advs:
+            peer = adv.get("peer", "") or adv.get("remote-address", "")
+            if peer:
+                adv_by_peer[peer] = adv_by_peer.get(peer, 0) + 1
+
+        sessions: list[BgpSessionInfo] = []
+        total_prefixes = 0
+        established = 0
+
+        for row in raw_sessions:
+            remote_ip = str(row.get("remote-address", "") or row.get("remote.ip", ""))
+            state_raw = str(row.get("state", "") or row.get("status", "")).lower()
+            if state_raw in ("established", "estab"):
+                state = "established"
+                established += 1
+            elif state_raw in ("active",):
+                state = "active"
+            elif state_raw in ("connect",):
+                state = "connect"
+            else:
+                state = state_raw or "idle"
+
+            uptime = str(row.get("uptime", ""))
+            prefix_count = int(row.get("prefix-count", 0) or row.get("received-prefix-count", 0) or 0)
+            advertised_count = adv_by_peer.get(remote_ip, 0)
+
+            total_prefixes += prefix_count
+
+            sessions.append(BgpSessionInfo(
+                remote_as=int(row.get("remote-as", 0) or 0),
+                remote_ip=remote_ip,
+                local_ip=str(row.get("local-address", "") or row.get("local.ip", "")),
+                state=state,
+                uptime=uptime,
+                prefix_count=prefix_count,
+                advertised_count=advertised_count,
+            ))
+
+        return sessions, total_prefixes, established

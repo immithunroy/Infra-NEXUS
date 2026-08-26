@@ -16,6 +16,8 @@ from ..drivers.base import DriverError
 from ..drivers.mikrotik import MikrotikDriver
 from ..utils.time import utcnow
 from ..models import (
+    BgpRoute,
+    BgpSession,
     MacEntry,
     MikrotikDevice,
     OLTDevice,
@@ -263,8 +265,56 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
     await session.flush()
     device.status = "reachable"
     device.last_scan_at = utcnow()
+
+    # Collect BGP data (best-effort, non-fatal if unsupported)
+    bgp_msg = ""
+    try:
+        bgp_sessions, bgp_prefixes, bgp_established = await driver.collect_bgp()
+        now = utcnow()
+
+        # Upsert BGP sessions
+        existing = (
+            await session.execute(select(BgpSession).where(BgpSession.device_id == device_id))
+        ).scalars().all()
+        existing_map = {s.remote_ip: s for s in existing}
+        seen_ips: set[str] = set()
+
+        for bs in bgp_sessions:
+            seen_ips.add(bs.remote_ip)
+            row = existing_map.get(bs.remote_ip)
+            if row is None:
+                row = BgpSession(
+                    device_id=device_id,
+                    remote_as=bs.remote_as,
+                    remote_ip=bs.remote_ip,
+                    local_ip=bs.local_ip,
+                    state=bs.state,
+                    uptime=bs.uptime,
+                    prefix_count=bs.prefix_count,
+                    advertised_count=bs.advertised_count,
+                    last_scan_at=now,
+                )
+                session.add(row)
+            else:
+                row.remote_as = bs.remote_as
+                row.state = bs.state
+                row.uptime = bs.uptime
+                row.prefix_count = bs.prefix_count
+                row.advertised_count = bs.advertised_count
+                row.last_scan_at = now
+
+        # Remove stale sessions
+        for ip, row in existing_map.items():
+            if ip not in seen_ips:
+                await session.delete(row)
+
+        if bgp_sessions:
+            bgp_msg = f" / BGP: {bgp_established} established, {bgp_prefixes} prefixes"
+    except Exception as exc:
+        logger.debug("BGP collection skipped for %s: %s", device.name, exc)
+
     device.last_message = (
-        f"{len(entries)} PPPoE active / {secret_count} PPP secrets"
+        f"{len(entries)} PPPoE active / {secret_count} PPP secrets{bgp_msg}"
     )
     await _finish_log(session, log, ScanStatus.success, device.last_message)
     await session.commit()

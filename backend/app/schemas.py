@@ -667,6 +667,21 @@ class OltWriteLogOut(BaseModel):
     finished_at: datetime | None
 
 
+class BgpSessionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    device_id: int
+    remote_as: int
+    remote_ip: str
+    local_ip: str
+    state: str
+    uptime: str
+    prefix_count: int
+    advertised_count: int
+    last_scan_at: datetime | None
+
+
 class Message(BaseModel):
     detail: str = Field(default="")
 

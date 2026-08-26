@@ -685,3 +685,42 @@ class OltWriteLog(Base):
 # Add write_logs relationship to OLTDevice if not already present
 if not hasattr(OLTDevice, "write_logs"):
     OLTDevice.write_logs = relationship("OltWriteLog", back_populates="olt", cascade="all, delete-orphan")
+
+
+class BgpSession(Base):
+    __tablename__ = "bgp_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("mikrotik_devices.id", ondelete="CASCADE"))
+    remote_as: Mapped[int] = mapped_column(Integer, default=0)
+    remote_ip: Mapped[str] = mapped_column(String(64), default="")
+    local_ip: Mapped[str] = mapped_column(String(64), default="")
+    state: Mapped[str] = mapped_column(String(32), default="idle")  # established|active|idle|connect
+    uptime: Mapped[str] = mapped_column(String(64), default="")
+    prefix_count: Mapped[int] = mapped_column(Integer, default=0)
+    advertised_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    device: Mapped["MikrotikDevice"] = relationship(back_populates="bgp_sessions")
+    routes: Mapped[list["BgpRoute"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+
+
+class BgpRoute(Base):
+    __tablename__ = "bgp_routes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("bgp_sessions.id", ondelete="CASCADE"))
+    prefix: Mapped[str] = mapped_column(String(64), default="")
+    nexthop: Mapped[str] = mapped_column(String(64), default="")
+    metric: Mapped[int] = mapped_column(Integer, default=0)
+    community: Mapped[str] = mapped_column(String(128), default="")
+    received: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    session: Mapped["BgpSession"] = relationship(back_populates="routes")
+
+
+# Add bgp_sessions relationship to MikrotikDevice if not already present
+if not hasattr(MikrotikDevice, "bgp_sessions"):
+    MikrotikDevice.bgp_sessions = relationship("BgpSession", back_populates="device", cascade="all, delete-orphan")

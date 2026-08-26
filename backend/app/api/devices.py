@@ -3,8 +3,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import OLTDevice, Onu, User, MikrotikDevice, SwitchDevice
+from ..models import OLTDevice, Onu, User, MikrotikDevice, SwitchDevice, BgpSession, BgpRoute
 from ..schemas import (
+    BgpSessionOut,
     MikrotikCreate,
     MikrotikOut,
     MikrotikUpdate,
@@ -478,3 +479,32 @@ async def scan_switch(switch_id: int, user: User = Depends(require_ops), db: Asy
         device.last_message = str(exc)[:1000]
         await db.commit()
         return TestResult(success=False, message=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# BGP endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/mikrotiks/{mikrotik_id}/bgp", response_model=list[BgpSessionOut])
+async def list_bgp_sessions(mikrotik_id: int, db: AsyncSession = Depends(get_db)):
+    device = await db.get(MikrotikDevice, mikrotik_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Mikrotik device not found")
+    result = await db.execute(
+        select(BgpSession).where(BgpSession.device_id == mikrotik_id).order_by(BgpSession.state.desc(), BgpSession.remote_ip)
+    )
+    return result.scalars().all()
+
+
+@router.get("/mikrotiks/{mikrotik_id}/bgp/{session_id}/routes")
+async def list_bgp_routes(mikrotik_id: int, session_id: int, db: AsyncSession = Depends(get_db)):
+    device = await db.get(MikrotikDevice, mikrotik_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Mikrotik device not found")
+    bgp_session = await db.get(BgpSession, session_id)
+    if bgp_session is None or bgp_session.device_id != mikrotik_id:
+        raise HTTPException(status_code=404, detail="BGP session not found")
+    result = await db.execute(
+        select(BgpRoute).where(BgpRoute.session_id == session_id).order_by(BgpRoute.prefix)
+    )
+    return result.scalars().all()

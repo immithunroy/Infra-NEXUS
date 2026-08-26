@@ -1081,10 +1081,14 @@ export default function Devices() {
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="label">Username</label>
                       <input className="input" value={modal.username} onChange={(e) => setModal({ ...modal, username: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="label">Password</label>
+                      <input className="input" type="password" value={modal.password} onChange={(e) => setModal({ ...modal, password: e.target.value })} />
                     </div>
                     <div>
                       <label className="label">Enable password</label>
