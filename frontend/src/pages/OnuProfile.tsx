@@ -130,13 +130,13 @@ export default function OnuProfile() {
     if (!confirm(`DELETE ONU ${onu.pon_port} (ID ${onu.onu_id}) from the OLT?\n\nThis will deregister the ONU from the OLT and remove it from the application.`)) return;
     setDeleting(true);
     try {
-      await api.post<{ ok: boolean; message: string }>(`/devices/olts/${onu.olt_id}/delete-onu`, {
+      const res = await api.post<{ ok: boolean; message: string }>(`/devices/olts/${onu.olt_id}/delete-onu`, {
         pon_port: onu.pon_port,
         onu_id: onu.onu_id,
       });
       await api.del(`/onus/${onu.id}`);
-      flash("ONU deleted from OLT and application");
-      navigate(-1);
+      flash(res.message || "ONU deleted from OLT and application");
+      setTimeout(() => navigate(-1), 1500);
     } catch (e) { setError(String(e)); }
     setDeleting(false);
   };
