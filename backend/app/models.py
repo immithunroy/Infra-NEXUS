@@ -666,3 +666,22 @@ class AcsJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OltWriteLog(Base):
+    __tablename__ = "olt_write_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    olt_id: Mapped[int] = mapped_column(ForeignKey("olt_devices.id", ondelete="CASCADE"))
+    olt_name: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(32), default="running")  # running|success|failed
+    message: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    olt: Mapped["OLTDevice"] = relationship(back_populates="write_logs")
+
+
+# Add write_logs relationship to OLTDevice if not already present
+if not hasattr(OLTDevice, "write_logs"):
+    OLTDevice.write_logs = relationship("OltWriteLog", back_populates="olt", cascade="all, delete-orphan")

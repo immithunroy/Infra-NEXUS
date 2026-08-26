@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..models import Binding, MacEntry, MikrotikDevice, OLTDevice, Onu, OnuOutage, OnuTelemetry, PppActiveEntry, PortArea, ScanLog, User
-from ..schemas import BrandBucket, DashboardSummary, MassDownPort, OltUsage, PortUsage, ScanLogOut, SignalBucket, WeakOnu
+from ..schemas import BrandBucket, DashboardSummary, MassDownPort, OltUsage, OltWriteLogOut, PortUsage, ScanLogOut, SignalBucket, WeakOnu
 from ..security import get_current_user
 from ..services.mac_vendor import vendor_map
 from ..utils.time import utcnow
@@ -302,3 +302,10 @@ async def optical_averages(db: AsyncSession = Depends(get_db)):
         }
 
     return result
+
+
+@router.get("/olt-write-logs", response_model=list[OltWriteLogOut])
+async def list_olt_write_logs(limit: int = 200, db: AsyncSession = Depends(get_db)):
+    from ..models import OltWriteLog
+    q = select(OltWriteLog).order_by(OltWriteLog.started_at.desc()).limit(min(limit, 500))
+    return (await db.execute(q)).scalars().all()

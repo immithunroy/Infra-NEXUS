@@ -301,6 +301,16 @@ export interface ScanLog {
   finished_at: string | null;
 }
 
+export interface OltWriteLog {
+  id: number;
+  olt_id: number;
+  olt_name: string;
+  status: string;
+  message: string;
+  started_at: string;
+  finished_at: string | null;
+}
+
 export interface SearchOnu {
   id: number;
   olt_id: number;

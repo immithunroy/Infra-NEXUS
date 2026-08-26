@@ -13,6 +13,7 @@ import NetworkMap from "./pages/NetworkMap";
 import Onus from "./pages/Onus";
 import OnuProfile from "./pages/OnuProfile";
 import Reports from "./pages/Reports";
+import ScheduleJobs from "./pages/ScheduleJobs";
 import Scans from "./pages/Scans";
 import SubscriberProfile from "./pages/SubscriberProfile";
 import Subscribers from "./pages/Subscribers";
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/users" element={<Users />} />
             <Route path="/scans" element={<Scans />} />
+            <Route path="/schedule-jobs" element={<ScheduleJobs />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -784,8 +784,6 @@ class BdcomCliDriver(BaseDriver):
             # Exit interface
             await self._exec("exit", timeout=5)
             await self._exec("exit", timeout=5)
-            # Save config
-            await self._exec("write all", timeout=30)
 
             state = "enabled" if enable else "disabled"
             return f"ONU Ethernet port {port_id} {state} on {pon_port}"
@@ -818,9 +816,6 @@ class BdcomCliDriver(BaseDriver):
             await self._exec(f"no {pon_type} bind-onu sequence {onu_id}", timeout=10)
             await self._exec("exit", timeout=5)
             await self._exec("exit", timeout=5)
-            await self._sendline("write all")
-            await asyncio.sleep(15)
-            await self._read_until_prompt(timeout=30)
             return f"ONU {onu_id} deleted from {pon_port}"
         except TelnetError as exc:
             raise DriverError(f"Failed to delete ONU: {exc}") from exc
@@ -862,9 +857,6 @@ class BdcomCliDriver(BaseDriver):
             await self._exec(f"{pon_type} bind-onu {id_type} {identifier}{seq_part}", timeout=10)
             await self._exec("exit", timeout=5)
             await self._exec("exit", timeout=5)
-            await self._sendline("write all")
-            await asyncio.sleep(15)
-            await self._read_until_prompt(timeout=30)
 
             # Query the OLT to find the actual assigned sequence
             out = await self._exec(f"show {pon_type} onu-information interface {pon_type} {pon_base}", timeout=30)
@@ -887,9 +879,6 @@ class BdcomCliDriver(BaseDriver):
                     await self._exec(f"description {description[:32]}", timeout=10)
                     await self._exec("exit", timeout=5)
                     await self._exec("exit", timeout=5)
-                    await self._sendline("write all")
-                    await asyncio.sleep(15)
-                    await self._read_until_prompt(timeout=30)
                 except Exception:
                     pass  # Description set is best-effort
 
@@ -929,9 +918,6 @@ class BdcomCliDriver(BaseDriver):
             await self._exec(f"description {description}", timeout=10)
             await self._exec("exit", timeout=5)
             await self._exec("exit", timeout=5)
-            await self._sendline("write all")
-            await asyncio.sleep(15)
-            await self._read_until_prompt(timeout=30)
             return f"Description set to {description} on {pon_port}"
         except TelnetError as exc:
             raise DriverError(f"Failed to set description: {exc}") from exc
@@ -984,9 +970,6 @@ class BdcomCliDriver(BaseDriver):
             await self._exec(f"epon sla downstream pir {pir} cir {cir}", timeout=10)
             await self._exec("exit", timeout=5)
             await self._exec("exit", timeout=5)
-            await self._sendline("write all")
-            await asyncio.sleep(15)
-            await self._read_until_prompt(timeout=30)
             return f"Bandwidth set to {label} on {pon_port}"
         except TelnetError as exc:
             raise DriverError(f"Failed to set bandwidth: {exc}") from exc

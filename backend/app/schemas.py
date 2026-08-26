@@ -655,6 +655,18 @@ class ScanLogOut(BaseModel):
     finished_at: datetime | None
 
 
+class OltWriteLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    olt_id: int
+    olt_name: str
+    status: str
+    message: str
+    started_at: datetime
+    finished_at: datetime | None
+
+
 class Message(BaseModel):
     detail: str = Field(default="")
 

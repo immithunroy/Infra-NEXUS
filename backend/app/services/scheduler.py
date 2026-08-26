@@ -164,6 +164,81 @@ async def _sync_mac_vendors_retry() -> None:
             logger.exception("MAC vendor sync retry at 05:00 also failed: %s", exc)
 
 
+# ---------------------------------------------------------------------------
+# OLT config save — daily at 01:00, retry at 02:00 on failure
+# ---------------------------------------------------------------------------
+
+async def _write_all_olts() -> None:
+    """Connect to each enabled OLT and run ``write all`` to persist config."""
+    from datetime import datetime as _dt
+
+    from ..drivers.bdcom import BdcomCliDriver
+    from ..models import OLTDevice, OltWriteLog
+
+    async with SessionLocal() as session:
+        devices = (await session.execute(select(OLTDevice).where(OLTDevice.enabled.is_(True)))).scalars().all()
+
+    for device in devices:
+        started = utcnow()
+        log = OltWriteLog(olt_id=device.id, olt_name=device.name, status="running", started_at=started)
+        async with SessionLocal() as session:
+            session.add(log)
+            await session.commit()
+            log_id = log.id
+
+        driver = BdcomCliDriver(device)
+        try:
+            await driver.connect()
+            await driver._exec("enable", timeout=10)
+            await driver._sendline("write all")
+            await asyncio.sleep(15)
+            await driver._read_until_prompt(timeout=30)
+            finished = utcnow()
+            async with SessionLocal() as session:
+                row = await session.get(OltWriteLog, log_id)
+                if row:
+                    row.status = "success"
+                    row.message = "Config saved successfully"
+                    row.finished_at = finished
+                    await session.commit()
+            logger.info("OLT write all succeeded for %s", device.name)
+        except Exception as exc:  # noqa: BLE001
+            finished = utcnow()
+            async with SessionLocal() as session:
+                row = await session.get(OltWriteLog, log_id)
+                if row:
+                    row.status = "failed"
+                    row.message = str(exc)[:500]
+                    row.finished_at = finished
+                    await session.commit()
+            logger.exception("OLT write all failed for %s: %s", device.name, exc)
+        finally:
+            driver.close()
+
+
+async def _write_all_olts_retry() -> None:
+    """Retry OLT config save at 02:00 (only if primary at 01:00 failed)."""
+    from ..models import OltWriteLog
+
+    async with SessionLocal() as session:
+        from sqlalchemy import func, select as _sel
+
+        failed_count = (
+            await session.execute(
+                _sel(func.count(OltWriteLog.id)).where(
+                    OltWriteLog.status == "failed",
+                    OltWriteLog.started_at >= utcnow().replace(hour=1, minute=0, second=0, microsecond=0),
+                )
+            )
+        ).scalar() or 0
+
+    if failed_count > 0:
+        logger.info("Retrying OLT write all (%d failures from 01:00)", failed_count)
+        await _write_all_olts()
+    else:
+        logger.info("OLT write all retry skipped — no failures at 01:00")
+
+
 def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -227,6 +302,15 @@ def start_scheduler() -> AsyncIOScheduler:
             misfire_grace_time=300,
         )
 
+    # OLT config save — daily at 01:00 (with retry at 02:00 handled inside)
+    scheduler.add_job(
+        _write_all_olts,
+        CronTrigger(hour=1, minute=0),
+        id="olt_write_all",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
     scheduler.start()
     _scheduler = scheduler
 
@@ -242,7 +326,7 @@ def start_scheduler() -> AsyncIOScheduler:
         )
 
     logger.info(
-        "Scheduler started (olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@04:00)",
+        "Scheduler started (olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@04:00, olt_write_all=daily@01:00)",
         settings.scan_olt_interval,
         settings.scan_mikrotik_interval,
         settings.bind_interval,
