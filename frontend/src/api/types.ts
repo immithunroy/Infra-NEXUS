@@ -200,6 +200,7 @@ export interface PortUsage {
   remaining: number;
   active: number;
   bound: number;
+  description: string;
 }
 
 export interface OltUsage {
@@ -314,9 +315,12 @@ export interface OltWriteLog {
 export interface BgpSession {
   id: number;
   device_id: number;
+  name: string;
   remote_as: number;
   remote_ip: string;
   local_ip: string;
+  local_as: number;
+  address_family: string;
   state: string;
   uptime: string;
   prefix_count: number;
@@ -332,6 +336,14 @@ export interface BgpRoute {
   metric: number;
   community: string;
   received: boolean;
+}
+
+export interface BgpPrefixSnapshot {
+  id: number;
+  session_id: number;
+  prefix_count: number;
+  advertised_count: number;
+  recorded_at: string;
 }
 
 export interface SearchOnu {

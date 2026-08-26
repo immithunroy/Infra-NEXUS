@@ -557,6 +557,57 @@ class BdcomCliDriver(BaseDriver):
         finally:
             self.close()
 
+    async def get_port_descriptions(self) -> dict[str, str]:
+        """Get PON port descriptions via ``show running-config interface``.
+
+        Returns dict like {"GPON0/1": "TO-CUSTOMER-A", "GPON0/2": ""}.
+        """
+        try:
+            await self.connect()
+        except DriverError:
+            raise
+        try:
+            await self._exec("enable", timeout=10)
+
+            # First discover available PON ports from onu-information
+            pon_type = self.device.pon_type.lower()
+            if pon_type == "epon":
+                out = await self._exec("show epon onu-information", timeout=60)
+            else:
+                out = await self._exec("show gpon onu-information", timeout=60)
+
+            pon_bases: set[str] = set()
+            for line in out.splitlines():
+                m = re.search(rf"(EPON|GPON)(\d+/\d+)", line, re.IGNORECASE)
+                if m:
+                    pon_bases.add(f"{m.group(1).upper()}{m.group(2)}")
+
+            descriptions: dict[str, str] = {}
+            for pon in sorted(pon_bases):
+                try:
+                    if pon.startswith("EPON"):
+                        raw = pon.replace("EPON", "")
+                        cfg = await self._exec(f"show running-config interface epon {raw}", timeout=15)
+                    else:
+                        raw = pon.replace("GPON", "")
+                        cfg = await self._exec(f"show running-config interface gpon {raw}", timeout=15)
+
+                    for line in cfg.splitlines():
+                        line = line.strip()
+                        if line.lower().startswith("description "):
+                            descriptions[pon] = line[12:].strip().strip('"')
+                            break
+                    else:
+                        descriptions[pon] = ""
+                except (TelnetError, DriverError):
+                    descriptions[pon] = ""
+
+            return descriptions
+        except TelnetError as exc:
+            raise DriverError(f"Failed to collect port descriptions: {exc}") from exc
+        finally:
+            self.close()
+
     async def get_macs(self) -> list[MacInfo]:
         try:
             await self.connect()

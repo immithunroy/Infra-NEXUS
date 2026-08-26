@@ -32,9 +32,12 @@ class ActiveSession:
 
 @dataclass
 class BgpSessionInfo:
+    name: str = ""
     remote_as: int = 0
     remote_ip: str = ""
     local_ip: str = ""
+    local_as: int = 0
+    address_family: str = ""
     state: str = "idle"
     uptime: str = ""
     prefix_count: int = 0
@@ -135,7 +138,10 @@ class MikrotikDriver:
         return sessions, advertisements
 
     async def collect_bgp(self) -> tuple[list[BgpSessionInfo], int, int]:
-        """Return (BGP sessions, total prefix count, established count)."""
+        """Return (BGP sessions, total prefix count, established count).
+
+        Handles both RouterOS v6 (flat keys) and v7 (nested keys).
+        """
         try:
             raw_sessions, raw_advs = await asyncio.to_thread(self._collect_bgp)
         except Exception as exc:
@@ -143,7 +149,7 @@ class MikrotikDriver:
 
         adv_by_peer: dict[str, int] = {}
         for adv in raw_advs:
-            peer = adv.get("peer", "") or adv.get("remote-address", "")
+            peer = adv.get("peer", "") or adv.get("remote-address", "") or _deep_get(adv, "remote.address", "")
             if peer:
                 adv_by_peer[peer] = adv_by_peer.get(peer, 0) + 1
 
@@ -152,7 +158,30 @@ class MikrotikDriver:
         established = 0
 
         for row in raw_sessions:
-            remote_ip = str(row.get("remote-address", "") or row.get("remote.ip", ""))
+            remote_ip = (
+                row.get("remote-address", "")
+                or _deep_get(row, "remote.address", "")
+                or row.get("remote.ip", "")
+                or ""
+            )
+            remote_as = int(
+                row.get("remote-as", 0)
+                or _deep_get_int(row, "remote.as", 0)
+                or 0
+            )
+            local_ip = (
+                row.get("local-address", "")
+                or _deep_get(row, "local.address", "")
+                or row.get("local.ip", "")
+                or ""
+            )
+            local_as = int(
+                row.get("local-as", 0)
+                or _deep_get_int(row, "local.as", 0)
+                or 0
+            )
+            name = str(row.get("name", "") or row.get("remote.identity", "") or "")
+            address_family = str(row.get("address-family", "") or row.get("af", "") or "")
             state_raw = str(row.get("state", "") or row.get("status", "")).lower()
             if state_raw in ("established", "estab"):
                 state = "established"
@@ -171,9 +200,12 @@ class MikrotikDriver:
             total_prefixes += prefix_count
 
             sessions.append(BgpSessionInfo(
-                remote_as=int(row.get("remote-as", 0) or 0),
+                name=name,
+                remote_as=remote_as,
                 remote_ip=remote_ip,
-                local_ip=str(row.get("local-address", "") or row.get("local.ip", "")),
+                local_ip=local_ip,
+                local_as=local_as,
+                address_family=address_family,
                 state=state,
                 uptime=uptime,
                 prefix_count=prefix_count,
@@ -181,3 +213,23 @@ class MikrotikDriver:
             ))
 
         return sessions, total_prefixes, established
+
+
+def _deep_get(d: dict, key: str, default=""):
+    """Get a nested key like 'remote.address' from a dict."""
+    parts = key.split(".")
+    cur = d
+    for p in parts:
+        if isinstance(cur, dict):
+            cur = cur.get(p, default)
+        else:
+            return default
+    return cur or default
+
+
+def _deep_get_int(d: dict, key: str, default=0):
+    val = _deep_get(d, key, default)
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default

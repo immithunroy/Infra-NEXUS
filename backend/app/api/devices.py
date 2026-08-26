@@ -3,9 +3,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import OLTDevice, Onu, User, MikrotikDevice, SwitchDevice, BgpSession, BgpRoute
+from ..models import OLTDevice, Onu, User, MikrotikDevice, SwitchDevice, BgpSession, BgpRoute, BgpPrefixSnapshot
 from ..schemas import (
     BgpSessionOut,
+    BgpPrefixSnapshotOut,
     MikrotikCreate,
     MikrotikOut,
     MikrotikUpdate,
@@ -506,5 +507,24 @@ async def list_bgp_routes(mikrotik_id: int, session_id: int, db: AsyncSession = 
         raise HTTPException(status_code=404, detail="BGP session not found")
     result = await db.execute(
         select(BgpRoute).where(BgpRoute.session_id == session_id).order_by(BgpRoute.prefix)
+    )
+    return result.scalars().all()
+
+
+@router.get("/mikrotiks/{mikrotik_id}/bgp/{session_id}/snapshots", response_model=list[BgpPrefixSnapshotOut])
+async def list_bgp_snapshots(mikrotik_id: int, session_id: int, hours: int = 168, db: AsyncSession = Depends(get_db)):
+    """Return prefix count history for graphing (default 7 days)."""
+    from datetime import timedelta
+    device = await db.get(MikrotikDevice, mikrotik_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Mikrotik device not found")
+    bgp_session = await db.get(BgpSession, session_id)
+    if bgp_session is None or bgp_session.device_id != mikrotik_id:
+        raise HTTPException(status_code=404, detail="BGP session not found")
+    since = utcnow() - timedelta(hours=min(hours, 720))
+    result = await db.execute(
+        select(BgpPrefixSnapshot)
+        .where(BgpPrefixSnapshot.session_id == session_id, BgpPrefixSnapshot.recorded_at >= since)
+        .order_by(BgpPrefixSnapshot.recorded_at)
     )
     return result.scalars().all()

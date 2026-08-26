@@ -314,6 +314,9 @@ function PortTile({ p }: { p: PortUsage }) {
           {p.remaining} free
         </span>
       </div>
+      {p.description && (
+        <div className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-400" title={p.description}>{p.description}</div>
+      )}
       <div className="mt-2"><GlowBar p={used} height="h-1.5" /></div>
       <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
         <span>{p.used}/{p.capacity} ONUs</span>
@@ -784,12 +787,12 @@ export default function Dashboard() {
         <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
           OLT Devices — click to expand port usage & remaining ONT slots
         </h3>
-        <div className="space-y-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {data.olts.map((o) => (
             <OltCard key={o.id} olt={o} weak={data.weakest_onus.filter((w) => w.olt_name === o.name)} />
           ))}
           {data.olts.length === 0 && (
-            <div className="card border-dashed p-8 text-center text-slate-500">No OLT devices configured yet.</div>
+            <div className="card border-dashed p-8 text-center text-slate-500 sm:col-span-2">No OLT devices configured yet.</div>
           )}
         </div>
       </div>

@@ -106,6 +106,7 @@ class OLTDevice(Base):
     snmp_port: Mapped[int] = mapped_column(Integer, default=161)
     snmp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     port_capacity: Mapped[int] = mapped_column(Integer, default=32)  # ONUs per PON port
+    port_descriptions: Mapped[str] = mapped_column(Text, default="{}")  # JSON: {"GPON0/1": "desc", ...}
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     status: Mapped[str] = mapped_column(String(32), default="unknown")  # reachable | unreachable | unknown
     noc_id: Mapped[int | None] = mapped_column(ForeignKey("nocs.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -692,9 +693,12 @@ class BgpSession(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     device_id: Mapped[int] = mapped_column(ForeignKey("mikrotik_devices.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(128), default="")  # peer name
     remote_as: Mapped[int] = mapped_column(Integer, default=0)
     remote_ip: Mapped[str] = mapped_column(String(64), default="")
     local_ip: Mapped[str] = mapped_column(String(64), default="")
+    local_as: Mapped[int] = mapped_column(Integer, default=0)
+    address_family: Mapped[str] = mapped_column(String(16), default="")  # ip | ipv6
     state: Mapped[str] = mapped_column(String(32), default="idle")  # established|active|idle|connect
     uptime: Mapped[str] = mapped_column(String(64), default="")
     prefix_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -704,6 +708,7 @@ class BgpSession(Base):
 
     device: Mapped["MikrotikDevice"] = relationship(back_populates="bgp_sessions")
     routes: Mapped[list["BgpRoute"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    snapshots: Mapped[list["BgpPrefixSnapshot"]] = relationship(back_populates="session", cascade="all, delete-orphan")
 
 
 class BgpRoute(Base):
@@ -719,6 +724,18 @@ class BgpRoute(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped["BgpSession"] = relationship(back_populates="routes")
+
+
+class BgpPrefixSnapshot(Base):
+    __tablename__ = "bgp_prefix_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("bgp_sessions.id", ondelete="CASCADE"))
+    prefix_count: Mapped[int] = mapped_column(Integer, default=0)
+    advertised_count: Mapped[int] = mapped_column(Integer, default=0)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    session: Mapped["BgpSession"] = relationship(back_populates="snapshots")
 
 
 # Add bgp_sessions relationship to MikrotikDevice if not already present

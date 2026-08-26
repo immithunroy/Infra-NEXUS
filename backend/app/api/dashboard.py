@@ -46,6 +46,13 @@ async def dashboard_summary(db: AsyncSession = Depends(get_db)):
 
     olt_usages: list[OltUsage] = []
     for d in olts:
+        # Parse port descriptions JSON
+        try:
+            import json
+            port_descs = json.loads(d.port_descriptions) if d.port_descriptions else {}
+        except (json.JSONDecodeError, TypeError):
+            port_descs = {}
+
         dev_onus = [o for o in onus if o.olt_id == d.id]
         port_map: dict[str, dict] = {}
         for o in dev_onus:
@@ -65,6 +72,7 @@ async def dashboard_summary(db: AsyncSession = Depends(get_db)):
                 remaining=max(cap - c["used"], 0),
                 active=c["active"],
                 bound=c["bound"],
+                description=port_descs.get(port, ""),
             )
             for port, c in sorted(port_map.items(), key=lambda kv: kv[0])
         ]

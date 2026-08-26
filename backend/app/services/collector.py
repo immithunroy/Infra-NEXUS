@@ -196,6 +196,16 @@ async def scan_olt(session: AsyncSession, olt_id: int) -> ScanLog:
     await session.flush()
     device.status = "reachable"
     device.last_scan_at = utcnow()
+
+    # Collect PON port descriptions (best-effort)
+    try:
+        port_descs = await driver.get_port_descriptions()
+        if port_descs:
+            import json
+            device.port_descriptions = json.dumps(port_descs)
+    except Exception as exc:
+        logger.debug("Port description collection skipped for %s: %s", device.name, exc)
+
     device.last_message = f"Collected {len(onus)} ONUs, {len(macs)} MACs"
     await _finish_log(session, log, ScanStatus.success, device.last_message)
     await session.commit()
@@ -269,6 +279,8 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
     # Collect BGP data (best-effort, non-fatal if unsupported)
     bgp_msg = ""
     try:
+        from ..models import BgpPrefixSnapshot
+
         bgp_sessions, bgp_prefixes, bgp_established = await driver.collect_bgp()
         now = utcnow()
 
@@ -285,9 +297,12 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
             if row is None:
                 row = BgpSession(
                     device_id=device_id,
+                    name=bs.name,
                     remote_as=bs.remote_as,
                     remote_ip=bs.remote_ip,
                     local_ip=bs.local_ip,
+                    local_as=bs.local_as,
+                    address_family=bs.address_family,
                     state=bs.state,
                     uptime=bs.uptime,
                     prefix_count=bs.prefix_count,
@@ -295,18 +310,38 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
                     last_scan_at=now,
                 )
                 session.add(row)
+                await session.flush()
             else:
-                row.remote_as = bs.remote_as
+                row.name = bs.name or row.name
+                row.remote_as = bs.remote_as or row.remote_as
+                row.local_ip = bs.local_ip or row.local_ip
+                row.local_as = bs.local_as or row.local_as
+                row.address_family = bs.address_family or row.address_family
                 row.state = bs.state
                 row.uptime = bs.uptime
                 row.prefix_count = bs.prefix_count
                 row.advertised_count = bs.advertised_count
                 row.last_scan_at = now
 
+            # Store prefix snapshot for graphing
+            session.add(BgpPrefixSnapshot(
+                session_id=row.id,
+                prefix_count=bs.prefix_count,
+                advertised_count=bs.advertised_count,
+                recorded_at=now,
+            ))
+
         # Remove stale sessions
         for ip, row in existing_map.items():
             if ip not in seen_ips:
                 await session.delete(row)
+
+        # Prune old snapshots (> 30 days)
+        from datetime import timedelta
+        cutoff = now - timedelta(days=30)
+        await session.execute(
+            delete(BgpPrefixSnapshot).where(BgpPrefixSnapshot.recorded_at < cutoff)
+        )
 
         if bgp_sessions:
             bgp_msg = f" / BGP: {bgp_established} established, {bgp_prefixes} prefixes"

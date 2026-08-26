@@ -366,6 +366,7 @@ class PortUsage(BaseModel):
     remaining: int
     active: int
     bound: int
+    description: str = ""
 
 
 class OltUsage(BaseModel):
@@ -672,14 +673,27 @@ class BgpSessionOut(BaseModel):
 
     id: int
     device_id: int
+    name: str
     remote_as: int
     remote_ip: str
     local_ip: str
+    local_as: int
+    address_family: str
     state: str
     uptime: str
     prefix_count: int
     advertised_count: int
     last_scan_at: datetime | None
+
+
+class BgpPrefixSnapshotOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: int
+    prefix_count: int
+    advertised_count: int
+    recorded_at: datetime
 
 
 class Message(BaseModel):

@@ -51,7 +51,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string, params?: Record<string, string | number>) => {
+    const url = params
+      ? `${path}?${new URLSearchParams(
+          Object.entries(params).map(([k, v]) => [k, String(v)])
+        ).toString()}`
+      : path;
+    return request<T>(url);
+  },
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body: unknown) =>
