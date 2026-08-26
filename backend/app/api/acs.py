@@ -3,6 +3,7 @@ import logging
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,11 +39,7 @@ async def cwmp_endpoint(request: Request, db: AsyncSession = Depends(get_db)):
     xml = await acs.handle_cwmp(db, body, ip)
     if not xml:
         # TR-069 expects a 204 No Content for empty responses.
-        from fastapi.responses import Response
-
         return Response(status_code=204)
-    from fastapi.responses import Response
-
     return Response(content=xml, media_type="text/xml")
 
 

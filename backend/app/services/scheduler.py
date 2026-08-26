@@ -64,6 +64,65 @@ async def _collect_all_telemetry() -> None:
                 logger.exception("Telemetry failed for %s: %s", device.name, exc)
 
 
+async def _poll_acs_metrics() -> None:
+    """Queue a monitoring poll for online ACS devices.
+
+    Creates a lightweight ``monitor`` job for each online device that supports
+    monitoring parameters.  When the CPE next sends a GetRPC, the handler
+    dispatches a GetParameterValues RPC and the response is stored as metrics.
+    """
+    async with SessionLocal() as session:
+        from sqlalchemy import func, select
+
+        from ..models import AcsDevice, AcsJob, AcsParameter
+        from ..utils.time import utcnow
+
+        devices = (await session.execute(select(AcsDevice).where(AcsDevice.online.is_(True)))).scalars().all()
+        now = utcnow()
+        for device in devices:
+            try:
+                # Only poll devices that have previously reported monitoring params
+                # (avoids Fault 9814 on basic CPEs).
+                count = (
+                    await session.execute(
+                        select(func.count(AcsParameter.id)).where(
+                            AcsParameter.device_id == device.id,
+                            AcsParameter.name.like("InternetGatewayDevice.WANDevice.%TotalBytesReceived%")
+                            | AcsParameter.name.like("InternetGatewayDevice.WANDevice.%TotalBytesSent%")
+                            | AcsParameter.name.like("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%")
+                            | AcsParameter.name.like("InternetGatewayDevice.DeviceInfo.CPUUsage%")
+                            | AcsParameter.name.like("InternetGatewayDevice.DeviceInfo.MemoryStatus.%")
+                        )
+                    )
+                ).scalar() or 0
+                if count == 0:
+                    continue
+
+                # Skip if a monitor job is already queued or sent (avoid flooding)
+                pending = (
+                    await session.execute(
+                        select(func.count(AcsJob.id)).where(
+                            AcsJob.device_id == device.id,
+                            AcsJob.action == "monitor",
+                            AcsJob.status.in_(["queued", "sent"]),
+                        )
+                    )
+                ).scalar() or 0
+                if pending > 0:
+                    continue
+
+                job = AcsJob(
+                    device_id=device.id,
+                    action="monitor",
+                    payload="{}",
+                    command_key=f"monitor-{now.strftime('%Y%m%d%H%M%S')}-{device.id}",
+                )
+                session.add(job)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("ACS metric poll failed for device %s: %s", device.id, exc)
+        await session.commit()
+
+
 async def _bind() -> None:
     async with SessionLocal() as session:
         try:
@@ -148,6 +207,16 @@ def start_scheduler() -> AsyncIOScheduler:
             next_run_time=utcnow() + timedelta(seconds=90),
         )
 
+    if settings.acs_poll_interval > 0:
+        scheduler.add_job(
+            _poll_acs_metrics,
+            IntervalTrigger(seconds=settings.acs_poll_interval),
+            id="acs_poll",
+            replace_existing=True,
+            misfire_grace_time=30,
+            next_run_time=utcnow() + timedelta(seconds=120),
+        )
+
     # MAC vendor sync — daily at 04:00 (with retry at 05:00 handled inside)
     if settings.mac_vendor_sync_interval > 0:
         scheduler.add_job(
@@ -173,11 +242,12 @@ def start_scheduler() -> AsyncIOScheduler:
         )
 
     logger.info(
-        "Scheduler started (olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, mac_vendor_sync=daily@04:00)",
+        "Scheduler started (olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@04:00)",
         settings.scan_olt_interval,
         settings.scan_mikrotik_interval,
         settings.bind_interval,
         settings.telemetry_interval,
+        settings.acs_poll_interval,
     )
     return scheduler
 

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     scan_mikrotik_interval: int = 300
     bind_interval: int = 300
     telemetry_interval: int = 300
+    acs_poll_interval: int = 600
     mac_vendor_sync_interval: int = 86400  # seconds (24h)
 
     @property

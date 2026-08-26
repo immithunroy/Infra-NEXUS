@@ -36,14 +36,17 @@ SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/"
 # Broad set of parameter names polled on GetRPC so most routers reply with at
 # least a subset (vendors use different prefixes for CPU/mem/traffic).
 _MONITOR_PARAMS = [
+    # CPU
     "InternetGatewayDevice.DeviceInfo.CPUUsage",
     "InternetGatewayDevice.DeviceInfo.X_TP-LINK_CPUUsage",
     "InternetGatewayDevice.DeviceInfo.X_ASB_COM_CPUUsage",
+    # Memory
     "InternetGatewayDevice.DeviceInfo.MemoryStatus.Total",
     "InternetGatewayDevice.DeviceInfo.MemoryStatus.Used",
     "InternetGatewayDevice.DeviceInfo.X_TP-LINK_MemUsage",
     "InternetGatewayDevice.DeviceInfo.X_ASB_COM_MemTotal",
     "InternetGatewayDevice.DeviceInfo.X_ASB_COM_MemUsed",
+    # WAN Traffic - IP Connection
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.X_BROADCOM_COM_TotalBytesReceived",
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.X_BROADCOM_COM_TotalBytesSent",
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.X_TP-LINK_TotalBytesReceived",
@@ -53,6 +56,7 @@ _MONITOR_PARAMS = [
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.X_ASB_COM_TotalBytesReceived",
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.X_ASB_COM_TotalBytesSent",
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.MACAddress",
+    # WAN Traffic - PPP Connection
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.X_BROADCOM_COM_TotalBytesReceived",
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.X_BROADCOM_COM_TotalBytesSent",
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.X_TP-LINK_TotalBytesReceived",
@@ -60,6 +64,46 @@ _MONITOR_PARAMS = [
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.TotalBytesReceived",
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.TotalBytesSent",
     "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.MACAddress",
+    # WiFi parameters (instances 1-3)
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Enable",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.Passphrase",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Channel",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Standard",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BasicEncryptionModes",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BeaconType",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.OperatingStandard",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.Enable",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.SSID",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.PreSharedKey.1.Passphrase",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.Channel",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.Standard",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.BasicEncryptionModes",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.BeaconType",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.OperatingStandard",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.Enable",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.SSID",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.PreSharedKey.1.Passphrase",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.Channel",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.Standard",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.BasicEncryptionModes",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.BeaconType",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.OperatingStandard",
+    # WiFi Radio stats (vendor specific)
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_BROADCOM_COM_TotalBytesReceived",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_BROADCOM_COM_TotalBytesSent",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_TP-LINK_TotalBytesReceived",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_TP-LINK_TotalBytesSent",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.X_BROADCOM_COM_TotalBytesReceived",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.X_BROADCOM_COM_TotalBytesSent",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.X_TP-LINK_TotalBytesReceived",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.X_TP-LINK_TotalBytesSent",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.X_BROADCOM_COM_TotalBytesReceived",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.X_BROADCOM_COM_TotalBytesSent",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.X_TP-LINK_TotalBytesReceived",
+    "InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.X_TP-LINK_TotalBytesSent",
+    # Device Summary
+    "InternetGatewayDevice.DeviceSummary",
 ]
 
 # TR-069 device status values used for Inform events.
@@ -198,11 +242,30 @@ def build_wifi_status(rows: list[AcsParameter]):
     by_instance: dict[int, dict[str, str]] = {}
     for p in rows:
         parts = p.name.split(".")
-        try:
-            instance = int(parts[parts.index("WLANConfiguration") + 1])
-        except (ValueError, IndexError):
+        instance = None
+        wlan_idx = -1
+        for idx, part in enumerate(parts):
+            part_lower = part.lower()
+            if part_lower == "wlanconfiguration" and idx + 1 < len(parts):
+                try:
+                    instance = int(parts[idx + 1])
+                    wlan_idx = idx
+                    break
+                except ValueError:
+                    pass
+            elif part_lower.startswith("wlanconfiguration") and len(part_lower) > len("wlanconfiguration"):
+                try:
+                    instance = int(part_lower.replace("wlanconfiguration", ""))
+                    wlan_idx = idx
+                    break
+                except ValueError:
+                    pass
+        if instance is None:
             continue
-        key = ".".join(parts[parts.index("WLANConfiguration") + 2:]).lower()
+        if wlan_idx >= 0 and wlan_idx + 2 < len(parts):
+            key = ".".join(parts[wlan_idx + 2:]).lower()
+        else:
+            continue
         by_instance.setdefault(instance, {})[key] = p.value
 
     bands: list[AcsWifiBandOut] = []
@@ -224,7 +287,7 @@ def build_wifi_status(rows: list[AcsParameter]):
         band = ""
         joined = " ".join(f"{k}={v}" for k, v in data.items())
         low = joined.lower()
-        if "5g" in low or "5ghz" in low or "802.11a" in low or "802.11ac" in low or "802.11ax" in low and "2.4" not in low:
+        if ("5g" in low or "5ghz" in low or "802.11a" in low or "802.11ac" in low or "802.11ax" in low) and "2.4" not in low:
             band = "5g"
         elif "2.4" in low or "802.11b" in low or "802.11g" in low or "802.11n" in low:
             band = "2.4g"
@@ -374,6 +437,23 @@ async def _sample_metrics(session: AsyncSession, device: AcsDevice, params: dict
 # Job dispatch
 # --------------------------------------------------------------------------
 
+async def _should_poll_monitoring(session: AsyncSession, device: AcsDevice) -> bool:
+    """Check if device supports monitoring parameters to avoid Fault 9814."""
+    count = (
+        await session.execute(
+            select(func.count(AcsParameter.id)).where(
+                AcsParameter.device_id == device.id,
+                AcsParameter.name.like("InternetGatewayDevice.WANDevice.%TotalBytesReceived%")
+                | AcsParameter.name.like("InternetGatewayDevice.WANDevice.%TotalBytesSent%")
+                | AcsParameter.name.like("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%")
+                | AcsParameter.name.like("InternetGatewayDevice.DeviceInfo.CPUUsage%")
+                | AcsParameter.name.like("InternetGatewayDevice.DeviceInfo.MemoryStatus.%")
+            )
+        )
+    ).scalar() or 0
+    return count > 0
+
+
 async def _next_job(session: AsyncSession, device: AcsDevice) -> AcsJob | None:
     res = await session.execute(
         select(AcsJob)
@@ -506,6 +586,8 @@ def _job_rpc(job: AcsJob) -> str | None:
         return download(job.command_key, job.command_key, url, "1 Firmware Upgrade Image")
     if job.action == "reboot":
         return reboot(job.command_key, job.command_key)
+    if job.action == "monitor":
+        return get_parameter_values(job.command_key, _MONITOR_PARAMS)
     return None
 
 
@@ -621,10 +703,11 @@ async def handle_cwmp(session: AsyncSession, body: bytes, ip: str) -> str:
             return ""
         job = await _next_job(session, device)
         if job is None:
-            # No pending work: end the session silently. Do NOT issue a
-            # GetParameterValues poll here - these basic CPEs (Baseline/
-            # EthernetLAN-only models) reject unsupported parameter requests
-            # with Fault 9814 on every cycle.
+            # No pending work: check if we should poll for monitoring parameters.
+            # Only poll for devices that have previously reported monitoring params
+            # to avoid Fault 9814 on basic CPEs.
+            if await _should_poll_monitoring(session, device):
+                return get_parameter_values(soap_id or str(uuid.uuid4()), _MONITOR_PARAMS)
             return ""
         # Fail fast when the device's reported TR-069 model does not expose the
         # parameters this job needs (avoids pointless Fault round-trips).
