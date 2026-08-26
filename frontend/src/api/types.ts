@@ -311,6 +311,29 @@ export interface OltWriteLog {
   finished_at: string | null;
 }
 
+export interface BgpSession {
+  id: number;
+  device_id: number;
+  remote_as: number;
+  remote_ip: string;
+  local_ip: string;
+  state: string;
+  uptime: string;
+  prefix_count: number;
+  advertised_count: number;
+  last_scan_at: string | null;
+}
+
+export interface BgpRoute {
+  id: number;
+  session_id: number;
+  prefix: string;
+  nexthop: string;
+  metric: number;
+  community: string;
+  received: boolean;
+}
+
 export interface SearchOnu {
   id: number;
   olt_id: number;

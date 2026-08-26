@@ -1,11 +1,10 @@
 import React, { FormEvent, useEffect, useState } from "react";
 import { api } from "../api/client";
-import { canOps, canWrite, MikrotikDevice, OLTDevice, RejectedOnu, SwitchDevice, TestResult } from "../api/types";
+import { canOps, canWrite, MikrotikDevice, OLTDevice, SwitchDevice, TestResult } from "../api/types";
 import { Pagination, usePagination } from "../components/Pagination";
 import { useUserRole } from "../lib/role";
 import { fmtTime } from "../lib/time";
 import ActionResultBanner from "../components/ActionResultBanner";
-import WarningBanner from "../components/WarningBanner";
 
 type Kind = "olt" | "mikrotik" | "switch";
 
@@ -103,10 +102,6 @@ export default function Devices() {
   const mktPager = usePagination(mikrotiks);
   const swPager = usePagination(switches);
 
-  const [rejectedOnus, setRejectedOnus] = useState<RejectedOnu[]>([]);
-  const [rejectedLoading, setRejectedLoading] = useState<number | null>(null);
-  const [authorizeModal, setAuthorizeModal] = useState<RejectedOnu | null>(null);
-  const [authName, setAuthName] = useState("");
   const [expandedSwitch, setExpandedSwitch] = useState<number | null>(null);
 
   const [nocs, setNocs] = useState<NocItem[]>([]);
@@ -117,17 +112,6 @@ export default function Devices() {
   const [expandedPop, setExpandedPop] = useState<number | null>(null);
   const [nocPopTab, setNocPopTab] = useState<"noc" | "pop">("noc");
 
-  const [onuOltId, setOnuOltId] = useState<number | "">("");
-  const [onuAction, setOnuAction] = useState<"delete" | "add" | "description">("delete");
-  const [onuPonPort, setOnuPonPort] = useState("");
-  const [onuId, setOnuId] = useState("");
-  const [onuIdentifier, setOnuIdentifier] = useState("");
-  const [onuDesc, setOnuDesc] = useState("");
-  const [onuBusy, setOnuBusy] = useState(false);
-
-  const [scanOltId, setScanOltId] = useState<number | "">("");
-  const [addResult, setAddResult] = useState<{ pon_port: string; onu_id: number; message: string } | null>(null);
-  const [onuActionResult, setOnuActionResult] = useState<{ message: string; ok: boolean } | null>(null);
 
   const load = async () => {
     setOlts(await api.get<OLTDevice[]>("/devices/olts"));
@@ -288,87 +272,6 @@ export default function Devices() {
     }
   };
 
-  const discoverRejected = async (oltId: number) => {
-    setRejectedLoading(oltId);
-    setRejectedOnus([]);
-    try {
-      const data = await api.get<RejectedOnu[]>(`/devices/olts/${oltId}/rejected`);
-      setRejectedOnus(data);
-      if (data.length === 0) flash("No rejected ONUs found on this OLT");
-    } catch (err) {
-      flash(err instanceof Error ? err.message : "Discovery failed", false);
-    } finally {
-      setRejectedLoading(null);
-    }
-  };
-
-  const authorizeOnu = async () => {
-    if (!authorizeModal) return;
-    try {
-      const res = await api.post<{ ok: boolean; message: string }>(
-        `/devices/olts/${authorizeModal.olt_id}/authorize-onu`,
-        {
-          pon_port: authorizeModal.pon_port,
-          onu_id: authorizeModal.onu_id,
-          serial: authorizeModal.serial,
-          name: authName,
-        },
-      );
-      flash(res.message);
-      setAuthorizeModal(null);
-      setAuthName("");
-      // Remove the authorized ONU from the rejected list
-      setRejectedOnus((prev) =>
-        prev.filter((r) => !(r.pon_port === authorizeModal!.pon_port && r.onu_id === authorizeModal!.onu_id))
-      );
-      await load();
-    } catch (err) {
-      flash(err instanceof Error ? err.message : "Authorization failed", false);
-    }
-  };
-
-  const onuOlt = olts.find((o) => o.id === onuOltId);
-  const isGpon = onuOlt?.pon_type === "gpon";
-  const onuPorts = onuOlt?.ports || [];
-
-  const execOnuAction = async () => {
-    if (onuOltId === "" || !onuPonPort) return;
-    const confirmMsg = onuAction === "delete"
-      ? `Delete ONU ${onuId} from ${onuPonPort}? This removes it from the OLT.`
-      : onuAction === "add"
-      ? `Add ONU on ${onuPonPort} with ${isGpon ? "SN" : "MAC"}: ${onuIdentifier}?`
-      : `Set description on ${onuPonPort}:${onuId}?`;
-    if (!confirm(confirmMsg)) return;
-    setOnuBusy(true);
-    try {
-      let res;
-      if (onuAction === "delete") {
-        res = await api.post<{ ok: boolean; message: string }>(`/devices/olts/${onuOltId}/delete-onu`, {
-          pon_port: onuPonPort, onu_id: Number(onuId),
-        });
-      } else if (onuAction === "add") {
-        res = await api.post<{ ok: boolean; message: string }>(`/devices/olts/${onuOltId}/add-onu`, {
-          pon_port: onuPonPort, identifier: onuIdentifier, description: onuDesc,
-        });
-      } else {
-        res = await api.post<{ ok: boolean; message: string }>(`/devices/olts/${onuOltId}/set-description`, {
-          pon_port: onuPonPort, onu_id: Number(onuId), description: onuDesc,
-        });
-      }
-      flash(res.message);
-      setOnuActionResult({ message: res.message, ok: true });
-      setOnuIdentifier("");
-      setOnuDesc("");
-      setOnuId("");
-      await load();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Operation failed";
-      flash(msg, false);
-      setOnuActionResult({ message: msg, ok: false });
-    } finally {
-      setOnuBusy(false);
-    }
-  };
 
   const saveNoc = async () => {
     if (!nocModal) return;
@@ -746,215 +649,6 @@ export default function Devices() {
         </div>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">ONU / ONT Management</h2>
-
-        <div className="card p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <label className="label">OLT</label>
-              <select className="input w-56" value={onuOltId} onChange={(e) => { setOnuOltId(e.target.value ? Number(e.target.value) : ""); setOnuPonPort(""); setOnuId(""); setOnuIdentifier(""); setOnuDesc(""); }}>
-                <option value="">Select OLT</option>
-                {olts.map((o) => <option key={o.id} value={o.id}>{o.name} ({o.pon_type})</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Action</label>
-              <select className="input w-40" value={onuAction} onChange={(e) => { setOnuAction(e.target.value as typeof onuAction); setOnuId(""); setOnuIdentifier(""); setOnuDesc(""); }}>
-                <option value="delete">Delete from OLT</option>
-                <option value="add">Add to OLT</option>
-                <option value="description">Set Description</option>
-              </select>
-            </div>
-            <div>
-              <label className="label">PON Port</label>
-              <select className="input w-48" value={onuPonPort} onChange={(e) => { setOnuPonPort(e.target.value); setOnuId(""); }} disabled={!onuOltId}>
-                <option value="">Select port</option>
-                {onuPorts.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-            {(onuAction === "delete" || onuAction === "description") && (
-              <div>
-                <label className="label">ONU ID</label>
-                <input className="input w-24" type="number" min="1" placeholder="e.g. 5" value={onuId} onChange={(e) => setOnuId(e.target.value)} disabled={!onuPonPort} />
-              </div>
-            )}
-            {onuAction === "add" && (
-              <div>
-                <label className="label">{isGpon ? "SN (VENDOR:SERIAL)" : "MAC (XX.XX.XX.XX.XX.XX)"}</label>
-                <input className="input w-56" placeholder={isGpon ? "HWTC:9E6DDA88" : "00d5.9f92.0c88"} value={onuIdentifier} onChange={(e) => setOnuIdentifier(e.target.value)} disabled={!onuPonPort} />
-              </div>
-            )}
-            {(onuAction === "add" || onuAction === "description") && (
-              <div>
-                <label className="label">Description (no spaces, use _)</label>
-                <input className="input w-64" placeholder="25021902_RPM_C_B" value={onuDesc} onChange={(e) => setOnuDesc(e.target.value)} disabled={!onuPonPort} />
-              </div>
-            )}
-            <button
-              className={onuAction === "delete" ? "btn-primary bg-red-600 hover:bg-red-700" : "btn-primary"}
-              disabled={!onuPonPort || onuBusy || (onuAction === "delete" && !onuId) || (onuAction === "add" && !onuIdentifier) || (onuAction === "description" && (!onuId || !onuDesc))}
-              onClick={execOnuAction}
-            >
-              {onuBusy ? "Working..." : onuAction === "delete" ? "Delete from OLT" : onuAction === "add" ? "Add to OLT" : "Set Description"}
-            </button>
-          </div>
-          {onuOlt && onuAction === "delete" && (
-            <WarningBanner level="danger" title="Warning: This will permanently remove the ONU from the OLT" className="mt-3">
-              Enter the PON port and ONU ID, then click "Delete from OLT" to proceed.
-            </WarningBanner>
-          )}
-          {onuOlt && onuAction === "add" && (
-            <div className="mt-3 text-xs text-slate-400">
-              {onuOlt.name} &middot; {isGpon ? "GPON" : "EPON"} &middot; Enter {isGpon ? "Serial Number with vendor prefix" : "MAC address"} and optional description
-            </div>
-          )}
-          {onuOlt && onuAction === "description" && (
-            <div className="mt-3 text-xs text-slate-400">
-              {onuOlt.name} &middot; {isGpon ? "GPON" : "EPON"} &middot; Sets ONU description on OLT (no spaces, max 32 chars)
-            </div>
-          )}
-        </div>
-
-        {onuActionResult && (
-          <ActionResultBanner ok={onuActionResult.ok} message={onuActionResult.message} onDismiss={() => setOnuActionResult(null)} className="mt-3" />
-        )}
-
-        <div className="mt-4">
-          <div className="mb-2 flex items-center gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Scan Rejected ONUs</h3>
-            <select className="input w-56 text-xs py-1" value={scanOltId} onChange={(e) => { setScanOltId(e.target.value ? Number(e.target.value) : ""); setRejectedOnus([]); setAddResult(null); }}>
-              <option value="">Select OLT</option>
-              {olts.map((o) => <option key={o.id} value={o.id}>{o.name} ({o.pon_type})</option>)}
-            </select>
-            <button className="btn-secondary text-xs" disabled={!scanOltId || rejectedLoading !== null} onClick={() => scanOltId && discoverRejected(scanOltId)}>
-              {rejectedLoading ? "Scanning..." : "Scan"}
-            </button>
-          </div>
-
-          {addResult && (
-            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/40">
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
-                  <svg className="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{addResult.message}</div>
-                  <div className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                    Bound on <span className="font-mono font-semibold">{addResult.pon_port}</span> as sequence <span className="font-mono font-semibold">{addResult.onu_id}</span>
-                  </div>
-                  <div className="mt-1 font-mono text-[11px] text-emerald-500 dark:text-emerald-500">
-                    {(() => {
-                      const m = addResult.pon_port.match(/^(EPON|GPON)(\d+\/\d+):(\d+)$/);
-                      if (!m) return addResult.pon_port;
-                      const type = m[1].toLowerCase();
-                      const base = m[2];
-                      const seq = addResult.onu_id;
-                      return type === "epon"
-                        ? `interface epon ${base}\nepon bind-onu sequence ${seq}`
-                        : `interface gpon ${base}\ngpon bind-onu sequence ${seq}`;
-                    })()}
-                  </div>
-                </div>
-                <button className="ml-auto text-emerald-400 hover:text-emerald-600" onClick={() => setAddResult(null)}>
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {rejectedOnus.length > 0 ? (
-            <div className="card overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-                  <tr>
-                    <th className="th">PON Port</th>
-                    <th className="th">Serial / MAC</th>
-                    <th className="th">Description</th>
-                    <th className="th">Seq</th>
-                    <th className="th">Reason</th>
-                    <th className="th">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                  {rejectedOnus.map((r, i) => (
-                    <tr key={`${r.pon_port}-${r.onu_id}-${i}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="td font-mono text-xs text-brand-700 dark:text-cyan-300">{r.pon_port}</td>
-                      <td className="td font-mono text-xs">{r.serial || "—"}</td>
-                      <td className="td">
-                        <input
-                          className="input w-56 text-xs py-1"
-                          placeholder="Max 32 chars, no /;: or spaces"
-                          maxLength={32}
-                          value={r.description || ""}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/[\/;:\s]/g, "_");
-                            setRejectedOnus((prev) => prev.map((item, idx) => idx === i ? { ...item, description: val } : item));
-                          }}
-                        />
-                      </td>
-                      <td className="td">
-                        <input
-                          className="input w-16 text-xs py-1"
-                          type="number"
-                          min="1"
-                          max={olts.find((o) => o.id === r.olt_id)?.pon_type === "epon" ? 64 : 128}
-                          placeholder="auto"
-                          value={r.sequence || ""}
-                          onChange={(e) => {
-                            const val = e.target.value ? Number(e.target.value) : null;
-                            setRejectedOnus((prev) => prev.map((item, idx) => idx === i ? { ...item, sequence: val } : item));
-                          }}
-                        />
-                      </td>
-                      <td className="td"><span className="badge bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">{r.reason || "unknown"}</span></td>
-                      <td className="td">
-                        {writeOk && (
-                          <button
-                            className="btn-primary text-xs py-1 px-3"
-                            disabled={rejectedLoading === -1}
-                            onClick={async () => {
-                              setRejectedLoading(-1);
-                              try {
-                                const ponBase = r.pon_port.replace(/:\d+$/, "");
-                                const res = await api.post<{ ok: boolean; message: string; pon_port: string; onu_id: number }>(`/devices/olts/${r.olt_id}/add-onu`, {
-                                  pon_port: ponBase,
-                                  identifier: r.serial || "",
-                                  description: r.description || "",
-                                  sequence: r.sequence || null,
-                                });
-                                setAddResult({ pon_port: res.pon_port, onu_id: res.onu_id, message: res.message });
-                                setRejectedOnus((prev) => prev.filter((_, idx) => idx !== i));
-                                await load();
-                              } catch (err) {
-                                flash(err instanceof Error ? err.message : "Add failed", false);
-                              } finally {
-                                setRejectedLoading(null);
-                              }
-                            }}
-                          >
-                            {rejectedLoading === -1 ? "..." : "Add"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : rejectedLoading ? (
-            <div className="card p-4 text-sm text-slate-400">Scanning for rejected ONUs...</div>
-          ) : scanOltId ? (
-            <div className="card p-4 text-sm text-slate-400">Click "Scan" to discover rejected ONUs.</div>
-          ) : (
-            <div className="card p-4 text-sm text-slate-400">Select an OLT and click "Scan" to discover rejected ONUs.</div>
-          )}
-        </div>
-      </section>
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setModal(null)}>
@@ -1197,48 +891,6 @@ export default function Devices() {
         </div>
       )}
 
-      {authorizeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setAuthorizeModal(null)}>
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
-            <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">Authorize ONU from Rejected</h2>
-            <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-              This will register the ONU on the OLT and add it to the application inventory.
-            </p>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">PON Port</label>
-                  <input className="input font-mono" value={authorizeModal.pon_port} disabled />
-                </div>
-                <div>
-                  <label className="label">ONU ID</label>
-                  <input className="input" value={authorizeModal.onu_id} disabled />
-                </div>
-              </div>
-              <div>
-                <label className="label">Serial / MAC</label>
-                <input className="input font-mono" value={authorizeModal.serial} disabled />
-              </div>
-              <div>
-                <label className="label">Description</label>
-                <input className="input" value={authorizeModal.description || "—"} disabled />
-              </div>
-              <div>
-                <label className="label">Reason</label>
-                <input className="input" value={authorizeModal.reason || "—"} disabled />
-              </div>
-              <div>
-                <label className="label">Customer / Name (optional)</label>
-                <input className="input" value={authName} onChange={(e) => setAuthName(e.target.value)} placeholder="e.g. John Doe" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <button type="button" className="btn-secondary" onClick={() => setAuthorizeModal(null)}>Cancel</button>
-              <button type="button" className="btn-primary" onClick={authorizeOnu}>Authorize & Add ONU</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* NOC Modal */}
       {nocModal && (

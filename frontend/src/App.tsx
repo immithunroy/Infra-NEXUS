@@ -13,6 +13,7 @@ import NetworkMap from "./pages/NetworkMap";
 import Onus from "./pages/Onus";
 import OnuProfile from "./pages/OnuProfile";
 import Reports from "./pages/Reports";
+import Routing from "./pages/Routing";
 import ScheduleJobs from "./pages/ScheduleJobs";
 import Scans from "./pages/Scans";
 import SubscriberProfile from "./pages/SubscriberProfile";
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="/network-map" element={<NetworkMap />} />
             <Route path="/fiber-map" element={<FiberMap />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/routing" element={<Routing />} />
             <Route path="/users" element={<Users />} />
             <Route path="/scans" element={<Scans />} />
             <Route path="/schedule-jobs" element={<ScheduleJobs />} />
