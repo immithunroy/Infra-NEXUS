@@ -2,8 +2,18 @@
 
 Vendors are fetched from free providers (maclookup.app primary, macvendors.com
 fallback) and cached in the ``mac_vendors`` table keyed by OUI so the provider
-is only contacted once per OUI. Every list endpoint resolves its MACs through
-:func:`vendor_map`, which batches DB lookups and only fetches unknown OUIs.
+is only contacted once per OUI.
+
+Two distinct paths:
+
+- **Background sync** (:func:`sync_all_vendors`): runs daily via scheduler,
+  collects every OUI from the ``onus`` table, fetches any missing/empty ones
+  from the external API, and batch-updates the cache.  HTTP happens *only*
+  here — never during page loads.
+
+- **Request-time lookup** (:func:`vendor_map`): pure DB read.  Extracts OUIs
+  from the caller's MAC list, fetches their brands from ``mac_vendors``, and
+  returns a dict.  Zero HTTP, zero flush — fast and pool-safe.
 """
 from __future__ import annotations
 
@@ -17,14 +27,12 @@ from urllib import request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import MacVendor
+from ..models import MacVendor, Onu
 from ..utils.mac import normalize_mac
 from ..utils.time import utcnow
 
 logger = logging.getLogger("olt_commander.mac_vendor")
 
-REFETCH_COOLDOWN_SECONDS = 86400
-MAX_FETCH_PER_CALL = 20
 FETCH_CONCURRENCY = 5
 
 _MACLOOKUP = "https://api.maclookup.app/v2/macs/{oui}"
@@ -67,6 +75,10 @@ _DROP_TOKENS = {
     "TECH", "SUPPLY", "CHAIN", "NET",
 }
 
+
+# ---------------------------------------------------------------------------
+# Helpers (shared by sync and fetch)
+# ---------------------------------------------------------------------------
 
 def oui_of(mac: str) -> str:
     clean = normalize_mac(mac)
@@ -122,14 +134,102 @@ async def _fetch_vendor(oui: str) -> tuple[str, str]:
     return "", ""
 
 
+# ---------------------------------------------------------------------------
+# Background sync (called by scheduler — once daily)
+# ---------------------------------------------------------------------------
+
+async def sync_all_vendors(session: AsyncSession) -> None:
+    """Collect every OUI from the ``onus`` table and populate ``mac_vendors``.
+
+    This is the **only** function that makes HTTP calls.  It runs in the
+    background scheduler, completely isolated from page-load requests.
+    Unknown OUIs are fetched sequentially (with concurrency cap) and written
+    to the DB in a single batch flush.
+    """
+    # Gather all OUIs from onus (mac + last_mac) in Python for portability
+    onu_rows = (
+        await session.execute(
+            select(Onu.mac, Onu.last_mac)
+        )
+    ).all()
+
+    all_ouis: set[str] = set()
+    for mac, last_mac in onu_rows:
+        for m in (mac, last_mac):
+            if m:
+                oui = oui_of(m)
+                if oui:
+                    all_ouis.add(oui)
+
+    if not all_ouis:
+        logger.info("MAC vendor sync: no OUIs found in onus table")
+        return
+
+    # Check which OUIs need fetching (missing or empty brand)
+    now = utcnow()
+    oui_list = list(all_ouis)
+    existing = (
+        await session.execute(
+            select(MacVendor).where(MacVendor.oui.in_(oui_list))
+        )
+    ).scalars().all()
+    existing_map = {r.oui: r for r in existing}
+
+    to_fetch: list[str] = []
+    for oui in oui_list:
+        if oui not in existing_map:
+            to_fetch.append(oui)
+        elif not existing_map[oui].brand:
+            to_fetch.append(oui)
+
+    if not to_fetch:
+        logger.info("MAC vendor sync: all %d OUIs already cached", len(all_ouis))
+        return
+
+    logger.info("MAC vendor sync: fetching %d new/empty OUIs out of %d total", len(to_fetch), len(all_ouis))
+
+    # 3. Fetch sequentially with concurrency cap — no DB session held during HTTP
+    sem = asyncio.Semaphore(FETCH_CONCURRENCY)
+    results: dict[str, tuple[str, str]] = {}  # oui -> (source, vendor)
+
+    async def _fetch_one(oui: str) -> None:
+        async with sem:
+            source, vendor = await _fetch_vendor(oui)
+            results[oui] = (source, vendor)
+
+    await asyncio.gather(*(_fetch_one(oui) for oui in to_fetch))
+
+    # 4. Batch write to DB
+    fetched_count = 0
+    for oui, (source, vendor) in results.items():
+        brand = normalize_brand(vendor) if vendor else ""
+        if oui in existing_map:
+            existing_map[oui].vendor = vendor
+            existing_map[oui].brand = brand
+            existing_map[oui].source = source
+            existing_map[oui].updated_at = utcnow()
+        else:
+            session.add(MacVendor(oui=oui, vendor=vendor, brand=brand, source=source, updated_at=utcnow()))
+        fetched_count += 1
+
+    try:
+        await session.flush()
+    except Exception:
+        logger.exception("MAC vendor sync: failed to flush vendor data")
+
+    logger.info("MAC vendor sync complete: %d OUIs fetched, %d total cached", fetched_count, len(all_ouis))
+
+
+# ---------------------------------------------------------------------------
+# Request-time lookup (pure DB — zero HTTP)
+# ---------------------------------------------------------------------------
+
 async def vendor_map(session: AsyncSession, macs: Iterable[str]) -> dict[str, str]:
-    """Resolve a batch of MACs to brand names.
+    """Resolve a batch of MACs to brand names from the local cache.
 
-    Returns a dict keyed by lowercased MAC -> brand ("" when unknown). Unknown
-    OUIs are fetched from the provider, capped to keep requests fast.
-
-    This function NEVER holds the DB session during HTTP calls. It fetches
-    vendor data first in a separate step, then does a single batch DB update.
+    Returns a dict keyed by lowercased MAC -> brand ("" when unknown/not yet
+    synced).  This function **never** makes HTTP calls — it reads only from
+    the ``mac_vendors`` table which is populated by :func:`sync_all_vendors`.
     """
     by_oui: dict[str, list[str]] = {}
     for mac in macs:
@@ -143,50 +243,11 @@ async def vendor_map(session: AsyncSession, macs: Iterable[str]) -> dict[str, st
 
     ouis = list(by_oui)
 
-    # Step 1: Read from DB (fast, no HTTP)
-    rows = (await session.execute(select(MacVendor).where(MacVendor.oui.in_(ouis)))).scalars().all()
-    known: dict[str, MacVendor] = {r.oui: r for r in rows}
-    now = utcnow()
-
-    # Step 2: Determine which OUIs need fetching
-    to_fetch = [
-        oui
-        for oui in ouis
-        if oui not in known or (not known[oui].brand and (now - known[oui].updated_at).total_seconds() >= REFETCH_COOLDOWN_SECONDS)
-    ][:MAX_FETCH_PER_CALL]
-
-    # Step 3: Fetch vendor data OUTSIDE the session (pure HTTP, no DB held)
-    fetched: dict[str, tuple[str, str]] = {}
-    if to_fetch:
-        sem = asyncio.Semaphore(FETCH_CONCURRENCY)
-
-        async def _fetch_one(oui: str) -> None:
-            async with sem:
-                source, vendor = await _fetch_vendor(oui)
-                fetched[oui] = (source, vendor)
-
-        await asyncio.gather(*(_fetch_one(oui) for oui in to_fetch))
-
-    # Step 4: Batch update DB (fast, single flush)
-    for oui, (source, vendor) in fetched.items():
-        brand = normalize_brand(vendor) if vendor else ""
-        if oui in known:
-            known[oui].vendor = vendor
-            known[oui].brand = brand
-            known[oui].source = source
-            known[oui].updated_at = utcnow()
-        else:
-            session.add(MacVendor(oui=oui, vendor=vendor, brand=brand, source=source, updated_at=utcnow()))
-
-    if fetched:
-        try:
-            await session.flush()
-        except Exception:
-            logger.exception("Failed to flush vendor data")
-
-    # Step 5: Read final brands from DB
-    rows = (await session.execute(select(MacVendor).where(MacVendor.oui.in_(ouis)))).scalars().all()
+    rows = (
+        await session.execute(select(MacVendor).where(MacVendor.oui.in_(ouis)))
+    ).scalars().all()
     brand_by_oui = {r.oui: r.brand for r in rows}
+
     result: dict[str, str] = {}
     for oui, macs_for_oui in by_oui.items():
         brand = brand_by_oui.get(oui, "")

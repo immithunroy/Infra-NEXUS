@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     scan_mikrotik_interval: int = 300
     bind_interval: int = 300
     telemetry_interval: int = 300
+    mac_vendor_sync_interval: int = 86400  # seconds (24h)
 
     @property
     def cors_origin_list(self) -> list[str]:
