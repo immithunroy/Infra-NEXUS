@@ -1,47 +1,60 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: olt-db
+    container_name: infra-nexus-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: olt
       POSTGRES_PASSWORD: oltpassword
       POSTGRES_DB: olt_commander
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - nexus_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U olt -d olt_commander"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - nexus_internal
 
   backend:
     build: ./backend
-    container_name: olt-backend
+    container_name: infra-nexus-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://olt:oltpassword@db:5432/olt_commander
-      JWT_SECRET: change-me-in-production
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: admin123
-      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      CORS_ORIGINS: https://nexus.qbinternet.com,http://localhost:3000,http://localhost:5173
       SCAN_OLT_INTERVAL: "300"
       SCAN_MIKROTIK_INTERVAL: "300"
       BIND_INTERVAL: "300"
+      TELEMETRY_INTERVAL: "300"
+      MAC_VENDOR_SYNC_INTERVAL: "86400"
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8080:8080"
+    networks:
+      - nexus_internal
 
   frontend:
     build: ./frontend
-    container_name: olt-frontend
+    container_name: infra-nexus-frontend
     restart: unless-stopped
     depends_on:
       - backend
     ports:
-      - "3000:80"
+      - "8050:80"
+    networks:
+      - nexus_internal
+      - proxy_npm_network
 
 volumes:
-  pgdata:
+  nexus_pgdata:
+
+networks:
+  nexus_internal:
+    driver: bridge
+  proxy_npm_network:
+    external: true

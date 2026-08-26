@@ -1,0 +1,39 @@
+name: Deploy Infra NEXUS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/infra-nexus
+
+            echo ">>> Pulling latest code..."
+            git pull origin main
+
+            echo ">>> Building Docker images..."
+            docker compose build --no-cache
+
+            echo ">>> Restarting containers..."
+            docker compose up -d --force-recreate --remove-orphans
+
+            echo ">>> Cleaning up old images..."
+            docker image prune -f
+
+            echo ">>> Waiting for backend health..."
+            sleep 10
+
+            echo ">>> Checking container status..."
+            docker compose ps
+
+            echo ">>> Deploy complete!"
