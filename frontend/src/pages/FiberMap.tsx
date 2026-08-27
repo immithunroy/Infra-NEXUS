@@ -144,6 +144,12 @@ export default function FiberMap() {
   const [searchSp, setSearchSp] = useState("");
   const [searchCuts, setSearchCuts] = useState("");
 
+  const [feasCheckOpen, setFeasCheckOpen] = useState(false);
+  const [feasLat, setFeasLat] = useState("");
+  const [feasLng, setFeasLng] = useState("");
+  const [feasResults, setFeasResults] = useState<{ tj: TjBox; distance: number; destinations: string[] }[]>([]);
+  const [feasChecked, setFeasChecked] = useState(false);
+
   const mapRef = useRef<L.Map | null>(null);
 
   const load = useCallback(async () => {
@@ -410,6 +416,34 @@ export default function FiberMap() {
     mapRef.current?.removeLayer(layer);
   };
 
+  const runFeasibilityCheck = () => {
+    const lat = parseFloat(feasLat);
+    const lng = parseFloat(feasLng);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setError("Invalid coordinates. Lat must be -90..90, Lng must be -180..180.");
+      return;
+    }
+    const results = tjBoxes.map((tj) => {
+      const distance = haversine(lat, lng, tj.lat, tj.lng);
+      const connectedCables = cables.filter((c) =>
+        c.segments?.some((s) =>
+          (Math.abs(s.start_lat - tj.lat) < 0.001 && Math.abs(s.start_lng - tj.lng) < 0.001) ||
+          (Math.abs(s.end_lat - tj.lat) < 0.001 && Math.abs(s.end_lng - tj.lng) < 0.001)
+        )
+      );
+      const destinations = [...new Set(connectedCables.map((c) => {
+        if (c.src_tj_name && c.dst_tj_name) {
+          return c.src_tj_id === tj.id ? c.dst_tj_name : c.src_tj_name;
+        }
+        return c.code;
+      }))];
+      return { tj, distance, destinations };
+    });
+    results.sort((a, b) => a.distance - b.distance);
+    setFeasResults(results.slice(0, 3));
+    setFeasChecked(true);
+  };
+
   return (
     <div className={isFullscreen ? "fixed inset-0 z-[9998] bg-white dark:bg-slate-900 flex flex-col" : "flex flex-col relative"} style={{ zIndex: 1, height: isFullscreen ? "100vh" : "calc(100vh - 4rem)" }}>
       {/* Top bar: all controls in one row */}
@@ -446,36 +480,14 @@ export default function FiberMap() {
           <>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Cable</button>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
-            <button className={`btn-secondary text-xs py-1 px-2 ${routeMode ? "bg-blue-600 text-white" : ""}`} onClick={() => { setRouteMode(!routeMode); setRouteSrcTj(null); setRouteDstTj(null); }}>
-              {routeMode ? "Cancel" : "Cable SRC>DST"}
+            <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>
+              Feasibility Check
             </button>
           </>
         )}
       </div>
 
       {error && <ActionResultBanner ok={false} message={error} onDismiss={() => setError("")} className="shrink-0" />}
-
-      {routeMode && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 text-xs shrink-0">
-          <span className="font-semibold text-blue-700 dark:text-blue-300">Cable SRC&gt;DST:</span>
-          <span className="text-blue-600 dark:text-blue-400">Click TJ on map</span>
-          <select className="input w-24 text-xs py-0.5" value={routeModeType} onChange={(e) => setRouteModeType(e.target.value as "straight" | "road")}>
-            <option value="straight">Straight Line</option>
-            <option value="road">Road Route</option>
-          </select>
-          {routeModeType === "road" && (
-            <select className="input w-24 text-xs py-0.5" value={routeType} onChange={(e) => setRouteType(e.target.value as "driving" | "walking")}>
-              <option value="driving">Driving</option>
-              <option value="walking">Walking</option>
-            </select>
-          )}
-          {routeSrcTj && <span className="text-emerald-600 font-semibold">SRC: {routeSrcTj.unique_id}</span>}
-          {routeDstTj && <span className="text-blue-600 font-semibold">DST: {routeDstTj.unique_id}</span>}
-          <button className="btn-primary text-xs py-0.5 px-2" disabled={!routeSrcTj || !routeDstTj || routing} onClick={handleRouteFetch}>
-            {routing ? "..." : "Create"}
-          </button>
-        </div>
-      )}
 
       {/* Map + Sidebar layout */}
       <div className="flex-1 flex min-h-0" style={{ zIndex: 2 }}>
@@ -647,7 +659,10 @@ export default function FiberMap() {
       {selectedTj && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedTj(null)}>
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
-            <TjDetailPanel tj={selectedTj} cables={cables} splitters={splitters} splices={splices} onClose={() => setSelectedTj(null)} onSpliceChange={load} writeOk={writeOk} />
+            <TjDetailPanel tj={selectedTj} cables={cables} splitters={splitters} splices={splices} onClose={() => setSelectedTj(null)} onSpliceChange={load} writeOk={writeOk}
+              onAddSplitter={() => { setSplitterForm({ split_ratio: 2, tj_box_id: selectedTj.id, lat: selectedTj.lat, lng: selectedTj.lng }); setEditingId(null); setShowForm("splitter"); }}
+              onEditSplitter={(sp) => { setEditingId(sp.id); setEditKind("splitter"); setSplitterForm(sp as any); setShowForm("splitter"); }}
+            />
           </div>
         </div>
       )}
@@ -891,6 +906,71 @@ export default function FiberMap() {
           </div>
         </div>
       )}
+
+      {/* Feasibility Check Modal */}
+      {feasCheckOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => { setFeasCheckOpen(false); setFeasChecked(false); setFeasResults([]); }}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Feasibility Check</h2>
+              <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={() => { setFeasCheckOpen(false); setFeasChecked(false); setFeasResults([]); }}>
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400">Enter coordinates to find the 3 nearest TJ boxes and their connected cable destinations.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Latitude</label>
+                  <input type="number" step="any" className="input" placeholder="e.g. 1.3521" value={feasLat} onChange={(e) => setFeasLat(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Longitude</label>
+                  <input type="number" step="any" className="input" placeholder="e.g. 103.8198" value={feasLng} onChange={(e) => setFeasLng(e.target.value)} />
+                </div>
+              </div>
+              <button className="btn-primary" onClick={runFeasibilityCheck}>Check Feasibility</button>
+              {feasChecked && (
+                <div className="mt-4">
+                  {feasResults.length === 0 ? (
+                    <p className="text-sm text-slate-500">No TJ boxes found in the database.</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-700">
+                          <th className="text-left py-2 text-slate-600 dark:text-slate-400">TJ</th>
+                          <th className="text-right py-2 text-slate-600 dark:text-slate-400">Distance</th>
+                          <th className="text-left py-2 text-slate-600 dark:text-slate-400">Cable Destinations</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {feasResults.map((r, i) => (
+                          <tr key={r.tj.id} className="border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" onClick={() => {
+                            if (mapRef.current) {
+                              mapRef.current.flyTo([r.tj.lat, r.tj.lng], 16, { duration: 1.2 });
+                              setSelectedTj(r.tj);
+                            }
+                          }}>
+                            <td className="py-2">
+                              <span className="font-semibold text-slate-900 dark:text-white">{r.tj.unique_id}</span>
+                              {r.tj.name && <span className="ml-1 text-slate-500 dark:text-slate-400">{r.tj.name}</span>}
+                              {i === 0 && <span className="ml-2 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">NEAREST</span>}
+                            </td>
+                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{r.distance.toFixed(2)} km</td>
+                            <td className="py-2 text-slate-600 dark:text-slate-400">
+                              {r.destinations.length > 0 ? r.destinations.join(", ") : <span className="italic text-slate-400">No cables</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -962,7 +1042,7 @@ function CoreSelect({ coreCount, value, onChange, occupiedCores, spareCores }: {
   );
 }
 
-function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange, writeOk }: { tj: TjBox; cables: Cable[]; splitters: Splitter[]; splices: any[]; onClose: () => void; onSpliceChange: () => void; writeOk: boolean }) {
+function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange, writeOk, onAddSplitter, onEditSplitter }: { tj: TjBox; cables: Cable[]; splitters: Splitter[]; splices: any[]; onClose: () => void; onSpliceChange: () => void; writeOk: boolean; onAddSplitter?: () => void; onEditSplitter?: (sp: Splitter) => void }) {
   const hostedSplitters = useMemo(() => splitters.filter((s) => s.tj_box_id === tj.id), [splitters, tj.id]);
   const connectedCables = useMemo(() => cables.filter((c) => {
     if (!c.segments?.length) return false;
@@ -1161,12 +1241,8 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hosted Splitters ({hostedSplitters.length})</h3>
-              {writeOk && (
-                <button className="btn-primary text-[10px] py-0.5 px-2" onClick={() => {
-                  setSplitterForm({ split_ratio: 2, tj_box_id: tj.id, lat: tj.lat, lng: tj.lng });
-                  setEditingId(null);
-                  setShowForm("splitter");
-                }}>+ Add Splitter</button>
+              {writeOk && onAddSplitter && (
+                <button className="btn-primary text-[10px] py-0.5 px-2" onClick={onAddSplitter}>+ Add Splitter</button>
               )}
             </div>
             {hostedSplitters.length > 0 ? (
@@ -1177,9 +1253,9 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                     <div className="text-xs text-slate-500">Input core: {sp.input_core}</div>
                     <div className="text-xs text-slate-500">Output: {sp.output_cores || "—"}</div>
                     {sp.name && <div className="text-xs text-slate-400 mt-1">{sp.name}</div>}
-                    {writeOk && (
+                    {writeOk && onEditSplitter && (
                       <div className="hidden group-hover:flex absolute top-2 right-2 gap-1">
-                        <button className="text-[9px] text-blue-500 hover:underline" onClick={() => { setEditingId(sp.id); setEditKind("splitter"); setSplitterForm(sp as any); setShowForm("splitter"); }}>Edit</button>
+                        <button className="text-[9px] text-blue-500 hover:underline" onClick={() => onEditSplitter(sp)}>Edit</button>
                         <button className="text-[9px] text-red-500 hover:underline" onClick={async () => {
                           if (!confirm(`Remove splitter ${sp.unique_id}? The allocated core(s) will be released.`)) return;
                           try { await api.del(`/fiber/splitters/${sp.id}`); onSpliceChange(); } catch (e) { alert(String(e)); }
