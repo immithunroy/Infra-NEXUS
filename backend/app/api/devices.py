@@ -513,7 +513,7 @@ async def list_bgp_routes(mikrotik_id: int, session_id: int, db: AsyncSession = 
 
 @router.get("/mikrotiks/{mikrotik_id}/bgp/{session_id}/snapshots", response_model=list[BgpPrefixSnapshotOut])
 async def list_bgp_snapshots(mikrotik_id: int, session_id: int, hours: int = 168, db: AsyncSession = Depends(get_db)):
-    """Return prefix count history for graphing (default 7 days)."""
+    """Return prefix count history for graphing (default 7 days, max 8760 = 1 year)."""
     from datetime import timedelta
     device = await db.get(MikrotikDevice, mikrotik_id)
     if device is None:
@@ -521,10 +521,46 @@ async def list_bgp_snapshots(mikrotik_id: int, session_id: int, hours: int = 168
     bgp_session = await db.get(BgpSession, session_id)
     if bgp_session is None or bgp_session.device_id != mikrotik_id:
         raise HTTPException(status_code=404, detail="BGP session not found")
-    since = utcnow() - timedelta(hours=min(hours, 720))
+    since = utcnow() - timedelta(hours=min(hours, 8760))
     result = await db.execute(
         select(BgpPrefixSnapshot)
         .where(BgpPrefixSnapshot.session_id == session_id, BgpPrefixSnapshot.recorded_at >= since)
+        .order_by(BgpPrefixSnapshot.recorded_at)
+    )
+    return result.scalars().all()
+
+
+@router.get("/bgp/all-sessions")
+async def list_all_bgp_sessions(db: AsyncSession = Depends(get_db)):
+    """Return all BGP sessions across all Mikrotik devices with device name."""
+    from ..models import MikrotikDevice
+    devices = (await db.execute(select(MikrotikDevice))).scalars().all()
+    device_map = {d.id: d.name for d in devices}
+    result = await db.execute(
+        select(BgpSession).order_by(BgpSession.device_id, BgpSession.state.desc(), BgpSession.remote_ip)
+    )
+    sessions = result.scalars().all()
+    out = []
+    for s in sessions:
+        d = {
+            "id": s.id, "device_id": s.device_id, "device_name": device_map.get(s.device_id, "?"),
+            "name": s.name, "remote_as": s.remote_as, "remote_ip": s.remote_ip,
+            "local_ip": s.local_ip, "local_as": s.local_as, "address_family": s.address_family,
+            "state": s.state, "uptime": s.uptime, "prefix_count": s.prefix_count,
+            "advertised_count": s.advertised_count, "last_scan_at": s.last_scan_at,
+        }
+        out.append(d)
+    return out
+
+
+@router.get("/bgp/snapshots-all", response_model=list[BgpPrefixSnapshotOut])
+async def list_all_bgp_snapshots(hours: int = 168, db: AsyncSession = Depends(get_db)):
+    """Return all prefix snapshots across all sessions (for total graph)."""
+    from datetime import timedelta
+    since = utcnow() - timedelta(hours=min(hours, 8760))
+    result = await db.execute(
+        select(BgpPrefixSnapshot)
+        .where(BgpPrefixSnapshot.recorded_at >= since)
         .order_by(BgpPrefixSnapshot.recorded_at)
     )
     return result.scalars().all()

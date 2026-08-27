@@ -336,9 +336,9 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
             if ip not in seen_ips:
                 await session.delete(row)
 
-        # Prune old snapshots (> 30 days)
+        # Prune old snapshots (> 365 days)
         from datetime import timedelta
-        cutoff = now - timedelta(days=30)
+        cutoff = now - timedelta(days=365)
         await session.execute(
             delete(BgpPrefixSnapshot).where(BgpPrefixSnapshot.recorded_at < cutoff)
         )

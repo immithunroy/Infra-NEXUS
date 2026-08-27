@@ -315,6 +315,7 @@ export interface OltWriteLog {
 export interface BgpSession {
   id: number;
   device_id: number;
+  device_name?: string;
   name: string;
   remote_as: number;
   remote_ip: string;
