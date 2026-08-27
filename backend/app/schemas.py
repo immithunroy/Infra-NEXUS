@@ -683,6 +683,7 @@ class BgpSessionOut(BaseModel):
     uptime: str
     prefix_count: int
     advertised_count: int
+    is_upstream: bool = False
     last_scan_at: datetime | None
 
 

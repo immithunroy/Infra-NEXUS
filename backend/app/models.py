@@ -703,6 +703,7 @@ class BgpSession(Base):
     uptime: Mapped[str] = mapped_column(String(64), default="")
     prefix_count: Mapped[int] = mapped_column(Integer, default=0)
     advertised_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_upstream: Mapped[bool] = mapped_column(Boolean, default=False)  # manually marked as upstream peer
     last_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

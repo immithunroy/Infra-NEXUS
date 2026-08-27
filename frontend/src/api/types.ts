@@ -326,6 +326,7 @@ export interface BgpSession {
   uptime: string;
   prefix_count: number;
   advertised_count: number;
+  is_upstream: boolean;
   last_scan_at: string | null;
 }
 

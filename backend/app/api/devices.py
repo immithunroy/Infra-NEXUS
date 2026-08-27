@@ -537,7 +537,7 @@ async def list_all_bgp_sessions(db: AsyncSession = Depends(get_db)):
     devices = (await db.execute(select(MikrotikDevice))).scalars().all()
     device_map = {d.id: d.name for d in devices}
     result = await db.execute(
-        select(BgpSession).order_by(BgpSession.device_id, BgpSession.state.desc(), BgpSession.remote_ip)
+        select(BgpSession).order_by(BgpSession.is_upstream.desc(), BgpSession.device_id, BgpSession.state.desc(), BgpSession.remote_ip)
     )
     sessions = result.scalars().all()
     out = []
@@ -547,10 +547,24 @@ async def list_all_bgp_sessions(db: AsyncSession = Depends(get_db)):
             "name": s.name, "remote_as": s.remote_as, "remote_ip": s.remote_ip,
             "local_ip": s.local_ip, "local_as": s.local_as, "address_family": s.address_family,
             "state": s.state, "uptime": s.uptime, "prefix_count": s.prefix_count,
-            "advertised_count": s.advertised_count, "last_scan_at": s.last_scan_at,
+            "advertised_count": s.advertised_count, "is_upstream": s.is_upstream,
+            "last_scan_at": s.last_scan_at,
         }
         out.append(d)
     return out
+
+
+@router.put("/bgp/sessions/{session_id}/toggle-upstream")
+async def toggle_upstream(session_id: int, db: AsyncSession = Depends(get_db)):
+    """Toggle is_upstream flag on a BGP session."""
+    from fastapi.responses import JSONResponse
+    res = await db.execute(select(BgpSession).where(BgpSession.id == session_id))
+    session = res.scalar_one_or_none()
+    if not session:
+        raise HTTPException(404, "BGP session not found")
+    session.is_upstream = not session.is_upstream
+    await db.commit()
+    return {"id": session.id, "is_upstream": session.is_upstream}
 
 
 @router.get("/bgp/snapshots-all", response_model=list[BgpPrefixSnapshotOut])
