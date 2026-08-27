@@ -1136,7 +1136,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 mb-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">{tj.unique_id} — {tj.name}</h2>
-          <p className="text-sm text-slate-500">{tj.box_type} · {(tj.box_type === "enclosure" || tj.box_type === "dome") ? `${tj.capacity} capacity · ${tj.tray_count} trays` : "Home TJ"} · {tj.address || "—"}</p>
+          <p className="text-sm text-slate-500">{tj.tj_port} ports · {tj.box_type} · {(tj.box_type === "enclosure" || tj.box_type === "dome") ? `${tj.capacity} capacity · ${tj.tray_count} trays` : ""} · {tj.address || "—"}</p>
           {tj.notes && <p className="text-xs text-slate-400 mt-1">{tj.notes}</p>}
         </div>
         <div className="flex items-center gap-1">
@@ -1253,7 +1253,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                   <div key={sp.id} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900 group relative">
                     <div className="font-semibold text-sm">{sp.unique_id} — 1:{sp.split_ratio}</div>
                     <div className="text-xs text-slate-500">Input core: {sp.input_core}</div>
-                    <div className="text-xs text-slate-500">Output: {sp.output_cores || "—"}</div>
+                    <div className="text-xs text-slate-500">Output: {sp.output_cores ? `${sp.output_cores.split(',').length} ports (${sp.output_cores})` : `${sp.split_ratio} ports`}</div>
                     {sp.name && <div className="text-xs text-slate-400 mt-1">{sp.name}</div>}
                     {writeOk && onEditSplitter && (
                       <div className="hidden group-hover:flex absolute top-2 right-2 gap-1">
@@ -1699,7 +1699,11 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         tip += "<br><hr style='margin:4px 0;border-color:#475569'>";
         for (const sp of hostedSps) {
           const loss = splitterLoss(sp.split_ratio);
-          tip += "<span style='color:#f59e0b'>▲</span> <b>" + sp.unique_id + "</b> 1:" + sp.split_ratio + " (" + loss.toFixed(1) + " dB)";
+          const outCount = sp.output_cores ? sp.output_cores.split(',').length : sp.split_ratio;
+          tip += "<span style='color:#f59e0b'>▲</span> <b>" + sp.unique_id + "</b> 1:" + sp.split_ratio;
+          tip += " · In: core " + (sp.input_core || "—");
+          tip += " · Out: " + outCount + " ports";
+          tip += " (" + loss.toFixed(1) + " dB)";
           if (sp.name) tip += " · " + sp.name;
           tip += "<br>";
         }
@@ -1725,12 +1729,14 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       const spColor = SPLITTER_RATIO_COLORS[sp.split_ratio] || "#f59e0b";
       const tjInfo = sp.tj_box_id ? tjBoxes.find((t) => t.id === sp.tj_box_id) : null;
       const loss = splitterLoss(sp.split_ratio);
+      const outCount = sp.output_cores ? sp.output_cores.split(',').length : sp.split_ratio;
       const marker = L.marker([sp.lat, sp.lng], { icon: splitterIcon(spColor), draggable: dragMode })
         .bindTooltip(
           "<b>" + sp.unique_id + "</b> · Splitter 1:" + sp.split_ratio
           + (sp.name ? "<br>" + sp.name : "")
           + (tjInfo ? "<br>In: <b>" + tjInfo.unique_id + "</b> " + tjInfo.name : "")
           + (sp.input_core ? "<br>Input core: " + sp.input_core : "")
+          + "<br>Output: " + outCount + " ports"
           + "<br>Loss: <b>" + loss.toFixed(1) + " dB</b>"
           + (dragMode ? "<br><i>drag to move</i>" : ""),
           { sticky: true }
