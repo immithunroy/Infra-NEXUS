@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
@@ -898,6 +898,14 @@ export default function FiberMap() {
 
 const CORE_COLORS_ARR = ["#3b82f6","#f97316","#22c55e","#92400e","#9ca3af","#ffffff","#ef4444","#000000","#eab308","#8b5cf6","#ec4899","#06b6d4"];
 
+function coreDotStyle(color: string): CSSProperties {
+  const base: CSSProperties = { background: color };
+  if (color === "#ffffff") {
+    return { ...base, border: "1.5px solid #94a3b8" };
+  }
+  return base;
+}
+
 function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange }: { tj: TjBox; cables: Cable[]; splitters: Splitter[]; splices: any[]; onClose: () => void; onSpliceChange: () => void }) {
   const hostedSplitters = useMemo(() => splitters.filter((s) => s.tj_box_id === tj.id), [splitters, tj.id]);
   const connectedCables = useMemo(() => cables.filter((c) => {
@@ -1011,14 +1019,13 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
               const pairs: { left: { cable: typeof connectedCables[0]; core: number; color: string }; right: { cable: typeof connectedCables[0]; core: number; color: string } | null }[] = [];
               for (let i = 0; i < connectedCables.length; i++) {
                 const c1 = connectedCables[i];
-                const c1Color = CORE_COLORS_ARR[i % CORE_COLORS_ARR.length];
                 const c2 = connectedCables[i + 1] || null;
-                const c2Color = c2 ? CORE_COLORS_ARR[(i + 1) % CORE_COLORS_ARR.length] : null;
                 const coreCount = Math.min(c1.core_count, c2 ? c2.core_count : c1.core_count, 8);
                 for (let j = 0; j < coreCount; j++) {
+                  const coreColor = CORE_COLORS_ARR[j % CORE_COLORS_ARR.length];
                   pairs.push({
-                    left: { cable: c1, core: j + 1, color: c1Color },
-                    right: c2 ? { cable: c2, core: j + 1, color: c2Color! } : null,
+                    left: { cable: c1, core: j + 1, color: coreColor },
+                    right: c2 ? { cable: c2, core: j + 1, color: coreColor } : null,
                   });
                 }
                 if (c2) i++; // skip next cable as it's paired
@@ -1027,7 +1034,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                 <div key={idx} className="flex items-center gap-1 group">
                   {/* Left core */}
                   <div className="flex items-center gap-1 min-w-[90px]">
-                    <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: pair.left.color }} />
+                    <div className="w-3 h-3 rounded-sm shrink-0" style={coreDotStyle(pair.left.color)} />
                     <span className="text-[9px] font-mono text-slate-500 truncate">{pair.left.cable.code}</span>
                     <span className="text-[9px] font-mono font-semibold" style={{ color: pair.left.color }}>:{pair.left.core}</span>
                   </div>
@@ -1042,7 +1049,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                       <>
                         <span className="text-[9px] font-mono font-semibold" style={{ color: pair.right.color }}>:{pair.right.core}</span>
                         <span className="text-[9px] font-mono text-slate-500 truncate">{pair.right.cable.code}</span>
-                        <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: pair.right.color }} />
+                        <div className="w-3 h-3 rounded-sm shrink-0" style={coreDotStyle(pair.right.color)} />
                       </>
                     ) : (
                       <span className="text-[9px] text-slate-300 dark:text-slate-600">—</span>
@@ -1084,7 +1091,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                   <div className="flex flex-wrap gap-1">
                     {Array.from({ length: c.core_count }, (_, i) => (
                       <div key={i} className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                        <div className="w-2 h-2 rounded-sm" style={{ background: CORE_COLORS_ARR[i % CORE_COLORS_ARR.length] }} />
+                        <div className="w-2 h-2 rounded-sm" style={coreDotStyle(CORE_COLORS_ARR[i % CORE_COLORS_ARR.length])} />
                         <span className="text-[9px] font-mono text-slate-500">{i + 1}</span>
                       </div>
                     ))}
@@ -1145,7 +1152,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                         <span className="text-slate-300">:</span>
                         {/* Core A with color */}
                         <div className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                          <div className="w-2 h-2 rounded-sm" style={{ background: CORE_COLORS_ARR[(sp.core_a - 1) % CORE_COLORS_ARR.length] }} />
+                          <div className="w-2 h-2 rounded-sm" style={coreDotStyle(CORE_COLORS_ARR[(sp.core_a - 1) % CORE_COLORS_ARR.length])} />
                           <span className="text-[9px] font-mono font-semibold">{sp.core_a}</span>
                         </div>
                         <span className="text-slate-400">↔</span>
@@ -1157,7 +1164,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                         <span className="text-slate-300">:</span>
                         {/* Core B with color */}
                         <div className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                          <div className="w-2 h-2 rounded-sm" style={{ background: CORE_COLORS_ARR[(sp.core_b - 1) % CORE_COLORS_ARR.length] }} />
+                          <div className="w-2 h-2 rounded-sm" style={coreDotStyle(CORE_COLORS_ARR[(sp.core_b - 1) % CORE_COLORS_ARR.length])} />
                           <span className="text-[9px] font-mono font-semibold">{sp.core_b}</span>
                         </div>
                         <span className={`ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
@@ -1592,6 +1599,12 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         marker.on("dragend", (e) => {
           const pos = e.target.getLatLng();
           onSpRef(sp.id, pos.lat, pos.lng);
+        });
+      }
+      if (tjInfo) {
+        marker.on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          onTjClickRef.current(tjInfo);
         });
       }
       marker.addTo(map);
