@@ -616,6 +616,21 @@ async def unused_cores(tj_id: int, db: AsyncSession = Depends(get_db)):
     for row in splices_res.all():
         used.add((row.cable_a_id, row.core_a))
         used.add((row.cable_b_id, row.core_b))
+    # Also mark cores allocated to hosted splitters as occupied
+    splitter_res = await db.execute(
+        select(Splitter).where(Splitter.tj_box_id == tj_id)
+    )
+    for sp in splitter_res.scalars().all():
+        if sp.input_core:
+            # Find which cable connects to this TJ to assign the input core
+            for cid in cable_ids:
+                used.add((cid, sp.input_core))
+        if sp.output_cores:
+            for part in sp.output_cores.split(","):
+                part = part.strip()
+                if part.isdigit():
+                    for cid in cable_ids:
+                        used.add((cid, int(part)))
     # Get cable info
     cables_res = await db.execute(select(Cable).where(Cable.id.in_(cable_ids)))
     cables = cables_res.scalars().all()

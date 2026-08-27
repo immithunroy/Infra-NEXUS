@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
@@ -446,7 +446,6 @@ export default function FiberMap() {
           <>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Cable</button>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
-            <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("splitter"); setEditingId(null); setSplitterForm({ split_ratio: 2 }); }}>+ Splitter</button>
             <button className={`btn-secondary text-xs py-1 px-2 ${routeMode ? "bg-blue-600 text-white" : ""}`} onClick={() => { setRouteMode(!routeMode); setRouteSrcTj(null); setRouteDstTj(null); }}>
               {routeMode ? "Cancel" : "Cable SRC>DST"}
             </button>
@@ -648,7 +647,7 @@ export default function FiberMap() {
       {selectedTj && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedTj(null)}>
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
-            <TjDetailPanel tj={selectedTj} cables={cables} splitters={splitters} splices={splices} onClose={() => setSelectedTj(null)} onSpliceChange={load} />
+            <TjDetailPanel tj={selectedTj} cables={cables} splitters={splitters} splices={splices} onClose={() => setSelectedTj(null)} onSpliceChange={load} writeOk={writeOk} />
           </div>
         </div>
       )}
@@ -897,16 +896,73 @@ export default function FiberMap() {
 }
 
 const CORE_COLORS_ARR = ["#3b82f6","#f97316","#22c55e","#92400e","#9ca3af","#ffffff","#ef4444","#000000","#eab308","#8b5cf6","#ec4899","#06b6d4"];
+const CORE_COLOR_NAMES = ["Blue","Orange","Green","Brown","Slate","White","Red","Black","Yellow","Violet","Rose","Aqua"];
 
-function coreDotStyle(color: string): CSSProperties {
-  const base: CSSProperties = { background: color };
-  if (color === "#ffffff") {
-    return { ...base, border: "1.5px solid #94a3b8" };
-  }
-  return base;
+function CoreColorDot({ coreIndex, size = 8 }: { coreIndex: number; size?: number }) {
+  const color = CORE_COLORS_ARR[(coreIndex - 1) % CORE_COLORS_ARR.length];
+  const needsBorder = color === "#ffffff" || color === "#000000";
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: color,
+        border: needsBorder ? "1.5px solid #94a3b8" : "1.5px solid transparent",
+        flexShrink: 0,
+      }}
+    />
+  );
 }
 
-function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange }: { tj: TjBox; cables: Cable[]; splitters: Splitter[]; splices: any[]; onClose: () => void; onSpliceChange: () => void }) {
+function CoreSelect({ coreCount, value, onChange, occupiedCores, spareCores }: {
+  coreCount: number; value: number; onChange: (v: number) => void;
+  occupiedCores?: number[]; spareCores?: number[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+  const selectedName = CORE_COLOR_NAMES[(value - 1) % CORE_COLOR_NAMES.length];
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" className="input text-xs w-full flex items-center gap-2 text-left" onClick={() => setOpen(!open)}>
+        <CoreColorDot coreIndex={value} size={14} />
+        <span>Core {value} — {selectedName}</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-[200px] overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
+          {Array.from({ length: coreCount }, (_, i) => {
+            const coreNum = i + 1;
+            const isOccupied = occupiedCores?.includes(coreNum) && !spareCores?.includes(coreNum);
+            const colorName = CORE_COLOR_NAMES[i % CORE_COLOR_NAMES.length];
+            return (
+              <button
+                key={coreNum}
+                type="button"
+                disabled={isOccupied}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition ${coreNum === value ? "bg-blue-50 dark:bg-blue-900/30" : "hover:bg-slate-50 dark:hover:bg-slate-700/50"} ${isOccupied ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                onClick={() => { if (!isOccupied) { onChange(coreNum); setOpen(false); } }}
+              >
+                <CoreColorDot coreIndex={coreNum} size={14} />
+                <span className="font-mono font-semibold">Core {coreNum}</span>
+                <span className="text-slate-500">— {colorName}</span>
+                {isOccupied && <span className="ml-auto text-[9px] text-red-400">occupied</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange, writeOk }: { tj: TjBox; cables: Cable[]; splitters: Splitter[]; splices: any[]; onClose: () => void; onSpliceChange: () => void; writeOk: boolean }) {
   const hostedSplitters = useMemo(() => splitters.filter((s) => s.tj_box_id === tj.id), [splitters, tj.id]);
   const connectedCables = useMemo(() => cables.filter((c) => {
     if (!c.segments?.length) return false;
@@ -1034,7 +1090,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                 <div key={idx} className="flex items-center gap-1 group">
                   {/* Left core */}
                   <div className="flex items-center gap-1 min-w-[90px]">
-                    <div className="w-3 h-3 rounded-sm shrink-0" style={coreDotStyle(pair.left.color)} />
+                    <CoreColorDot coreIndex={pair.left.core} size={12} />
                     <span className="text-[9px] font-mono text-slate-500 truncate">{pair.left.cable.code}</span>
                     <span className="text-[9px] font-mono font-semibold" style={{ color: pair.left.color }}>:{pair.left.core}</span>
                   </div>
@@ -1049,7 +1105,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                       <>
                         <span className="text-[9px] font-mono font-semibold" style={{ color: pair.right.color }}>:{pair.right.core}</span>
                         <span className="text-[9px] font-mono text-slate-500 truncate">{pair.right.cable.code}</span>
-                        <div className="w-3 h-3 rounded-sm shrink-0" style={coreDotStyle(pair.right.color)} />
+                        <CoreColorDot coreIndex={pair.right.core} size={12} />
                       </>
                     ) : (
                       <span className="text-[9px] text-slate-300 dark:text-slate-600">—</span>
@@ -1091,7 +1147,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                   <div className="flex flex-wrap gap-1">
                     {Array.from({ length: c.core_count }, (_, i) => (
                       <div key={i} className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                        <div className="w-2 h-2 rounded-sm" style={coreDotStyle(CORE_COLORS_ARR[i % CORE_COLORS_ARR.length])} />
+                        <CoreColorDot coreIndex={i + 1} size={8} />
                         <span className="text-[9px] font-mono text-slate-500">{i + 1}</span>
                       </div>
                     ))}
@@ -1102,21 +1158,41 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
           )}
 
           {/* Hosted splitters */}
-          {hostedSplitters.length > 0 && (
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Hosted Splitters</h3>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hosted Splitters ({hostedSplitters.length})</h3>
+              {writeOk && (
+                <button className="btn-primary text-[10px] py-0.5 px-2" onClick={() => {
+                  setSplitterForm({ split_ratio: 2, tj_box_id: tj.id, lat: tj.lat, lng: tj.lng });
+                  setEditingId(null);
+                  setShowForm("splitter");
+                }}>+ Add Splitter</button>
+              )}
+            </div>
+            {hostedSplitters.length > 0 ? (
               <div className="grid grid-cols-2 gap-2">
                 {hostedSplitters.map((sp) => (
-                  <div key={sp.id} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                  <div key={sp.id} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900 group relative">
                     <div className="font-semibold text-sm">{sp.unique_id} — 1:{sp.split_ratio}</div>
                     <div className="text-xs text-slate-500">Input core: {sp.input_core}</div>
                     <div className="text-xs text-slate-500">Output: {sp.output_cores || "—"}</div>
                     {sp.name && <div className="text-xs text-slate-400 mt-1">{sp.name}</div>}
+                    {writeOk && (
+                      <div className="hidden group-hover:flex absolute top-2 right-2 gap-1">
+                        <button className="text-[9px] text-blue-500 hover:underline" onClick={() => { setEditingId(sp.id); setEditKind("splitter"); setSplitterForm(sp as any); setShowForm("splitter"); }}>Edit</button>
+                        <button className="text-[9px] text-red-500 hover:underline" onClick={async () => {
+                          if (!confirm(`Remove splitter ${sp.unique_id}? The allocated core(s) will be released.`)) return;
+                          try { await api.del(`/fiber/splitters/${sp.id}`); onSpliceChange(); } catch (e) { alert(String(e)); }
+                        }}>Remove</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="text-xs text-slate-400">No splitters hosted in this TJ.</div>
+            )}
+          </div>
 
           {connectedCables.length === 0 && hostedSplitters.length === 0 && (
             <div className="text-xs text-slate-400">No cables connected</div>
@@ -1152,7 +1228,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                         <span className="text-slate-300">:</span>
                         {/* Core A with color */}
                         <div className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                          <div className="w-2 h-2 rounded-sm" style={coreDotStyle(CORE_COLORS_ARR[(sp.core_a - 1) % CORE_COLORS_ARR.length])} />
+                          <CoreColorDot coreIndex={sp.core_a} size={8} />
                           <span className="text-[9px] font-mono font-semibold">{sp.core_a}</span>
                         </div>
                         <span className="text-slate-400">↔</span>
@@ -1164,7 +1240,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                         <span className="text-slate-300">:</span>
                         {/* Core B with color */}
                         <div className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                          <div className="w-2 h-2 rounded-sm" style={coreDotStyle(CORE_COLORS_ARR[(sp.core_b - 1) % CORE_COLORS_ARR.length])} />
+                          <CoreColorDot coreIndex={sp.core_b} size={8} />
                           <span className="text-[9px] font-mono font-semibold">{sp.core_b}</span>
                         </div>
                         <span className={`ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
@@ -1216,19 +1292,13 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                 </div>
                 <div>
                   <label className="label">Core A</label>
-                  <select className="input text-xs" value={spliceForm.core_a} onChange={(e) => setSpliceForm({ ...spliceForm, core_a: Number(e.target.value) })}>
-                    {Array.from({ length: connectedCables.find((c) => c.id === spliceForm.cable_a_id)?.core_count || 12 }, (_, i) => {
-                      const coreNum = i + 1;
-                      const uc = unusedCores.find((u) => u.cable_id === spliceForm.cable_a_id);
-                      const isOccupied = uc?.occupied_cores?.includes(coreNum) && !uc?.spare_cores?.includes(coreNum);
-                      const colorName = ["Blue","Orange","Green","Brown","Slate","White","Red","Black","Yellow","Violet","Rose","Aqua"][i % 12];
-                      return (
-                        <option key={coreNum} value={coreNum} disabled={isOccupied}>
-                          {isOccupied ? "\u2716" : "\u25CF"} {coreNum} — {colorName}{isOccupied ? " (occupied)" : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <CoreSelect
+                    coreCount={connectedCables.find((c) => c.id === spliceForm.cable_a_id)?.core_count || 12}
+                    value={spliceForm.core_a}
+                    onChange={(v) => setSpliceForm({ ...spliceForm, core_a: v })}
+                    occupiedCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_a_id)?.occupied_cores}
+                    spareCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_a_id)?.spare_cores}
+                  />
                 </div>
               </div>
               <div className="text-center text-xs text-slate-400">↔ Splice ↔</div>
@@ -1247,19 +1317,13 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                 </div>
                 <div>
                   <label className="label">Core B</label>
-                  <select className="input text-xs" value={spliceForm.core_b} onChange={(e) => setSpliceForm({ ...spliceForm, core_b: Number(e.target.value) })}>
-                    {Array.from({ length: connectedCables.find((c) => c.id === spliceForm.cable_b_id)?.core_count || 12 }, (_, i) => {
-                      const coreNum = i + 1;
-                      const uc = unusedCores.find((u) => u.cable_id === spliceForm.cable_b_id);
-                      const isOccupied = uc?.occupied_cores?.includes(coreNum) && !uc?.spare_cores?.includes(coreNum);
-                      const colorName = ["Blue","Orange","Green","Brown","Slate","White","Red","Black","Yellow","Violet","Rose","Aqua"][i % 12];
-                      return (
-                        <option key={coreNum} value={coreNum} disabled={isOccupied}>
-                          {isOccupied ? "\u2716" : "\u25CF"} {coreNum} — {colorName}{isOccupied ? " (occupied)" : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <CoreSelect
+                    coreCount={connectedCables.find((c) => c.id === spliceForm.cable_b_id)?.core_count || 12}
+                    value={spliceForm.core_b}
+                    onChange={(v) => setSpliceForm({ ...spliceForm, core_b: v })}
+                    occupiedCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_b_id)?.occupied_cores}
+                    spareCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_b_id)?.spare_cores}
+                  />
                 </div>
               </div>
               <div>
@@ -1385,8 +1449,6 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       menu.innerHTML = '<div style="padding:6px 12px;color:#94a3b8;font-size:11px;font-weight:600">' + cLat + ", " + cLng + "</div>"
         + '<div class="ctx-i" data-kind="tj" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
         + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>Add TJ Box</div>'
-        + '<div class="ctx-i" data-kind="splitter" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
-        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><polygon points="12,2 22,22 2,22"/></svg>Add Splitter</div>'
         + '<div class="ctx-i" data-kind="cable" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
         + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M4 12h16M12 4v16"/></svg>Add Cable</div>'
         + '<div class="ctx-i" data-kind="loop" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
