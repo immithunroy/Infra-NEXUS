@@ -673,12 +673,12 @@ class BgpSessionOut(BaseModel):
 
     id: int
     device_id: int
-    name: str
+    name: str | None = ""
     remote_as: int
     remote_ip: str
     local_ip: str
-    local_as: int
-    address_family: str
+    local_as: int | None = None
+    address_family: str | None = "ipv4"
     state: str
     uptime: str
     prefix_count: int
