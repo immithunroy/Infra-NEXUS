@@ -232,7 +232,7 @@ export default function FiberMap() {
   };
 
   const saveSplitter = async () => {
-    if (!splitterForm.tj_box_id) { setError("Select a TJ Box first"); return; }
+    if (!splitterForm.tj_box_id) { setError("No parent TJ associated. Open this form from a TJ."); return; }
     try {
       if (editingId && editKind === "splitter") {
         await api.put(`/fiber/splitters/${editingId}`, splitterForm);
@@ -820,6 +820,19 @@ export default function FiberMap() {
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold">{editingId ? "Edit" : "Add"} Splitter</h2>
             <div className="space-y-3">
+              {(() => {
+                const parentTj = tjBoxes.find((t) => t.id === splitterForm.tj_box_id);
+                return parentTj ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Parent TJ</div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">{parentTj.unique_id}</div>
+                    {parentTj.name && <div className="text-xs text-slate-500 dark:text-slate-400">{parentTj.name}</div>}
+                    <div className="mt-1 text-[10px] text-slate-400">GPS: {parentTj.lat?.toFixed(6)}, {parentTj.lng?.toFixed(6)}</div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-red-500">No parent TJ selected. Close and re-open from a TJ.</div>
+                );
+              })()}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Name</label><input className="input" value={splitterForm.name || ""} onChange={(e) => setSplitterForm({ ...splitterForm, name: e.target.value })} /></div>
                 <div><label className="label">Split Ratio</label><select className="input" value={splitterForm.split_ratio || 2} onChange={(e) => setSplitterForm({ ...splitterForm, split_ratio: Number(e.target.value) })}>
@@ -827,24 +840,13 @@ export default function FiberMap() {
                 </select></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">TJ Box</label><select className="input" value={splitterForm.tj_box_id || ""} onChange={(e) => {
-                  const id = e.target.value ? Number(e.target.value) : null;
-                  const tj = id ? tjBoxes.find((t) => t.id === id) : null;
-                  setSplitterForm({ ...splitterForm, tj_box_id: id, lat: tj?.lat || splitterForm.lat, lng: tj?.lng || splitterForm.lng });
-                }}>
-                  <option value="">Select TJ Box</option>
-                  {tjBoxes.map((t) => <option key={t.id} value={t.id}>{t.unique_id} - {t.name}</option>)}
-                </select></div>
                 <div><label className="label">Input Core</label><input type="number" className="input" value={splitterForm.input_core || 0} onChange={(e) => setSplitterForm({ ...splitterForm, input_core: Number(e.target.value) })} /></div>
-              </div>
-              <div><label className="label">Output Cores</label><input className="input" placeholder="e.g. 1,2,3,4" value={splitterForm.output_cores || ""} onChange={(e) => setSplitterForm({ ...splitterForm, output_cores: e.target.value })} /></div>
-              <div className="text-xs text-slate-500">
-                GPS: {splitterForm.lat?.toFixed(6) || "—"}, {splitterForm.lng?.toFixed(6) || "—"} (auto-set from TJ box)
+                <div><label className="label">Output Cores</label><input className="input" placeholder="e.g. 1,2,3,4" value={splitterForm.output_cores || ""} onChange={(e) => setSplitterForm({ ...splitterForm, output_cores: e.target.value })} /></div>
               </div>
               <div><label className="label">Notes</label><textarea className="input" rows={2} value={splitterForm.notes || ""} onChange={(e) => setSplitterForm({ ...splitterForm, notes: e.target.value })} /></div>
               <div className="flex justify-end gap-2 pt-2">
                 <button className="btn-secondary" onClick={() => setShowForm(null)}>Cancel</button>
-                <button className="btn-primary" onClick={saveSplitter}>Save</button>
+                <button className="btn-primary" onClick={saveSplitter} disabled={!splitterForm.tj_box_id}>Save</button>
               </div>
             </div>
           </div>
