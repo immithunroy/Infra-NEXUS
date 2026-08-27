@@ -128,6 +128,7 @@ export default function FiberMap() {
   const [importing, setImporting] = useState(false);
   const [selectedTj, setSelectedTj] = useState<TjBox | null>(null);
   const [selectedCable, setSelectedCable] = useState<Cable | null>(null);
+  const [editingCableId, setEditingCableId] = useState<number | null>(null);
   const [routeSrcTj, setRouteSrcTj] = useState<TjBox | null>(null);
   const [routeDstTj, setRouteDstTj] = useState<TjBox | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -512,6 +513,8 @@ export default function FiberMap() {
             onCableClick={(cable) => setSelectedCable(cable)}
             onLoopClick={(loop) => { setLoopForm(loop); setShowForm("loop"); }}
             onCutClick={(cut) => { setCutForm(cut); setShowForm("cut"); }}
+            editingCableId={editingCableId}
+            onEditingCableDone={() => setEditingCableId(null)}
           />
         </div>
 
@@ -688,6 +691,12 @@ export default function FiberMap() {
                 );
               })()}
             </div>
+            {writeOk && (
+              <div className="mt-4 flex gap-2">
+                <button className="btn-primary text-xs" onClick={() => { setSelectedCable(null); setEditingCableId(selectedCable.id); }}>Edit Path</button>
+                <button className="btn-secondary text-xs" onClick={() => { setSelectedCable(null); startEdit("cable", selectedCable); }}>Edit Info</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1151,7 +1160,11 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                           <div className="w-2 h-2 rounded-sm" style={{ background: CORE_COLORS_ARR[(sp.core_b - 1) % CORE_COLORS_ARR.length] }} />
                           <span className="text-[9px] font-mono font-semibold">{sp.core_b}</span>
                         </div>
-                        <span className="ml-auto text-[9px] text-slate-400">{sp.status}</span>
+                        <span className={`ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
+                          sp.status === "active" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : sp.status === "spare" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                          : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 line-through"
+                        }`}>{sp.status}</span>
                         <div className="hidden group-hover:flex gap-1">
                           <button className="text-[9px] text-blue-500 hover:underline" onClick={() => openSpliceForm(sp)}>Edit</button>
                           <button className="text-[9px] text-red-500 hover:underline" onClick={() => deleteSplice(sp.id)}>Del</button>
@@ -1185,16 +1198,29 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                 <div>
                   <label className="label">Cable A</label>
                   <input className="input text-[10px] py-1 mb-1" placeholder="Search cable..." value={cableSearchA} onChange={(e) => setCableSearchA(e.target.value)} />
-                  <select className="input text-xs" size={Math.min(filteredCablesA.length, 5)} value={spliceForm.cable_a_id} onChange={(e) => setSpliceForm({ ...spliceForm, cable_a_id: Number(e.target.value), core_a: 1 })}>
+                  <select className="input text-xs" size={Math.min(filteredCablesA.length, 5)} value={spliceForm.cable_a_id} onChange={(e) => {
+                    const newCableId = Number(e.target.value);
+                    const uc = unusedCores.find((u) => u.cable_id === newCableId);
+                    const firstSpare = uc?.spare_cores?.[0] || 1;
+                    setSpliceForm({ ...spliceForm, cable_a_id: newCableId, core_a: firstSpare });
+                  }}>
                     {filteredCablesA.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.manufacturer || "?"} · {c.manufacturing_year || "?"} ({c.core_count}C)</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="label">Core A</label>
                   <select className="input text-xs" value={spliceForm.core_a} onChange={(e) => setSpliceForm({ ...spliceForm, core_a: Number(e.target.value) })}>
-                    {Array.from({ length: connectedCables.find((c) => c.id === spliceForm.cable_a_id)?.core_count || 12 }, (_, i) => (
-                      <option key={i + 1} value={i + 1}>{CORE_COLORS_ARR[i % CORE_COLORS_ARR.length] !== "#ffffff" ? "●" : "○"} {i + 1} — {["Blue","Orange","Green","Brown","Slate","White","Red","Black","Yellow","Violet","Rose","Aqua"][i % 12]}</option>
-                    ))}
+                    {Array.from({ length: connectedCables.find((c) => c.id === spliceForm.cable_a_id)?.core_count || 12 }, (_, i) => {
+                      const coreNum = i + 1;
+                      const uc = unusedCores.find((u) => u.cable_id === spliceForm.cable_a_id);
+                      const isOccupied = uc?.occupied_cores?.includes(coreNum) && !uc?.spare_cores?.includes(coreNum);
+                      const colorName = ["Blue","Orange","Green","Brown","Slate","White","Red","Black","Yellow","Violet","Rose","Aqua"][i % 12];
+                      return (
+                        <option key={coreNum} value={coreNum} disabled={isOccupied}>
+                          {isOccupied ? "\u2716" : "\u25CF"} {coreNum} — {colorName}{isOccupied ? " (occupied)" : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -1203,16 +1229,29 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                 <div>
                   <label className="label">Cable B</label>
                   <input className="input text-[10px] py-1 mb-1" placeholder="Search cable..." value={cableSearchB} onChange={(e) => setCableSearchB(e.target.value)} />
-                  <select className="input text-xs" size={Math.min(filteredCablesB.length, 5)} value={spliceForm.cable_b_id} onChange={(e) => setSpliceForm({ ...spliceForm, cable_b_id: Number(e.target.value), core_b: 1 })}>
+                  <select className="input text-xs" size={Math.min(filteredCablesB.length, 5)} value={spliceForm.cable_b_id} onChange={(e) => {
+                    const newCableId = Number(e.target.value);
+                    const uc = unusedCores.find((u) => u.cable_id === newCableId);
+                    const firstSpare = uc?.spare_cores?.[0] || 1;
+                    setSpliceForm({ ...spliceForm, cable_b_id: newCableId, core_b: firstSpare });
+                  }}>
                     {filteredCablesB.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.manufacturer || "?"} · {c.manufacturing_year || "?"} ({c.core_count}C)</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="label">Core B</label>
                   <select className="input text-xs" value={spliceForm.core_b} onChange={(e) => setSpliceForm({ ...spliceForm, core_b: Number(e.target.value) })}>
-                    {Array.from({ length: connectedCables.find((c) => c.id === spliceForm.cable_b_id)?.core_count || 12 }, (_, i) => (
-                      <option key={i + 1} value={i + 1}>{CORE_COLORS_ARR[i % CORE_COLORS_ARR.length] !== "#ffffff" ? "●" : "○"} {i + 1} — {["Blue","Orange","Green","Brown","Slate","White","Red","Black","Yellow","Violet","Rose","Aqua"][i % 12]}</option>
-                    ))}
+                    {Array.from({ length: connectedCables.find((c) => c.id === spliceForm.cable_b_id)?.core_count || 12 }, (_, i) => {
+                      const coreNum = i + 1;
+                      const uc = unusedCores.find((u) => u.cable_id === spliceForm.cable_b_id);
+                      const isOccupied = uc?.occupied_cores?.includes(coreNum) && !uc?.spare_cores?.includes(coreNum);
+                      const colorName = ["Blue","Orange","Green","Brown","Slate","White","Red","Black","Yellow","Violet","Rose","Aqua"][i % 12];
+                      return (
+                        <option key={coreNum} value={coreNum} disabled={isOccupied}>
+                          {isOccupied ? "\u2716" : "\u25CF"} {coreNum} — {colorName}{isOccupied ? " (occupied)" : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -1230,9 +1269,11 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
               </div>
               {unusedCores.length > 0 && (
                 <div className="rounded-md bg-slate-50 dark:bg-slate-800 p-2 text-[10px] max-h-[100px] overflow-y-auto">
-                  <div className="font-semibold mb-1">Spare Cores Available:</div>
+                  <div className="font-semibold mb-1">Core Availability:</div>
                   {unusedCores.map((uc) => (
-                    <div key={uc.cable_id} className="text-slate-500">{uc.cable_code}: cores {uc.spare_cores.join(", ")}</div>
+                    <div key={uc.cable_id} className="text-slate-500">
+                      {uc.cable_code}: <span className="text-emerald-600">{uc.spare_cores.length} spare</span>{uc.occupied_cores?.length ? <span className="text-red-500 ml-1">{uc.occupied_cores.length} occupied</span> : ""}
+                    </div>
                   ))}
                 </div>
               )}
@@ -1276,7 +1317,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, routeMode, routeSrcTj, routeDstTj, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, routeMode, routeSrcTj, routeDstTj, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, onEditingCableDone }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -1296,11 +1337,14 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onCableClick: (cable: Cable) => void;
   onLoopClick: (loop: FiberLoop) => void;
   onCutClick: (cut: CableCut) => void;
+  editingCableId: number | null;
+  onEditingCableDone: () => void;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
   const drawControlRef = useRef<L.Control.Draw | null>(null);
   const routeMarkersRef = useRef<L.Marker[]>([]);
   const nocPopLayerRef = useRef<L.LayerGroup | null>(null);
+  const cableLayersRef = useRef<Map<number, L.Polyline>>(new Map());
   const onRightClickRef = useRef(onRightClickAdd);
   onRightClickRef.current = onRightClickAdd;
 
@@ -1418,6 +1462,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         const pl = L.polyline(points, { color, weight: 2, opacity: 0.85 })
           .bindTooltip(tipParts.join("<br>"), { sticky: true });
         pl.addTo(map);
+        cableLayersRef.current.set(cable.id, pl);
 
         pl.on("dblclick", (e: L.LeafletMouseEvent) => {
           L.DomEvent.stopPropagation(e);
@@ -1441,7 +1486,6 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           (pl as any).on("edit:stop", onEditStop);
         });
         pl.on("click", (e: L.LeafletMouseEvent) => {
-          if ((e.originalEvent as any).__midpointClick) return;
           L.DomEvent.stopPropagation(e);
           onCableClickFn(cable);
         });
@@ -1449,8 +1493,14 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
       for (let si = 0; si < cable.segments.length; si++) {
         const seg = cable.segments[si];
-        L.circleMarker([seg.start_lat, seg.start_lng], { radius: 4, color, fillColor: color, fillOpacity: 1 }).addTo(map);
-        L.circleMarker([seg.end_lat, seg.end_lng], { radius: 4, color, fillColor: color, fillOpacity: 1 }).addTo(map);
+        const endMarker = L.circleMarker([seg.end_lat, seg.end_lng], { radius: 4, color, fillColor: color, fillOpacity: 1 });
+        endMarker.on("click", (e) => { L.DomEvent.stopPropagation(e); });
+        endMarker.addTo(map);
+        if (si === 0) {
+          const startMarker = L.circleMarker([seg.start_lat, seg.start_lng], { radius: 4, color, fillColor: color, fillOpacity: 1 });
+          startMarker.on("click", (e) => { L.DomEvent.stopPropagation(e); });
+          startMarker.addTo(map);
+        }
         // Midpoint marker — draggable to adjust cable path
         const midLat = (seg.start_lat + seg.end_lat) / 2;
         const midLng = (seg.start_lng + seg.end_lng) / 2;
@@ -1458,7 +1508,6 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           .bindTooltip(dragMode ? "Drag to adjust cable" : "Enable drag mode", { direction: "top" });
         if (dragMode) {
           midMarker.on("click", (e) => {
-            (e.originalEvent as any).__midpointClick = true;
             L.DomEvent.stopPropagation(e.originalEvent);
           });
           midMarker.on("dragend", (e) => {
@@ -1476,7 +1525,6 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         // Click to straighten (when not in drag mode)
         if (!dragMode) {
           midMarker.on("click", (e) => {
-            (e.originalEvent as any).__midpointClick = true;
             L.DomEvent.stopPropagation(e.originalEvent);
             const srcTj = tjBoxes.find((t) => Math.abs(t.lat - seg.start_lat) < 0.001 && Math.abs(t.lng - seg.start_lng) < 0.001);
             const dstTj = tjBoxes.find((t) => Math.abs(t.lat - seg.end_lat) < 0.001 && Math.abs(t.lng - seg.end_lng) < 0.001);
@@ -1581,6 +1629,44 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       marker.addTo(map);
     }
   }, [cables, tjBoxes, splitters, loops, cuts, dragMode]);
+
+  // Enable edit mode on a cable polyline when editingCableId is set
+  useEffect(() => {
+    if (editingCableId == null) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const pl = cableLayersRef.current.get(editingCableId);
+    if (!pl) { onEditingCableDone(); return; }
+
+    const cable = cables.find((c) => c.id === editingCableId);
+    if (!cable) { onEditingCableDone(); return; }
+
+    pl.setStyle({ weight: 3, dashArray: "6,4" });
+    (pl as any).enableEdit();
+    const origSegs = cable.segments.map((s) => ({ ...s }));
+
+    const onEditStop = () => {
+      pl.setStyle({ weight: 3, dashArray: undefined });
+      (pl as any).disableEdit();
+      const newVerts = pl.getLatLngs() as L.LatLng[];
+      const segs = newVerts.slice(0, -1).map((ll, i) => ({
+        id: origSegs[i]?.id,
+        start_lat: ll.lat, start_lng: ll.lng,
+        end_lat: newVerts[i + 1].lat, end_lng: newVerts[i + 1].lng,
+        order_index: i,
+      }));
+      onCableSegmentUpdate(editingCableId!, segs);
+      onEditingCableDone();
+    };
+    (pl as any).on("edit:stop", onEditStop);
+
+    return () => {
+      if ((pl as any).editing?.enabled()) {
+        (pl as any).disableEdit();
+        pl.setStyle({ weight: 2, dashArray: undefined });
+      }
+    };
+  }, [editingCableId, cables, onCableSegmentUpdate, onEditingCableDone]);
 
   useEffect(() => {
     const map = mapRef.current;

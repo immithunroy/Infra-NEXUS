@@ -493,6 +493,31 @@ async def list_splices(tj_id: int | None = None, limit: int = 200, offset: int =
 
 @router.post("/splices", response_model=SpliceOut, status_code=201, dependencies=[Depends(require_write)])
 async def create_splice(body: SpliceCreate, db: AsyncSession = Depends(get_db)):
+    # Validate that neither core is already occupied by an active/spare splice
+    from sqlalchemy import and_, or_
+    existing = (await db.execute(
+        select(Splice).where(
+            Splice.tj_id == body.tj_id,
+            Splice.status.in_(["active", "spare"]),
+            or_(
+                and_(Splice.cable_a_id == body.cable_a_id, Splice.core_a == body.core_a),
+                and_(Splice.cable_b_id == body.cable_a_id, Splice.core_b == body.core_a),
+                and_(Splice.cable_a_id == body.cable_b_id, Splice.core_a == body.core_b),
+                and_(Splice.cable_b_id == body.cable_b_id, Splice.core_b == body.core_b),
+            )
+        )
+    )).scalars().all()
+    if existing:
+        occupied = existing[0]
+        if occupied.cable_a_id == body.cable_a_id and occupied.core_a == body.core_a:
+            raise HTTPException(400, f"Core {body.core_a} on cable A is already spliced (splice #{occupied.id})")
+        if occupied.cable_b_id == body.cable_a_id and occupied.core_b == body.core_a:
+            raise HTTPException(400, f"Core {body.core_a} on cable A is already spliced (splice #{occupied.id})")
+        if occupied.cable_a_id == body.cable_b_id and occupied.core_a == body.core_b:
+            raise HTTPException(400, f"Core {body.core_b} on cable B is already spliced (splice #{occupied.id})")
+        if occupied.cable_b_id == body.cable_b_id and occupied.core_b == body.core_b:
+            raise HTTPException(400, f"Core {body.core_b} on cable B is already spliced (splice #{occupied.id})")
+
     splice = Splice(**body.model_dump())
     db.add(splice)
     await db.commit()
@@ -511,7 +536,36 @@ async def update_splice(splice_id: int, body: SpliceUpdate, db: AsyncSession = D
     splice = res.scalar_one_or_none()
     if not splice:
         raise HTTPException(404, "Splice not found")
-    for k, v in body.model_dump(exclude_unset=True).items():
+
+    # Determine effective values after update
+    eff = body.model_dump(exclude_unset=True)
+    eff_cable_a = eff.get("cable_a_id", splice.cable_a_id)
+    eff_core_a = eff.get("core_a", splice.core_a)
+    eff_cable_b = eff.get("cable_b_id", splice.cable_b_id)
+    eff_core_b = eff.get("core_b", splice.core_b)
+    eff_status = eff.get("status", splice.status)
+
+    # If setting to active/spare, validate cores are not occupied by other splices
+    if eff_status in ("active", "spare"):
+        from sqlalchemy import and_, or_
+        existing = (await db.execute(
+            select(Splice).where(
+                Splice.tj_id == splice.tj_id,
+                Splice.id != splice_id,
+                Splice.status.in_(["active", "spare"]),
+                or_(
+                    and_(Splice.cable_a_id == eff_cable_a, Splice.core_a == eff_core_a),
+                    and_(Splice.cable_b_id == eff_cable_a, Splice.core_b == eff_core_a),
+                    and_(Splice.cable_a_id == eff_cable_b, Splice.core_a == eff_core_b),
+                    and_(Splice.cable_b_id == eff_cable_b, Splice.core_b == eff_core_b),
+                )
+            )
+        )).scalars().all()
+        if existing:
+            occupied = existing[0]
+            raise HTTPException(400, f"Core is already occupied by splice #{occupied.id}")
+
+    for k, v in eff.items():
         setattr(splice, k, v)
     await db.commit()
     await db.refresh(splice)
@@ -553,10 +607,10 @@ async def unused_cores(tj_id: int, db: AsyncSession = Depends(get_db)):
     cable_ids = set(segs_res.scalars().all())
     if not cable_ids:
         return []
-    # Get all splices at this TJ (only cable_id + core columns)
+    # Get all active/spare splices at this TJ (broken splices don't occupy cores)
     splices_res = await db.execute(
         select(Splice.cable_a_id, Splice.core_a, Splice.cable_b_id, Splice.core_b)
-        .where(Splice.tj_id == tj_id)
+        .where(Splice.tj_id == tj_id, Splice.status.in_(["active", "spare"]))
     )
     used = set()
     for row in splices_res.all():
@@ -568,8 +622,8 @@ async def unused_cores(tj_id: int, db: AsyncSession = Depends(get_db)):
     result = []
     for c in cables:
         spare = [i for i in range(1, c.core_count + 1) if (c.id, i) not in used]
-        if spare:
-            result.append({"cable_id": c.id, "cable_code": c.code, "core_count": c.core_count, "spare_cores": spare})
+        occupied = [i for i in range(1, c.core_count + 1) if (c.id, i) in used]
+        result.append({"cable_id": c.id, "cable_code": c.code, "core_count": c.core_count, "spare_cores": spare, "occupied_cores": occupied})
     return result
 
 
