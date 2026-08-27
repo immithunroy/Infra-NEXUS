@@ -149,7 +149,13 @@ class MikrotikDriver:
 
         adv_by_peer: dict[str, int] = {}
         for adv in raw_advs:
-            peer = adv.get("peer", "") or adv.get("remote-address", "") or _deep_get(adv, "remote.address", "")
+            peer = (
+                adv.get("remote.address", "")
+                or adv.get("peer", "")
+                or adv.get("remote-address", "")
+                or _deep_get(adv, "remote.address", "")
+                or ""
+            )
             if peer:
                 adv_by_peer[peer] = adv_by_peer.get(peer, 0) + 1
 
@@ -158,40 +164,57 @@ class MikrotikDriver:
         established = 0
 
         for row in raw_sessions:
+            # RouterOS v7 uses flat dotted keys like "remote.address", "remote.as"
+            # Try flat key first (dict lookup with full dotted string), then nested
             remote_ip = (
-                row.get("remote-address", "")
-                or _deep_get(row, "remote.address", "")
+                row.get("remote.address", "")
+                or row.get("remote-address", "")
                 or row.get("remote.ip", "")
+                or _deep_get(row, "remote.address", "")
                 or ""
             )
             remote_as = int(
-                row.get("remote-as", 0)
+                row.get("remote.as", 0)
+                or row.get("remote-as", 0)
                 or _deep_get_int(row, "remote.as", 0)
                 or 0
             )
             local_ip = (
-                row.get("local-address", "")
-                or _deep_get(row, "local.address", "")
+                row.get("local.address", "")
+                or row.get("local-address", "")
                 or row.get("local.ip", "")
+                or _deep_get(row, "local.address", "")
                 or ""
             )
             local_as = int(
-                row.get("local-as", 0)
+                row.get("local.as", 0)
+                or row.get("local-as", 0)
                 or _deep_get_int(row, "local.as", 0)
                 or 0
             )
             name = str(row.get("name", "") or row.get("remote.identity", "") or "")
-            address_family = str(row.get("address-family", "") or row.get("af", "") or "")
-            state_raw = str(row.get("state", "") or row.get("status", "")).lower()
-            if state_raw in ("established", "estab"):
+            address_family = str(
+                row.get("remote.afi", "")
+                or row.get("local.afi", "")
+                or row.get("address-family", "")
+                or row.get("af", "")
+                or ""
+            )
+            # RouterOS v7 uses "established" boolean instead of "state" string
+            if row.get("established") is True or row.get("established") == "true":
                 state = "established"
                 established += 1
-            elif state_raw in ("active",):
-                state = "active"
-            elif state_raw in ("connect",):
-                state = "connect"
             else:
-                state = state_raw or "idle"
+                state_raw = str(row.get("state", "") or row.get("status", "")).lower()
+                if state_raw in ("established", "estab"):
+                    state = "established"
+                    established += 1
+                elif state_raw in ("active",):
+                    state = "active"
+                elif state_raw in ("connect",):
+                    state = "connect"
+                else:
+                    state = state_raw or "idle"
 
             uptime = str(row.get("uptime", ""))
             prefix_count = int(row.get("prefix-count", 0) or row.get("received-prefix-count", 0) or 0)

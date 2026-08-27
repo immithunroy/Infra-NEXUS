@@ -9,39 +9,53 @@ function StateBadge({ state }: { state: string }) {
     connect: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
     idle: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
   };
-  return <span className={`badge ${map[state] || map.idle}`}>{state}</span>;
+  return <span className={`badge text-[10px] ${map[state] || map.idle}`}>{state}</span>;
 }
 
 function FamilyBadge({ family }: { family: string }) {
-  const map: Record<string, string> = {
-    "ipv4": "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-    "ipv6": "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-  };
-  const label = family?.replace("ipv4-unicast", "IPv4").replace("ipv6-unicast", "IPv6").replace("ipv4", "IPv4").replace("ipv6", "IPv6") || "IPv4";
-  const key = label.toLowerCase().includes("ipv6") ? "ipv6" : "ipv4";
-  return <span className={`badge text-[10px] ${map[key] || map.ipv4}`}>{label}</span>;
+  const isV6 = family?.toLowerCase().includes("ipv6");
+  return (
+    <span className={`badge text-[10px] ${isV6 ? "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300" : "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"}`}>
+      {isV6 ? "IPv6" : "IPv4"}
+    </span>
+  );
 }
 
-function MiniSparkLine({ data, color, height = 32 }: { data: number[]; color?: string; height?: number }) {
-  if (data.length < 2) return <span className="text-[10px] text-slate-400">—</span>;
+function SparkLine({ data, color = "#3b82f6", height = 40, width = 200 }: { data: number[]; color?: string; height?: number; width?: number }) {
+  if (data.length < 2) {
+    return <div className="text-[10px] text-slate-400 dark:text-slate-500" style={{ height, width }}>No data</div>;
+  }
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
-  const w = 120;
-  const h = height;
-  const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`).join(" ");
+  const padY = 4;
+  const h = height - padY * 2;
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = padY + h - ((v - min) / range) * h;
+    return `${x},${y}`;
+  }).join(" ");
+  const areaPoints = `0,${padY + h} ${points} ${width},${padY + h}`;
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="inline-block">
-      <polyline points={points} fill="none" stroke={color || "#3b82f6"} strokeWidth="1.5" strokeLinejoin="round" />
-      <circle cx={(data.length - 1) / (data.length - 1) * w} cy={h - ((data[data.length - 1] - min) / range) * (h - 4) - 2} r="2" fill={color || "#3b82f6"} />
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="inline-block">
+      <defs>
+        <linearGradient id={`grad-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.05" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPoints} fill={`url(#grad-${color.replace("#", "")})`} />
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx={width} cy={padY + h - ((data[data.length - 1] - min) / range) * h} r="2.5" fill={color} />
     </svg>
   );
 }
 
 function TotalPrefixGraph({ snapshots, sessions }: { snapshots: BgpPrefixSnapshot[]; sessions: BgpSession[] }) {
-  if (!snapshots.length) return null;
+  if (!snapshots.length && !sessions.length) return null;
+  const totalRecorded = sessions.reduce((s, v) => s + v.prefix_count, 0);
+  const totalAdvertised = sessions.reduce((s, v) => s + v.advertised_count, 0);
 
-  // Aggregate snapshots by recorded_at
   const byTime = new Map<string, { recorded: number; advertised: number }>();
   for (const s of snapshots) {
     const key = s.recorded_at;
@@ -50,40 +64,136 @@ function TotalPrefixGraph({ snapshots, sessions }: { snapshots: BgpPrefixSnapsho
     existing.advertised += s.advertised_count;
     byTime.set(key, existing);
   }
-
   const sorted = Array.from(byTime.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   const recorded = sorted.map(([, v]) => v.recorded);
   const advertised = sorted.map(([, v]) => v.advertised);
 
-  const totalRecorded = sessions.reduce((s, v) => s + v.prefix_count, 0);
-  const totalAdvertised = sessions.reduce((s, v) => s + v.advertised_count, 0);
-
   return (
-    <div className="card p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="card p-5">
+      <div className="mb-4 flex items-center justify-between">
         <div>
-          <div className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Total Prefix Trend (7 days)</div>
-          <div className="mt-1 flex gap-4 text-xs text-slate-500 dark:text-slate-400">
-            <span className="text-blue-600 dark:text-blue-400">Received: {totalRecorded.toLocaleString()}</span>
-            <span className="text-purple-600 dark:text-purple-400">Advertised: {totalAdvertised.toLocaleString()}</span>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Prefix Trend</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">7-day received vs advertised prefixes</p>
+        </div>
+        <div className="flex gap-4 text-xs">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+            <span className="text-slate-600 dark:text-slate-300">Received: <b>{totalRecorded.toLocaleString()}</b></span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+            <span className="text-slate-600 dark:text-slate-300">Advertised: <b>{totalAdvertised.toLocaleString()}</b></span>
           </div>
         </div>
-        <div className="flex gap-1">
-          {recorded.length > 0 && (
-            <MiniSparkLine data={recorded} color="#3b82f6" height={28} />
+      </div>
+      {recorded.length > 1 ? (
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <div className="mb-1 text-[10px] font-semibold uppercase text-blue-600 dark:text-blue-400">Received Prefixes</div>
+            <SparkLine data={recorded} color="#3b82f6" height={56} width={360} />
+          </div>
+          <div>
+            <div className="mb-1 text-[10px] font-semibold uppercase text-purple-600 dark:text-purple-400">Advertised Prefixes</div>
+            <SparkLine data={advertised} color="#8b5cf6" height={56} width={360} />
+          </div>
+        </div>
+      ) : (
+        <div className="text-xs text-slate-400">Collecting data... graphs appear after 2+ scans.</div>
+      )}
+    </div>
+  );
+}
+
+function SessionCard({ session, snapshots, onExpand, isExpanded, routes, routesLoading }: {
+  session: BgpSession;
+  snapshots: BgpPrefixSnapshot[];
+  onExpand: () => void;
+  isExpanded: boolean;
+  routes: BgpRoute[];
+  routesLoading: boolean;
+}) {
+  const prefixCounts = snapshots.map((sn) => sn.prefix_count);
+  const advertisedCounts = snapshots.map((sn) => sn.advertised_count);
+  return (
+    <div className="card overflow-hidden">
+      <div className="p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition" onClick={onExpand}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{session.name || session.remote_ip}</span>
+              <StateBadge state={session.state} />
+              <FamilyBadge family={session.address_family} />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-xs">
+              <div><span className="text-slate-400">Remote:</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{session.remote_ip}</span></div>
+              <div><span className="text-slate-400">Local:</span> <span className="font-mono text-slate-500 dark:text-slate-400">{session.local_ip}</span></div>
+              <div><span className="text-slate-400">Remote AS:</span> <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{session.remote_as}</span></div>
+              <div><span className="text-slate-400">Local AS:</span> <span className="font-mono text-slate-500 dark:text-slate-400">{session.local_as || "—"}</span></div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="text-right">
+              <div className="text-lg font-bold font-mono text-blue-600 dark:text-blue-400">{session.prefix_count.toLocaleString()}</div>
+              <div className="text-[10px] text-slate-400">received</div>
+            </div>
+            <div className="text-right">
+              <div className="text-lg font-bold font-mono text-purple-600 dark:text-purple-400">{session.advertised_count.toLocaleString()}</div>
+              <div className="text-[10px] text-slate-400">advertised</div>
+            </div>
+            <div className="text-right w-20">
+              <div className="text-xs font-medium text-slate-600 dark:text-slate-300">{session.uptime || "—"}</div>
+              <div className="text-[10px] text-slate-400">uptime</div>
+            </div>
+            <div className="w-48">
+              {prefixCounts.length > 1 ? (
+                <SparkLine data={prefixCounts} color="#3b82f6" height={32} width={192} />
+              ) : (
+                <div className="text-[10px] text-slate-400 h-8 flex items-center">collecting...</div>
+              )}
+            </div>
+            <svg className={`h-4 w-4 text-slate-400 transition-transform shrink-0 ${isExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      {isExpanded && (
+        <div className="border-t border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/30 px-4 py-3">
+          {routesLoading ? (
+            <div className="text-xs text-slate-400 py-2">Loading routes...</div>
+          ) : routes.length === 0 ? (
+            <div className="text-xs text-slate-400 py-2">No routes received from this peer.</div>
+          ) : (
+            <div>
+              <div className="mb-2 text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">
+                Received Routes ({routes.length})
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-slate-500 dark:text-slate-400">
+                      <th className="pb-1 pr-4 font-medium">Prefix</th>
+                      <th className="pb-1 pr-4 font-medium">Nexthop</th>
+                      <th className="pb-1 pr-4 font-medium">Metric</th>
+                      <th className="pb-1 font-medium">Community</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200/50 dark:divide-slate-700/30">
+                    {routes.map((r) => (
+                      <tr key={r.id}>
+                        <td className="py-1 pr-4 font-mono">{r.prefix}</td>
+                        <td className="py-1 pr-4 font-mono text-slate-500">{r.nexthop}</td>
+                        <td className="py-1 pr-4">{r.metric}</td>
+                        <td className="py-1 font-mono text-slate-500">{r.community || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="mb-1 text-[10px] font-medium uppercase text-blue-600 dark:text-blue-400">Received Prefixes</div>
-          <MiniSparkLine data={recorded} color="#3b82f6" height={48} />
-        </div>
-        <div>
-          <div className="mb-1 text-[10px] font-medium uppercase text-purple-600 dark:text-purple-400">Advertised Prefixes</div>
-          <MiniSparkLine data={advertised} color="#8b5cf6" height={48} />
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -96,34 +206,28 @@ export default function Routing() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [routes, setRoutes] = useState<BgpRoute[]>([]);
   const [routesLoading, setRoutesLoading] = useState(false);
-  const [snapshots, setSnapshots] = useState<BgpPrefixSnapshot[]>([]);
   const [sessionSnapshots, setSessionSnapshots] = useState<Map<number, BgpPrefixSnapshot[]>>(new Map());
+  const [allSnapshots, setAllSnapshots] = useState<BgpPrefixSnapshot[]>([]);
 
   useEffect(() => {
     api.get<MikrotikDevice[]>("/devices/mikrotiks").then(setMikrotiks).catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    if (selectedId === "") { setSessions([]); setSnapshots([]); setSessionSnapshots(new Map()); return; }
+    if (selectedId === "") { setSessions([]); setSessionSnapshots(new Map()); setAllSnapshots([]); return; }
     setLoading(true);
     api.get<BgpSession[]>(`/devices/mikrotiks/${selectedId}/bgp`)
       .then((data) => {
         setSessions(data);
-        // Fetch snapshots for all sessions in parallel
-        data.forEach((s) => {
-          api.get<BgpPrefixSnapshot[]>(`/devices/mikrotiks/${selectedId}/bgp/${s.id}/snapshots`, { hours: 168 })
-            .then((snap) => {
-              setSessionSnapshots((prev) => new Map(prev).set(s.id, snap));
-            })
-            .catch(() => undefined);
-        });
-        // Aggregate all snapshots for total graph
         const all: BgpPrefixSnapshot[] = [];
         Promise.all(data.map((s) =>
           api.get<BgpPrefixSnapshot[]>(`/devices/mikrotiks/${selectedId}/bgp/${s.id}/snapshots`, { hours: 168 }).catch(() => [])
         )).then((results) => {
-          results.forEach((r) => all.push(...r));
-          setSnapshots(all);
+          results.forEach((snap, i) => {
+            setSessionSnapshots((prev) => new Map(prev).set(data[i].id, snap));
+            all.push(...snap);
+          });
+          setAllSnapshots(all);
         });
       })
       .catch(() => setSessions([]))
@@ -142,7 +246,7 @@ export default function Routing() {
   }, [expandedId]);
 
   const established = sessions.filter((s) => s.state === "established").length;
-  const active = sessions.filter((s) => s.state === "active").length;
+  const active = sessions.filter((s) => s.state !== "established" && s.state !== "idle").length;
   const totalPrefixes = sessions.reduce((sum, s) => sum + s.prefix_count, 0);
   const totalAdvertised = sessions.reduce((sum, s) => sum + s.advertised_count, 0);
 
@@ -168,7 +272,7 @@ export default function Routing() {
           <div className="card p-4">
             <div className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Established</div>
             <div className="mt-1 text-3xl font-bold text-emerald-600 dark:text-emerald-400">{established}</div>
-            <div className="mt-1 text-xs text-slate-400">of {sessions.length} total sessions</div>
+            <div className="mt-1 text-xs text-slate-400">of {sessions.length} sessions</div>
           </div>
           <div className="card p-4">
             <div className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Active / Connecting</div>
@@ -188,107 +292,29 @@ export default function Routing() {
         </div>
       )}
 
-      {/* Total prefix trend graph */}
-      {selectedId !== "" && snapshots.length > 0 && (
-        <TotalPrefixGraph snapshots={snapshots} sessions={sessions} />
-      )}
+      {/* Total prefix trend */}
+      {selectedId !== "" && <TotalPrefixGraph snapshots={allSnapshots} sessions={sessions} />}
 
-      {/* BGP Sessions table */}
+      {/* Session cards */}
       {selectedId !== "" && (
-        <div className="card overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-              <tr>
-                <th className="th">State</th>
-                <th className="th">Peer Name</th>
-                <th className="th">Remote IP</th>
-                <th className="th">Family</th>
-                <th className="th">Local IP</th>
-                <th className="th">Remote AS</th>
-                <th className="th">Local AS</th>
-                <th className="th">Uptime</th>
-                <th className="th text-right">Received</th>
-                <th className="th text-right">Advertised</th>
-                <th className="th">Prefix Trend</th>
-                <th className="th w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-              {loading && (
-                <tr><td className="td text-center text-slate-400" colSpan={12}>Loading BGP sessions...</td></tr>
-              )}
-              {!loading && sessions.length === 0 && (
-                <tr><td className="td text-center text-slate-400" colSpan={12}>No BGP sessions found. Data is collected during Mikrotik scans.</td></tr>
-              )}
-              {sessions.map((s) => {
-                const snapData = sessionSnapshots.get(s.id) || [];
-                const prefixCounts = snapData.map((sn) => sn.prefix_count);
-                return (
-                  <Fragment key={s.id}>
-                    <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => toggleExpand(s)}>
-                      <td className="td"><StateBadge state={s.state} /></td>
-                      <td className="td text-sm font-medium">{s.name || "—"}</td>
-                      <td className="td font-mono text-sm font-medium">{s.remote_ip}</td>
-                      <td className="td"><FamilyBadge family={s.address_family} /></td>
-                      <td className="td font-mono text-sm text-slate-500 dark:text-slate-400">{s.local_ip}</td>
-                      <td className="td font-mono text-sm">{s.remote_as}</td>
-                      <td className="td font-mono text-sm text-slate-500 dark:text-slate-400">{s.local_as || "—"}</td>
-                      <td className="td text-sm">{s.uptime || "—"}</td>
-                      <td className="td text-right font-mono text-sm">{s.prefix_count.toLocaleString()}</td>
-                      <td className="td text-right font-mono text-sm">{s.advertised_count.toLocaleString()}</td>
-                      <td className="td">
-                        <MiniSparkLine data={prefixCounts} color="#3b82f6" height={24} />
-                      </td>
-                      <td className="td w-10 text-center">
-                        <svg className={`h-4 w-4 text-slate-400 transition-transform ${expandedId === s.id ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                        </svg>
-                      </td>
-                    </tr>
-                    {expandedId === s.id && (
-                      <tr key={`${s.id}-routes`}>
-                        <td colSpan={12} className="bg-slate-50/50 px-6 py-4 dark:bg-slate-800/30">
-                          {routesLoading ? (
-                            <div className="text-sm text-slate-400">Loading routes...</div>
-                          ) : routes.length === 0 ? (
-                            <div className="text-sm text-slate-400">No routes received from this peer.</div>
-                          ) : (
-                            <div>
-                              <div className="mb-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                                Received Routes ({routes.length})
-                              </div>
-                              <div className="max-h-64 overflow-y-auto">
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="text-left text-slate-500 dark:text-slate-400">
-                                      <th className="pb-1 pr-4 font-medium">Prefix</th>
-                                      <th className="pb-1 pr-4 font-medium">Nexthop</th>
-                                      <th className="pb-1 pr-4 font-medium">Metric</th>
-                                      <th className="pb-1 font-medium">Community</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-200/50 dark:divide-slate-700/30">
-                                    {routes.map((r) => (
-                                      <tr key={r.id}>
-                                        <td className="py-1 pr-4 font-mono">{r.prefix}</td>
-                                        <td className="py-1 pr-4 font-mono text-slate-500">{r.nexthop}</td>
-                                        <td className="py-1 pr-4">{r.metric}</td>
-                                        <td className="py-1 font-mono text-slate-500">{r.community || "—"}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {loading && (
+            <div className="card p-8 text-center text-slate-400">Loading BGP sessions...</div>
+          )}
+          {!loading && sessions.length === 0 && (
+            <div className="card p-8 text-center text-slate-400">No BGP sessions found. Data is collected during Mikrotik scans.</div>
+          )}
+          {sessions.map((s) => (
+            <SessionCard
+              key={s.id}
+              session={s}
+              snapshots={sessionSnapshots.get(s.id) || []}
+              onExpand={() => toggleExpand(s)}
+              isExpanded={expandedId === s.id}
+              routes={expandedId === s.id ? routes : []}
+              routesLoading={expandedId === s.id && routesLoading}
+            />
+          ))}
         </div>
       )}
 
