@@ -1570,6 +1570,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    cableLayersRef.current.clear();
     map.eachLayer((layer: L.Layer) => {
       if (!(layer instanceof L.TileLayer) && !(layer instanceof L.Control.Draw)) map.removeLayer(layer);
     });
