@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models import Ticket, TicketPriority, TicketStatus, User, UserRole
 from ..schemas import TicketCreate, TicketOut, TicketUpdate
-from ..security import get_current_user, require_write, user_role
+from ..security import get_current_user, require_write, require_fiber_request, user_role
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"], dependencies=[Depends(get_current_user)])
 
@@ -73,7 +73,7 @@ def _to_out(t: Ticket, unames: dict[int, str]) -> TicketOut:
 @router.post("", response_model=TicketOut)
 async def create_ticket(
     body: TicketCreate,
-    user: User = Depends(require_write),
+    user: User = Depends(require_fiber_request),
     db: AsyncSession = Depends(get_db),
 ):
     if not body.title.strip():

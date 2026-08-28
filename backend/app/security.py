@@ -81,6 +81,8 @@ _OPS_ROLES = {UserRole.admin, UserRole.global_write, UserRole.noc}
 _WRITE_ROLES = {UserRole.admin, UserRole.global_write}
 # Roles that may manage users and roles.
 _ADMIN_ROLES = {UserRole.admin}
+# Roles that may submit fiber infrastructure changes for approval.
+_FIBER_REQUEST_ROLES = {UserRole.admin, UserRole.global_write, UserRole.field_team}
 
 
 def user_role(user: User) -> str:
@@ -114,6 +116,12 @@ def require_gps_write(user: User = Depends(get_current_user)) -> User:
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
     if user_role(user) not in _ADMIN_ROLES:
+        raise _denied()
+    return user
+
+
+def require_fiber_request(user: User = Depends(get_current_user)) -> User:
+    if user_role(user) not in _FIBER_REQUEST_ROLES:
         raise _denied()
     return user
 

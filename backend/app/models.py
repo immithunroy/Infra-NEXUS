@@ -742,3 +742,27 @@ class BgpPrefixSnapshot(Base):
 # Add bgp_sessions relationship to MikrotikDevice if not already present
 if not hasattr(MikrotikDevice, "bgp_sessions"):
     MikrotikDevice.bgp_sessions = relationship("BgpSession", back_populates="device", cascade="all, delete-orphan")
+
+
+class ApprovalStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class FiberApprovalRequest(Base):
+    """A pending fiber infrastructure change submitted by field_team for NOC/admin approval."""
+
+    __tablename__ = "fiber_approval_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requested_by: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    action: Mapped[str] = mapped_column(String(16))  # create | update | delete
+    entity_type: Mapped[str] = mapped_column(String(32))  # cable | tj_box | splitter | splice | loop | cable_cut
+    entity_id: Mapped[int | None] = mapped_column(nullable=True)  # ID of existing entity (for update/delete)
+    payload_json: Mapped[str] = mapped_column(Text)  # serialized create/update body as JSON
+    status: Mapped[str] = mapped_column(String(16), default=ApprovalStatus.pending.value)
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
