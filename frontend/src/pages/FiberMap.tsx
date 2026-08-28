@@ -120,17 +120,54 @@ export default function FiberMap() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editKind, setEditKind] = useState<string>("");
 
-  const [routeMode, setRouteMode] = useState(false);
-  const [routeType, setRouteType] = useState<"driving" | "walking">("driving");
-  const [routeModeType, setRouteModeType] = useState<"straight" | "road">("road");
+  type PlanPhase = "idle" | "select-src" | "select-dst" | "fetching" | "select-route" | "draw" | "confirm";
+  const [planner, setPlanner] = useState<{ phase: PlanPhase; srcTj: TjBox | null; dstTj: TjBox | null; waypoints: L.LatLng[] }>({ phase: "idle", srcTj: null, dstTj: null, waypoints: [] });
+  const [routeAlts, setRouteAlts] = useState<{ coords: [number, number][]; distance: number; duration: number }[]>([]);
   const [routing, setRouting] = useState(false);
+
+  const calcWaypointDistKm = useCallback((wp: L.LatLng[]): number => { let d = 0; for (let i = 0; i < wp.length - 1; i++) d += haversine(wp[i].lat, wp[i].lng, wp[i + 1].lat, wp[i + 1].lng); return d / 1000; }, []);
+  const fetchOsrmAlts = useCallback(async (src: TjBox, dst: TjBox) => {
+    setRouting(true); setPlanner((p) => ({ ...p, phase: "fetching" as PlanPhase }));
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${src.lng},${src.lat};${dst.lng},${dst.lat}?overview=full&geometries=geojson&alternatives=true`;
+      const res = await fetch(url); const data = await res.json();
+      if (data.code !== "Ok" || !data.routes?.length) { setError("No route found between these TJs."); setPlanner((p) => ({ ...p, phase: "select-dst" as PlanPhase })); return; }
+      const alts = data.routes.map((r: any) => ({ coords: r.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]] as [number, number]), distance: r.distance, duration: r.duration }));
+      setRouteAlts(alts);
+      setPlanner((p) => ({ ...p, phase: "select-route" as PlanPhase }));
+    } catch (e) { setError("Routing failed: " + String(e)); setPlanner((p) => ({ ...p, phase: "select-dst" as PlanPhase })); }
+    finally { setRouting(false); }
+  }, []);
+  const selectRoute = useCallback((idx: number) => {
+    const alt = routeAlts[idx]; if (!alt) return;
+    const waypoints = alt.coords.map((c) => L.latLng(c[0], c[1]));
+    setPlanner((p) => ({ ...p, phase: "draw" as PlanPhase, waypoints }));
+    setRouteAlts([]);
+  }, [routeAlts]);
+  const addWaypoint = useCallback((lat: number, lng: number) => {
+    setPlanner((p) => { if (p.phase !== "draw" || p.waypoints.length < 2) return p;
+      const pt = L.latLng(lat, lng); let best = 0, bestD = Infinity;
+      for (let i = 0; i < p.waypoints.length - 1; i++) { const d = pt.distanceTo(L.latLng((p.waypoints[i].lat + p.waypoints[i + 1].lat) / 2, (p.waypoints[i].lng + p.waypoints[i + 1].lng) / 2)); if (d < bestD) { bestD = d; best = i; } }
+      const wp = [...p.waypoints]; wp.splice(best + 1, 0, pt); return { ...p, waypoints: wp };
+    });
+  }, []);
+  const removeWaypoint = useCallback((idx: number) => {
+    setPlanner((p) => { if (p.phase !== "draw" || p.waypoints.length <= 2) return p; const wp = [...p.waypoints]; wp.splice(idx, 1); return { ...p, waypoints: wp }; });
+  }, []);
+  const confirmRoute = useCallback(() => {
+    setPlanner((p) => { if (!p.srcTj || !p.dstTj || p.waypoints.length < 2) return p;
+      const segments: TempSegment[] = p.waypoints.map((ll, i) => { const next = p.waypoints[i + 1]; return next ? { start_lat: ll.lat, start_lng: ll.lng, end_lat: next.lat, end_lng: next.lng, order_index: i } : null; }).filter(Boolean) as TempSegment[];
+      const code = (p.srcTj as TjBox).unique_id + ">" + (p.dstTj as TjBox).unique_id;
+      setTimeout(() => { setCableForm({ code, cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: (p.srcTj as TjBox).id, dst_tj_id: (p.dstTj as TjBox).id, segments: segments as any[] }); setShowForm("cable"); }, 0);
+      return { phase: "idle" as PlanPhase, srcTj: null, dstTj: null, waypoints: [] };
+    });
+  }, []);
+  const cancelPlan = useCallback(() => { setPlanner({ phase: "idle", srcTj: null, dstTj: null, waypoints: [] }); setRouteAlts([]); }, []);
 
   const [importing, setImporting] = useState(false);
   const [selectedTj, setSelectedTj] = useState<TjBox | null>(null);
   const [selectedCable, setSelectedCable] = useState<Cable | null>(null);
   const [editingCableId, setEditingCableId] = useState<number | null>(null);
-  const [routeSrcTj, setRouteSrcTj] = useState<TjBox | null>(null);
-  const [routeDstTj, setRouteDstTj] = useState<TjBox | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
@@ -373,35 +410,6 @@ export default function FiberMap() {
     else if (kind === "cut") { setCutForm({ lat, lng }); setShowForm("cut"); }
   };
 
-  const handleRouteFetch = async () => {
-    if (!routeSrcTj || !routeDstTj) return;
-    setRouting(true);
-    const start: [number, number] = [routeSrcTj.lat, routeSrcTj.lng];
-    const end: [number, number] = [routeDstTj.lat, routeDstTj.lng];
-    try {
-      let segments: TempSegment[] = [];
-      if (routeModeType === "straight") {
-        segments = [{ start_lat: start[0], start_lng: start[1], end_lat: end[0], end_lng: end[1], order_index: 0 }];
-      } else {
-        const profile = routeType;
-        const url = `https://router.project-osrm.org/route/v1/${profile}/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.code !== "Ok" || !data.routes?.length) { setError("No route found"); setRouting(false); return; }
-        const coords: [number, number][] = data.routes[0].geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
-        for (let i = 0; i < coords.length - 1; i++) {
-          segments.push({ start_lat: coords[i][0], start_lng: coords[i][1], end_lat: coords[i + 1][0], end_lng: coords[i + 1][1], order_index: i });
-        }
-        const step = Math.max(1, Math.floor(segments.length / 50));
-        segments = segments.filter((_, i) => i % step === 0 || i === segments.length - 1);
-      }
-      setCableForm({ ...cableForm, code: routeSrcTj.unique_id + ">" + routeDstTj.unique_id, cable_type: "round", core_count: 12, segments: segments as any[] });
-      setShowForm("cable");
-      setRouteMode(false); setRouteSrcTj(null); setRouteDstTj(null);
-    } catch (e) { setError("Routing failed: " + String(e)); }
-    finally { setRouting(false); }
-  };
-
   const handleDrawCreated = (e: { layer: L.Polyline }) => {
     const layer = e.layer;
     const latlngs = layer.getLatLngs() as L.LatLng[];
@@ -479,6 +487,9 @@ export default function FiberMap() {
         {writeOk && (
           <>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Cable</button>
+            <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
+              {planner.phase !== "idle" ? "Planning..." : "Plan Cable"}
+            </button>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>
               Feasibility Check
@@ -502,17 +513,19 @@ export default function FiberMap() {
             nocPopData={nocPopData}
             center={CITY_CENTER}
             mapRef={mapRef}
-            routeMode={routeMode}
-            routeSrcTj={routeSrcTj}
-            routeDstTj={routeDstTj}
+            planner={planner}
+            routeAlts={routeAlts}
+            routing={routing}
             isFullscreen={isFullscreen}
             dragMode={dragMode}
             onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
             onTjClick={(tj) => {
-              if (routeMode) {
-                if (!routeSrcTj) setRouteSrcTj(tj);
-                else if (!routeDstTj) setRouteDstTj(tj);
-              } else {
+              if (planner.phase === "select-src") {
+                setPlanner({ ...planner, srcTj: tj, phase: "select-dst" });
+              } else if (planner.phase === "select-dst") {
+                setPlanner({ ...planner, dstTj: tj });
+                fetchOsrmAlts(planner.srcTj!, tj);
+              } else if (planner.phase !== "draw" && planner.phase !== "fetching") {
                 setSelectedTj(tj);
               }
             }}
@@ -526,6 +539,12 @@ export default function FiberMap() {
             onCutClick={(cut) => { setCutForm(cut); setShowForm("cut"); }}
             editingCableId={editingCableId}
             onEditingCableDone={() => setEditingCableId(null)}
+            onMapClick={(lat, lng) => { if (planner.phase === "draw") addWaypoint(lat, lng); }}
+            onSelectRoute={selectRoute}
+            onAddWaypoint={addWaypoint}
+            onRemoveWaypoint={removeWaypoint}
+            onStartPlan={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}
+            calcDistKm={calcWaypointDistKm}
           />
         </div>
 
@@ -759,7 +778,7 @@ export default function FiberMap() {
                 <div><label className="label">Year *</label><input type="number" className="input" value={cableForm.manufacturing_year || ""} onChange={(e) => setCableForm({ ...cableForm, manufacturing_year: Number(e.target.value) })} required /></div>
               </div>
               <div><label className="label">Notes</label><textarea className="input" rows={2} value={cableForm.notes || ""} onChange={(e) => setCableForm({ ...cableForm, notes: e.target.value })} /></div>
-              <div className="text-xs text-slate-500">Segments: {cableForm.segments?.length || 0} points ({routeModeType === "straight" ? "straight line" : "road route"})</div>
+              <div className="text-xs text-slate-500">Segments: {cableForm.segments?.length || 0} points</div>
               <div className="flex justify-end gap-2 pt-2">
                 <button className="btn-secondary" onClick={() => setShowForm(null)}>Cancel</button>
                 <button className="btn-primary" onClick={saveCable}>Save</button>
@@ -1466,14 +1485,14 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, routeMode, routeSrcTj, routeDstTj, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, onEditingCableDone }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, onEditingCableDone, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onStartPlan, calcDistKm }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
   mapRef: React.MutableRefObject<L.Map | null>;
-  routeMode: boolean;
-  routeSrcTj: TjBox | null;
-  routeDstTj: TjBox | null;
+  planner: { phase: string; srcTj: TjBox | null; dstTj: TjBox | null; waypoints: L.LatLng[] };
+  routeAlts: { coords: [number, number][]; distance: number; duration: number }[];
+  routing: boolean;
   isFullscreen: boolean;
   dragMode: boolean;
   onToggleFullscreen: () => void;
@@ -1488,6 +1507,12 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onCutClick: (cut: CableCut) => void;
   editingCableId: number | null;
   onEditingCableDone: () => void;
+  onMapClick: (lat: number, lng: number) => void;
+  onSelectRoute: (idx: number) => void;
+  onAddWaypoint: (lat: number, lng: number) => void;
+  onRemoveWaypoint: (idx: number) => void;
+  onStartPlan: () => void;
+  calcDistKm: (wp: L.LatLng[]) => number;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
   const drawControlRef = useRef<L.Control.Draw | null>(null);
@@ -1497,6 +1522,8 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   const cableLayersRef = useRef<Map<number, L.Polyline>>(new Map());
   const onRightClickRef = useRef(onRightClickAdd);
   onRightClickRef.current = onRightClickAdd;
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   useEffect(() => {
     if (!mapEl || mapRef.current) return;
@@ -1546,6 +1573,10 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       map.once("click", () => menu.remove());
     });
 
+    map.on("click", (e: L.LeafletMouseEvent) => {
+      if (onMapClickRef.current) onMapClickRef.current(e.latlng.lat, e.latlng.lng);
+    });
+
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
   }, [mapEl, center]);
@@ -1558,15 +1589,28 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     if (!map) return;
     routeMarkersRef.current.forEach((m) => map.removeLayer(m));
     routeMarkersRef.current = [];
-    if (routeSrcTj) {
-      const m = L.marker([routeSrcTj.lat, routeSrcTj.lng], { icon: tjIcon("#22c55e") }).bindTooltip("SRC: " + routeSrcTj.unique_id, { permanent: true, className: "" }).addTo(map);
+    if (planner.srcTj && planner.phase !== "idle") {
+      const m = L.marker([planner.srcTj.lat, planner.srcTj.lng], { icon: tjIcon("#22c55e"), interactive: planner.phase === "select-dst" }).bindTooltip("SRC: " + planner.srcTj.unique_id, { permanent: true, className: "" }).addTo(map);
       routeMarkersRef.current.push(m);
     }
-    if (routeDstTj) {
-      const m = L.marker([routeDstTj.lat, routeDstTj.lng], { icon: tjIcon("#3b82f6") }).bindTooltip("DST: " + routeDstTj.unique_id, { permanent: true, className: "" }).addTo(map);
+    if (planner.dstTj && planner.phase !== "idle") {
+      const m = L.marker([planner.dstTj.lat, planner.dstTj.lng], { icon: tjIcon("#3b82f6"), interactive: false }).bindTooltip("DST: " + planner.dstTj.unique_id, { permanent: true, className: "" }).addTo(map);
       routeMarkersRef.current.push(m);
     }
-  }, [routeSrcTj, routeDstTj]);
+    if (planner.phase === "draw" && planner.waypoints.length >= 2) {
+      const pts: [number, number][] = planner.waypoints.map((ll) => [ll.lat, ll.lng]);
+      const pl = L.polyline(pts, { color: "#ef4444", weight: 4, opacity: 0.85, dashArray: "8,4" }).addTo(map);
+      routeMarkersRef.current.push(pl as any);
+      const wpIcon = L.divIcon({ className: "", html: '<div style="width:12px;height:12px;background:#ef4444;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize: [12, 12], iconAnchor: [6, 6] });
+      planner.waypoints.forEach((ll, i) => {
+        const marker = L.marker([ll.lat, ll.lng], { icon: wpIcon, draggable: true }).addTo(map);
+        marker.bindTooltip(`WP${i + 1}<br>double-click to remove`, { direction: "top" });
+        marker.on("dragend", (e) => { const pos = e.target.getLatLng(); setPlanner((p) => ({ ...p, waypoints: p.waypoints.map((w, j) => j === i ? pos : w) })); });
+        marker.on("dblclick", (e) => { L.DomEvent.stopPropagation(e); removeWaypoint(i); });
+        routeMarkersRef.current.push(marker);
+      });
+    }
+  }, [planner.phase, planner.srcTj?.id, planner.dstTj?.id, planner.waypoints, removeWaypoint]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1918,6 +1962,65 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   return (
     <div className="relative h-full">
       <div ref={setMapEl} className="w-full h-full" style={{ minHeight: isFullscreen ? "100%" : "400px" }} />
+
+      {/* Cable Plan Toolbar */}
+      {planner.phase !== "idle" && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 rounded-xl bg-white/95 dark:bg-slate-900/95 px-4 py-2.5 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            {planner.phase === "select-src" && (
+              <><span className="text-xs font-semibold text-blue-600">Click Source TJ</span><span className="text-[10px] text-slate-400">— Select the starting TJ box on the map</span></>
+            )}
+            {planner.phase === "select-dst" && (
+              <><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /><span className="text-xs font-medium">{planner.srcTj?.unique_id}</span></div><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg><span className="text-xs font-semibold text-blue-600">Click Destination TJ</span></>
+            )}
+            {planner.phase === "fetching" && (
+              <><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /><span className="text-xs font-medium">{planner.srcTj?.unique_id}</span></div><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-500" /><span className="text-xs font-medium">{planner.dstTj?.unique_id}</span></div><span className="text-[10px] text-slate-400 ml-1 animate-pulse">Finding routes...</span></>
+            )}
+            {planner.phase === "select-route" && (
+              <><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /><span className="text-xs font-medium">{planner.srcTj?.unique_id}</span></div><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-500" /><span className="text-xs font-medium">{planner.dstTj?.unique_id}</span></div><span className="text-[10px] text-slate-400 ml-1">— Select a route below</span></>
+            )}
+            {planner.phase === "draw" && (
+              <><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /><span className="text-xs font-medium">{planner.srcTj?.unique_id}</span></div><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-500" /><span className="text-xs font-medium">{planner.dstTj?.unique_id}</span></div><span className="text-[10px] text-slate-400 mx-1">|</span><span className="text-xs font-semibold text-red-600">Edit Route</span><span className="text-[10px] text-slate-400">— Click map to add points, double-click to remove</span></>
+            )}
+          </div>
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+          {planner.phase === "draw" && planner.waypoints.length >= 2 && (
+            <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(planner.waypoints).toFixed(2)} km · {planner.waypoints.length} pts</span>
+          )}
+          {planner.phase === "draw" && (
+            <button className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition" onClick={() => { setPlanner({ ...planner, phase: "confirm" as any }); confirmRoute(); }}>Confirm Route</button>
+          )}
+          <button className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition" onClick={cancelPlan}>Cancel</button>
+        </div>
+      )}
+
+      {/* Route Alternatives Selection Panel */}
+      {planner.phase === "select-route" && routeAlts.length > 0 && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-4 max-w-lg w-[90vw]">
+          <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-3">Select Route — {planner.srcTj?.unique_id} → {planner.dstTj?.unique_id}</div>
+          <div className="space-y-2">
+            {routeAlts.map((alt, i) => {
+              const distKm = (alt.distance / 1000).toFixed(2);
+              const wpCount = alt.coords.length;
+              const colors = ["bg-emerald-500", "bg-amber-500", "bg-violet-500", "bg-rose-500"];
+              const borderColors = ["border-emerald-500", "border-amber-500", "border-violet-500", "border-rose-500"];
+              return (
+                <button key={i} className={`w-full flex items-center gap-3 rounded-lg border-2 ${borderColors[i] || "border-slate-300"} bg-white dark:bg-slate-800 p-3 hover:shadow-md transition text-left`} onClick={() => onSelectRoute(i)}>
+                  <div className={`w-8 h-8 rounded-full ${colors[i] || "bg-slate-400"} text-white flex items-center justify-center text-sm font-bold`}>{i + 1}</div>
+                  <div className="flex-1">
+                    <div className="text-xs font-bold text-slate-800 dark:text-white">Route {i + 1}</div>
+                    <div className="text-[10px] text-slate-500">{wpCount} waypoints · {i === 0 ? "Shortest" : "Alternative"}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-slate-900 dark:text-white">{distKm} km</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <button
         onClick={onToggleFullscreen}
         className="absolute bottom-4 right-4 z-[999] flex items-center gap-1.5 rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-700"
