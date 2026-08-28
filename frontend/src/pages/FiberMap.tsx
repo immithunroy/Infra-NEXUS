@@ -1491,6 +1491,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
   const drawControlRef = useRef<L.Control.Draw | null>(null);
+  const drawFeatureGroupRef = useRef<L.FeatureGroup>(new L.FeatureGroup());
   const routeMarkersRef = useRef<L.Marker[]>([]);
   const nocPopLayerRef = useRef<L.LayerGroup | null>(null);
   const cableLayersRef = useRef<Map<number, L.Polyline>>(new Map());
@@ -1509,7 +1510,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         polyline: { shapeOptions: { color: "#ef4444", weight: 2 } },
         polygon: false, circle: false, rectangle: false, marker: false, circlemarker: false,
       },
-      edit: { featureGroup: new L.FeatureGroup() },
+      edit: { featureGroup: drawFeatureGroupRef.current },
     });
     map.addControl(drawControl);
     drawControlRef.current = drawControl;
@@ -1571,6 +1572,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     const map = mapRef.current;
     if (!map) return;
     cableLayersRef.current.clear();
+    drawFeatureGroupRef.current.clearLayers();
     map.eachLayer((layer: L.Layer) => {
       if (!(layer instanceof L.TileLayer) && !(layer instanceof L.Control.Draw)) map.removeLayer(layer);
     });
@@ -1610,18 +1612,23 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         const pl = L.polyline(points, { color, weight: 2, opacity: 0.85 })
           .bindTooltip(tipParts.join("<br>"), { sticky: true });
         pl.addTo(map);
+        drawFeatureGroupRef.current.addLayer(pl);
         cableLayersRef.current.set(cable.id, pl);
 
         pl.on("dblclick", (e: L.LeafletMouseEvent) => {
           L.DomEvent.stopPropagation(e);
-          if (pl.editing?.enabled()) return;
+          if ((pl as any).editing?.enabled()) return;
           pl.setStyle({ weight: 3, dashArray: "6,4" });
-          (pl as any).enableEdit();
+          if (typeof (pl as any).enableEdit === "function") {
+            (pl as any).enableEdit();
+          }
           const verts = pl.getLatLngs() as L.LatLng[];
           const origSegs = cable.segments.map((s) => ({ ...s }));
           const onEditStop = () => {
             pl.setStyle({ weight: 3, dashArray: undefined });
-            (pl as any).disableEdit();
+            if (typeof (pl as any).disableEdit === "function") {
+              (pl as any).disableEdit();
+            }
             const newVerts = pl.getLatLngs() as L.LatLng[];
             const segs = newVerts.slice(0, -1).map((ll, i) => ({
               id: origSegs[i]?.id,
@@ -1801,13 +1808,21 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     const cable = cables.find((c) => c.id === editingCableId);
     if (!cable) { onEditingCableDone(); return; }
 
+    if (typeof (pl as any).enableEdit !== "function") {
+      drawFeatureGroupRef.current.addLayer(pl);
+    }
+
     pl.setStyle({ weight: 3, dashArray: "6,4" });
-    (pl as any).enableEdit();
+    if (typeof (pl as any).enableEdit === "function") {
+      (pl as any).enableEdit();
+    }
     const origSegs = cable.segments.map((s) => ({ ...s }));
 
     const onEditStop = () => {
       pl.setStyle({ weight: 3, dashArray: undefined });
-      (pl as any).disableEdit();
+      if (typeof (pl as any).disableEdit === "function") {
+        (pl as any).disableEdit();
+      }
       const newVerts = pl.getLatLngs() as L.LatLng[];
       const segs = newVerts.slice(0, -1).map((ll, i) => ({
         id: origSegs[i]?.id,
@@ -1821,7 +1836,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     (pl as any).on("edit:stop", onEditStop);
 
     return () => {
-      if ((pl as any).editing?.enabled()) {
+      if (typeof (pl as any).disableEdit === "function" && (pl as any).editing?.enabled()) {
         (pl as any).disableEdit();
         pl.setStyle({ weight: 2, dashArray: undefined });
       }
