@@ -161,7 +161,13 @@ export default function FiberMap() {
     setPlanner((p) => { if (!p.srcTj || !p.dstTj || p.waypoints.length < 2) return p;
       const segments: TempSegment[] = p.waypoints.map((ll, i) => { const next = p.waypoints[i + 1]; return next ? { start_lat: ll.lat, start_lng: ll.lng, end_lat: next.lat, end_lng: next.lng, order_index: i } : null; }).filter(Boolean) as TempSegment[];
       const code = (p.srcTj as TjBox).unique_id + ">" + (p.dstTj as TjBox).unique_id;
-      setTimeout(() => { setCableForm({ code, cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: (p.srcTj as TjBox).id, dst_tj_id: (p.dstTj as TjBox).id, segments: segments as any[] }); setShowForm("cable"); }, 0);
+      setCableForm({
+        code, cable_type: "round", core_count: 12, route_type: "driving",
+        src_tj_id: (p.srcTj as TjBox).id, dst_tj_id: (p.dstTj as TjBox).id,
+        manufacturer: "PLANNED", manufacturing_year: new Date().getFullYear(),
+        segments: segments as any[],
+      });
+      setShowForm("cable");
       return { phase: "idle" as PlanPhase, srcTj: null, dstTj: null, waypoints: [] };
     });
   }, []);
