@@ -1871,37 +1871,6 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       marker.addTo(map);
     }
 
-    for (const sp of splitters) {
-      const spColor = SPLITTER_RATIO_COLORS[sp.split_ratio] || "#f59e0b";
-      const tjInfo = sp.tj_box_id ? tjBoxes.find((t) => t.id === sp.tj_box_id) : null;
-      const loss = splitterLoss(sp.split_ratio);
-      const outCount = sp.output_cores ? sp.output_cores.split(',').length : sp.split_ratio;
-      const marker = L.marker([sp.lat, sp.lng], { icon: splitterIcon(spColor), draggable: dragMode })
-        .bindTooltip(
-          "<b>" + sp.unique_id + "</b> · Splitter 1:" + sp.split_ratio
-          + (sp.name ? "<br>" + sp.name : "")
-          + (tjInfo ? "<br>In: <b>" + tjInfo.unique_id + "</b> " + tjInfo.name : "")
-          + (sp.input_core ? "<br>Input core: " + sp.input_core : "")
-          + "<br>Output: " + outCount + " ports"
-          + "<br>Loss: <b>" + loss.toFixed(1) + " dB</b>"
-          + (dragMode ? "<br><i>drag to move</i>" : ""),
-          { sticky: true }
-        );
-      if (dragMode) {
-        marker.on("dragend", (e) => {
-          const pos = e.target.getLatLng();
-          onSpRef(sp.id, pos.lat, pos.lng);
-        });
-      }
-      if (tjInfo) {
-        marker.on("click", (e) => {
-          L.DomEvent.stopPropagation(e);
-          onTjClickRef.current(tjInfo);
-        });
-      }
-      marker.addTo(map);
-    }
-
     for (const loop of loops) {
       const marker = L.marker([loop.lat, loop.lng], { icon: loopIcon() })
         .bindTooltip(
