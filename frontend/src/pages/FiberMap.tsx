@@ -170,7 +170,12 @@ export default function FiberMap() {
   const [importing, setImporting] = useState(false);
   const [selectedTj, setSelectedTj] = useState<TjBox | null>(null);
   const [selectedCable, setSelectedCable] = useState<Cable | null>(null);
-  const [editingCableId, setEditingCableId] = useState<number | null>(null);
+  const [cableEdit, setCableEdit] = useState<{
+    cableId: number;
+    waypoints: L.LatLng[];
+    originalWaypoints: L.LatLng[];
+    cable: Cable;
+  } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
@@ -315,6 +320,70 @@ export default function FiberMap() {
       await load();
     } catch (e) { setError(String(e)); }
   };
+
+  const startCableEdit = useCallback((cable: Cable) => {
+    if (!cable.segments?.length) return;
+    const wps: L.LatLng[] = cable.segments.map((s) => L.latLng(s.start_lat, s.start_lng));
+    const last = cable.segments[cable.segments.length - 1];
+    wps.push(L.latLng(last.end_lat, last.end_lng));
+    setSelectedCable(null);
+    setCableEdit({
+      cableId: cable.id,
+      waypoints: wps,
+      originalWaypoints: wps.map((wp) => L.latLng(wp.lat, wp.lng)),
+      cable,
+    });
+  }, []);
+
+  const saveCableEdit = useCallback(async () => {
+    if (!cableEdit) return;
+    if (cableEdit.waypoints.length < 2) { setError("Need at least 2 points to form a cable path."); return; }
+    const segments = cableEdit.waypoints.map((wp, i) => {
+      const next = cableEdit.waypoints[i + 1];
+      return next ? { start_lat: wp.lat, start_lng: wp.lng, end_lat: next.lat, end_lng: next.lng, order_index: i } : null;
+    }).filter(Boolean);
+    try {
+      await api.put(`/fiber/cables/${cableEdit.cableId}`, { segments });
+      setCableEdit(null);
+      await load();
+    } catch (e) { setError(String(e)); }
+  }, [cableEdit, load]);
+
+  const cancelCableEdit = useCallback(() => { setCableEdit(null); }, []);
+
+  const addEditWaypoint = useCallback((lat: number, lng: number) => {
+    setCableEdit((prev) => {
+      if (!prev || prev.waypoints.length < 2) return prev;
+      const pt = L.latLng(lat, lng);
+      let best = 0, bestD = Infinity;
+      for (let i = 0; i < prev.waypoints.length - 1; i++) {
+        const mid = L.latLng((prev.waypoints[i].lat + prev.waypoints[i + 1].lat) / 2, (prev.waypoints[i].lng + prev.waypoints[i + 1].lng) / 2);
+        const d = pt.distanceTo(mid);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      const wp = [...prev.waypoints];
+      wp.splice(best + 1, 0, pt);
+      return { ...prev, waypoints: wp };
+    });
+  }, []);
+
+  const removeEditWaypoint = useCallback((idx: number) => {
+    setCableEdit((prev) => {
+      if (!prev || prev.waypoints.length <= 2) return prev;
+      const wp = [...prev.waypoints];
+      wp.splice(idx, 1);
+      return { ...prev, waypoints: wp };
+    });
+  }, []);
+
+  const updateEditWaypoint = useCallback((idx: number, lat: number, lng: number) => {
+    setCableEdit((prev) => {
+      if (!prev || idx < 0 || idx >= prev.waypoints.length) return prev;
+      const wp = [...prev.waypoints];
+      wp[idx] = L.latLng(lat, lng);
+      return { ...prev, waypoints: wp };
+    });
+  }, []);
 
   const handleTjMove = async (tjId: number, lat: number, lng: number) => {
     try {
@@ -540,9 +609,15 @@ export default function FiberMap() {
             onCableClick={(cable) => setSelectedCable(cable)}
             onLoopClick={(loop) => { setLoopForm(loop); setShowForm("loop"); }}
             onCutClick={(cut) => { setCutForm(cut); setShowForm("cut"); }}
-            editingCableId={editingCableId}
-            onEditingCableDone={() => setEditingCableId(null)}
-            onMapClick={(lat, lng) => { if (planner.phase === "draw") addWaypoint(lat, lng); }}
+            editingCableId={cableEdit?.cableId ?? null}
+            cableEditWaypoints={cableEdit?.waypoints ?? null}
+            onStartCableEdit={startCableEdit}
+            onSaveCableEdit={saveCableEdit}
+            onCancelCableEdit={cancelCableEdit}
+            onAddEditWaypoint={addEditWaypoint}
+            onRemoveEditWaypoint={removeEditWaypoint}
+            onUpdateEditWaypoint={updateEditWaypoint}
+            onMapClick={(lat, lng) => { if (cableEdit) addEditWaypoint(lat, lng); else if (planner.phase === "draw") addWaypoint(lat, lng); }}
             onSelectRoute={selectRoute}
             onAddWaypoint={addWaypoint}
             onRemoveWaypoint={removeWaypoint}
@@ -732,7 +807,7 @@ export default function FiberMap() {
             </div>
             {writeOk && (
               <div className="mt-4 flex gap-2">
-                <button className="btn-primary text-xs" onClick={() => { setSelectedCable(null); setEditingCableId(selectedCable.id); }}>Edit Path</button>
+                <button className="btn-primary text-xs" onClick={() => startCableEdit(selectedCable)}>Edit Path</button>
                 <button className="btn-secondary text-xs" onClick={() => { setSelectedCable(null); startEdit("cable", selectedCable); }}>Edit Info</button>
               </div>
             )}
@@ -1491,7 +1566,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, onEditingCableDone, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, calcDistKm }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, calcDistKm }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -1512,7 +1587,13 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onLoopClick: (loop: FiberLoop) => void;
   onCutClick: (cut: CableCut) => void;
   editingCableId: number | null;
-  onEditingCableDone: () => void;
+  cableEditWaypoints: L.LatLng[] | null;
+  onStartCableEdit: (cable: Cable) => void;
+  onSaveCableEdit: () => void;
+  onCancelCableEdit: () => void;
+  onAddEditWaypoint: (lat: number, lng: number) => void;
+  onRemoveEditWaypoint: (idx: number) => void;
+  onUpdateEditWaypoint: (idx: number, lat: number, lng: number) => void;
   onMapClick: (lat: number, lng: number) => void;
   onSelectRoute: (idx: number) => void;
   onAddWaypoint: (lat: number, lng: number) => void;
@@ -1533,6 +1614,12 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onRightClickRef.current = onRightClickAdd;
   const onMapClickRef = useRef(onMapClick);
   onMapClickRef.current = onMapClick;
+  const onRemoveEditWaypointRef = useRef(onRemoveEditWaypoint);
+  onRemoveEditWaypointRef.current = onRemoveEditWaypoint;
+  const onUpdateEditWaypointRef = useRef(onUpdateEditWaypoint);
+  onUpdateEditWaypointRef.current = onUpdateEditWaypoint;
+  const onStartCableEditRef = useRef(onStartCableEdit);
+  onStartCableEditRef.current = onStartCableEdit;
 
   useEffect(() => {
     if (!mapEl || mapRef.current) return;
@@ -1642,6 +1729,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
     for (const cable of cables) {
       if (!cable.segments?.length) continue;
+      if (editingCableId === cable.id) continue;
       const color = CORE_COLORS[cable.core_count] || "#6b7280";
       const points: [number, number][] = [];
       for (const s of cable.segments) points.push([s.start_lat, s.start_lng]);
@@ -1665,33 +1753,11 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         const pl = L.polyline(points, { color, weight: 2, opacity: 0.85 })
           .bindTooltip(tipParts.join("<br>"), { sticky: true });
         pl.addTo(map);
-        drawFeatureGroupRef.current.addLayer(pl);
         cableLayersRef.current.set(cable.id, pl);
 
         pl.on("dblclick", (e: L.LeafletMouseEvent) => {
           L.DomEvent.stopPropagation(e);
-          if ((pl as any).editing?.enabled()) return;
-          pl.setStyle({ weight: 3, dashArray: "6,4" });
-          if (typeof (pl as any).enableEdit === "function") {
-            (pl as any).enableEdit();
-          }
-          const verts = pl.getLatLngs() as L.LatLng[];
-          const origSegs = cable.segments.map((s) => ({ ...s }));
-          const onEditStop = () => {
-            pl.setStyle({ weight: 3, dashArray: undefined });
-            if (typeof (pl as any).disableEdit === "function") {
-              (pl as any).disableEdit();
-            }
-            const newVerts = pl.getLatLngs() as L.LatLng[];
-            const segs = newVerts.slice(0, -1).map((ll, i) => ({
-              id: origSegs[i]?.id,
-              start_lat: ll.lat, start_lng: ll.lng,
-              end_lat: newVerts[i + 1].lat, end_lng: newVerts[i + 1].lng,
-              order_index: i,
-            }));
-            onCableRef(cable.id, segs);
-          };
-          (pl as any).on("edit:stop", onEditStop);
+          onStartCableEditRef.current(cable);
         });
         pl.on("click", (e: L.LeafletMouseEvent) => {
           L.DomEvent.stopPropagation(e);
@@ -1850,51 +1916,51 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     }
   }, [cables, tjBoxes, splitters, loops, cuts, dragMode]);
 
-  // Enable edit mode on a cable polyline when editingCableId is set
+  // Cable edit overlay: renders editable waypoints and route polyline
+  const cableEditLayersRef = useRef<L.Layer[]>([]);
   useEffect(() => {
-    if (editingCableId == null) return;
     const map = mapRef.current;
     if (!map) return;
-    const pl = cableLayersRef.current.get(editingCableId);
-    if (!pl) { onEditingCableDone(); return; }
+    cableEditLayersRef.current.forEach((l) => map.removeLayer(l));
+    cableEditLayersRef.current = [];
+    if (!editingCableId || !cableEditWaypoints || cableEditWaypoints.length < 2) return;
 
-    const cable = cables.find((c) => c.id === editingCableId);
-    if (!cable) { onEditingCableDone(); return; }
+    const pts: [number, number][] = cableEditWaypoints.map((ll) => [ll.lat, ll.lng]);
+    const routePl = L.polyline(pts, { color: "#ef4444", weight: 4, opacity: 0.9, dashArray: "8,4" }).addTo(map);
+    cableEditLayersRef.current.push(routePl);
 
-    if (typeof (pl as any).enableEdit !== "function") {
-      drawFeatureGroupRef.current.addLayer(pl);
-    }
-
-    pl.setStyle({ weight: 3, dashArray: "6,4" });
-    if (typeof (pl as any).enableEdit === "function") {
-      (pl as any).enableEdit();
-    }
-    const origSegs = cable.segments.map((s) => ({ ...s }));
-
-    const onEditStop = () => {
-      pl.setStyle({ weight: 3, dashArray: undefined });
-      if (typeof (pl as any).disableEdit === "function") {
-        (pl as any).disableEdit();
-      }
-      const newVerts = pl.getLatLngs() as L.LatLng[];
-      const segs = newVerts.slice(0, -1).map((ll, i) => ({
-        id: origSegs[i]?.id,
-        start_lat: ll.lat, start_lng: ll.lng,
-        end_lat: newVerts[i + 1].lat, end_lng: newVerts[i + 1].lng,
-        order_index: i,
-      }));
-      onCableSegmentUpdate(editingCableId!, segs);
-      onEditingCableDone();
-    };
-    (pl as any).on("edit:stop", onEditStop);
+    const wpIcon = L.divIcon({
+      className: "",
+      html: '<div style="width:14px;height:14px;background:#ef4444;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 2px 6px rgba(0,0,0,.5)"></div>',
+      iconSize: [14, 14], iconAnchor: [7, 7],
+    });
+    const endIcon = L.divIcon({
+      className: "",
+      html: '<div style="width:14px;height:14px;background:#22c55e;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 2px 6px rgba(0,0,0,.5)"></div>',
+      iconSize: [14, 14], iconAnchor: [7, 7],
+    });
+    cableEditWaypoints.forEach((ll, i) => {
+      const isFirst = i === 0;
+      const isLast = i === cableEditWaypoints.length - 1;
+      const icon = isFirst || isLast ? endIcon : wpIcon;
+      const label = isFirst ? "SRC (drag to move)" : isLast ? "DST (drag to move)" : "WP" + (i + 1) + " (drag · dbl-click to remove)";
+      const marker = L.marker([ll.lat, ll.lng], { icon, draggable: true }).bindTooltip(label, { direction: "top", offset: [0, -8] }).addTo(map);
+      marker.on("dragend", (e) => {
+        const pos = e.target.getLatLng();
+        onUpdateEditWaypointRef.current(i, pos.lat, pos.lng);
+      });
+      marker.on("dblclick", (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (!isFirst && !isLast) onRemoveEditWaypointRef.current(i);
+      });
+      cableEditLayersRef.current.push(marker);
+    });
 
     return () => {
-      if (typeof (pl as any).disableEdit === "function" && (pl as any).editing?.enabled()) {
-        (pl as any).disableEdit();
-        pl.setStyle({ weight: 2, dashArray: undefined });
-      }
+      cableEditLayersRef.current.forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
+      cableEditLayersRef.current = [];
     };
-  }, [editingCableId, cables, onCableSegmentUpdate, onEditingCableDone]);
+  }, [editingCableId, cableEditWaypoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1971,6 +2037,18 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   return (
     <div className="relative h-full">
       <div ref={setMapEl} className="w-full h-full" style={{ minHeight: isFullscreen ? "100%" : "400px" }} />
+
+      {/* Cable Edit Toolbar */}
+      {editingCableId && cableEditWaypoints && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 rounded-xl bg-white/95 dark:bg-slate-900/95 px-4 py-2.5 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm">
+          <span className="text-xs font-semibold text-red-600">Editing Cable Route</span>
+          <span className="text-[10px] text-slate-400">Click map to add points · Drag to move · Double-click to remove</span>
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+          <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(cableEditWaypoints).toFixed(2)} km · {cableEditWaypoints.length} pts</span>
+          <button className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition" onClick={onSaveCableEdit}>Save</button>
+          <button className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition" onClick={onCancelCableEdit}>Cancel</button>
+        </div>
+      )}
 
       {/* Cable Plan Toolbar */}
       {planner.phase !== "idle" && (
