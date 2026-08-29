@@ -154,6 +154,9 @@ export default function FiberMap() {
   const removeWaypoint = useCallback((idx: number) => {
     setPlanner((p) => { if (p.phase !== "draw" || p.waypoints.length <= 2) return p; const wp = [...p.waypoints]; wp.splice(idx, 1); return { ...p, waypoints: wp }; });
   }, []);
+  const updateWaypoint = useCallback((idx: number, lat: number, lng: number) => {
+    setPlanner((p) => { if (p.phase !== "draw" || idx < 0 || idx >= p.waypoints.length) return p; const wp = [...p.waypoints]; wp[idx] = L.latLng(lat, lng); return { ...p, waypoints: wp }; });
+  }, []);
   const confirmRoute = useCallback(() => {
     setPlanner((p) => { if (!p.srcTj || !p.dstTj || p.waypoints.length < 2) return p;
       const segments: TempSegment[] = p.waypoints.map((ll, i) => { const next = p.waypoints[i + 1]; return next ? { start_lat: ll.lat, start_lng: ll.lng, end_lat: next.lat, end_lng: next.lng, order_index: i } : null; }).filter(Boolean) as TempSegment[];
@@ -543,7 +546,10 @@ export default function FiberMap() {
             onSelectRoute={selectRoute}
             onAddWaypoint={addWaypoint}
             onRemoveWaypoint={removeWaypoint}
+            onUpdateWaypoint={updateWaypoint}
             onStartPlan={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}
+            onConfirmRoute={confirmRoute}
+            onCancelPlan={cancelPlan}
             calcDistKm={calcWaypointDistKm}
           />
         </div>
@@ -1485,7 +1491,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, onEditingCableDone, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onStartPlan, calcDistKm }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, onEditingCableDone, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, calcDistKm }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -1511,7 +1517,10 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onSelectRoute: (idx: number) => void;
   onAddWaypoint: (lat: number, lng: number) => void;
   onRemoveWaypoint: (idx: number) => void;
+  onUpdateWaypoint: (idx: number, lat: number, lng: number) => void;
   onStartPlan: () => void;
+  onConfirmRoute: () => void;
+  onCancelPlan: () => void;
   calcDistKm: (wp: L.LatLng[]) => number;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
@@ -1605,12 +1614,12 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       planner.waypoints.forEach((ll, i) => {
         const marker = L.marker([ll.lat, ll.lng], { icon: wpIcon, draggable: true }).addTo(map);
         marker.bindTooltip(`WP${i + 1}<br>double-click to remove`, { direction: "top" });
-        marker.on("dragend", (e) => { const pos = e.target.getLatLng(); setPlanner((p) => ({ ...p, waypoints: p.waypoints.map((w, j) => j === i ? pos : w) })); });
-        marker.on("dblclick", (e) => { L.DomEvent.stopPropagation(e); removeWaypoint(i); });
+        marker.on("dragend", (e) => { const pos = e.target.getLatLng(); onUpdateWaypoint(i, pos.lat, pos.lng); });
+        marker.on("dblclick", (e) => { L.DomEvent.stopPropagation(e); onRemoveWaypoint(i); });
         routeMarkersRef.current.push(marker);
       });
     }
-  }, [planner.phase, planner.srcTj?.id, planner.dstTj?.id, planner.waypoints, removeWaypoint]);
+  }, [planner.phase, planner.srcTj?.id, planner.dstTj?.id, planner.waypoints, onRemoveWaypoint]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1988,9 +1997,9 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
             <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(planner.waypoints).toFixed(2)} km · {planner.waypoints.length} pts</span>
           )}
           {planner.phase === "draw" && (
-            <button className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition" onClick={() => { setPlanner({ ...planner, phase: "confirm" as any }); confirmRoute(); }}>Confirm Route</button>
+            <button className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition" onClick={onConfirmRoute}>Confirm Route</button>
           )}
-          <button className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition" onClick={cancelPlan}>Cancel</button>
+          <button className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition" onClick={onCancelPlan}>Cancel</button>
         </div>
       )}
 
