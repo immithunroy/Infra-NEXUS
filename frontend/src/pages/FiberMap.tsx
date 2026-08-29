@@ -176,6 +176,7 @@ export default function FiberMap() {
     originalWaypoints: L.LatLng[];
     cable: Cable;
   } | null>(null);
+  const [selectedWaypoint, setSelectedWaypoint] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
@@ -327,6 +328,7 @@ export default function FiberMap() {
     const last = cable.segments[cable.segments.length - 1];
     wps.push(L.latLng(last.end_lat, last.end_lng));
     setSelectedCable(null);
+    setSelectedWaypoint(null);
     setCableEdit({
       cableId: cable.id,
       waypoints: wps,
@@ -345,13 +347,15 @@ export default function FiberMap() {
     try {
       await api.put(`/fiber/cables/${cableEdit.cableId}`, { segments });
       setCableEdit(null);
+      setSelectedWaypoint(null);
       await load();
     } catch (e) { setError(String(e)); }
   }, [cableEdit, load]);
 
-  const cancelCableEdit = useCallback(() => { setCableEdit(null); }, []);
+  const cancelCableEdit = useCallback(() => { setCableEdit(null); setSelectedWaypoint(null); }, []);
 
   const addEditWaypoint = useCallback((lat: number, lng: number) => {
+    setSelectedWaypoint(null);
     setCableEdit((prev) => {
       if (!prev || prev.waypoints.length < 2) return prev;
       const pt = L.latLng(lat, lng);
@@ -368,6 +372,7 @@ export default function FiberMap() {
   }, []);
 
   const removeEditWaypoint = useCallback((idx: number) => {
+    setSelectedWaypoint(null);
     setCableEdit((prev) => {
       if (!prev || prev.waypoints.length <= 2) return prev;
       const wp = [...prev.waypoints];
@@ -383,6 +388,10 @@ export default function FiberMap() {
       wp[idx] = L.latLng(lat, lng);
       return { ...prev, waypoints: wp };
     });
+  }, []);
+
+  const selectEditWaypoint = useCallback((idx: number | null) => {
+    setSelectedWaypoint(idx);
   }, []);
 
   const handleTjMove = async (tjId: number, lat: number, lng: number) => {
@@ -617,7 +626,13 @@ export default function FiberMap() {
             onAddEditWaypoint={addEditWaypoint}
             onRemoveEditWaypoint={removeEditWaypoint}
             onUpdateEditWaypoint={updateEditWaypoint}
-            onMapClick={(lat, lng) => { if (cableEdit) addEditWaypoint(lat, lng); else if (planner.phase === "draw") addWaypoint(lat, lng); }}
+            selectedWaypoint={selectedWaypoint}
+            onSelectEditWaypoint={selectEditWaypoint}
+            onMapClick={(lat, lng) => {
+              setSelectedWaypoint(null);
+              if (cableEdit) addEditWaypoint(lat, lng);
+              else if (planner.phase === "draw") addWaypoint(lat, lng);
+            }}
             onSelectRoute={selectRoute}
             onAddWaypoint={addWaypoint}
             onRemoveWaypoint={removeWaypoint}
@@ -1566,7 +1581,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, calcDistKm }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, dragMode, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onTjMove, onSplitterMove, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, calcDistKm }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -1594,6 +1609,8 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onAddEditWaypoint: (lat: number, lng: number) => void;
   onRemoveEditWaypoint: (idx: number) => void;
   onUpdateEditWaypoint: (idx: number, lat: number, lng: number) => void;
+  selectedWaypoint: number | null;
+  onSelectEditWaypoint: (idx: number | null) => void;
   onMapClick: (lat: number, lng: number) => void;
   onSelectRoute: (idx: number) => void;
   onAddWaypoint: (lat: number, lng: number) => void;
@@ -1620,6 +1637,8 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onUpdateEditWaypointRef.current = onUpdateEditWaypoint;
   const onStartCableEditRef = useRef(onStartCableEdit);
   onStartCableEditRef.current = onStartCableEdit;
+  const onSelectEditWaypointRef = useRef(onSelectEditWaypoint);
+  onSelectEditWaypointRef.current = onSelectEditWaypoint;
 
   useEffect(() => {
     if (!mapEl || mapRef.current) return;
@@ -1934,6 +1953,11 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       html: '<div style="width:14px;height:14px;background:#ef4444;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 2px 6px rgba(0,0,0,.5)"></div>',
       iconSize: [14, 14], iconAnchor: [7, 7],
     });
+    const wpSelectedIcon = L.divIcon({
+      className: "",
+      html: '<div style="width:18px;height:18px;background:#fbbf24;border:3px solid white;border-radius:50%;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.6)"></div>',
+      iconSize: [18, 18], iconAnchor: [9, 9],
+    });
     const endIcon = L.divIcon({
       className: "",
       html: '<div style="width:14px;height:14px;background:#22c55e;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 2px 6px rgba(0,0,0,.5)"></div>',
@@ -1942,9 +1966,15 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     cableEditWaypoints.forEach((ll, i) => {
       const isFirst = i === 0;
       const isLast = i === cableEditWaypoints.length - 1;
-      const icon = isFirst || isLast ? endIcon : wpIcon;
-      const label = isFirst ? "SRC (drag to move)" : isLast ? "DST (drag to move)" : "WP" + (i + 1) + " (drag · dbl-click to remove)";
+      const isSelected = selectedWaypoint === i;
+      const icon = isFirst || isLast ? endIcon : isSelected ? wpSelectedIcon : wpIcon;
+      const label = isFirst ? "SRC (drag to move)" : isLast ? "DST (drag to move)" : isSelected ? "WP" + (i + 1) + " selected" : "WP" + (i + 1) + " (drag · dbl-click to remove)";
       const marker = L.marker([ll.lat, ll.lng], { icon, draggable: true }).bindTooltip(label, { direction: "top", offset: [0, -8] }).addTo(map);
+
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        onSelectEditWaypointRef.current(isFirst || isLast ? null : i);
+      });
       marker.on("dragend", (e) => {
         const pos = e.target.getLatLng();
         onUpdateEditWaypointRef.current(i, pos.lat, pos.lng);
@@ -1960,7 +1990,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       cableEditLayersRef.current.forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
       cableEditLayersRef.current = [];
     };
-  }, [editingCableId, cableEditWaypoints]);
+  }, [editingCableId, cableEditWaypoints, selectedWaypoint]);
 
   useEffect(() => {
     const map = mapRef.current;
