@@ -60,7 +60,15 @@ async def create_cable(body: CableCreate, user: User = Depends(require_write), d
     await db.flush()
 
     segments = list(body.segments)
-    if not segments and cable.src_tj_id and cable.dst_tj_id:
+    if segments:
+        for i, seg in enumerate(segments):
+            db.add(CableSegment(
+                cable_id=cable.id,
+                start_lat=seg.start_lat, start_lng=seg.start_lng,
+                end_lat=seg.end_lat, end_lng=seg.end_lng,
+                order_index=seg.order_index if seg.order_index is not None else i,
+            ))
+    elif cable.src_tj_id and cable.dst_tj_id:
         src_tj = await db.get(TjBox, cable.src_tj_id)
         dst_tj = await db.get(TjBox, cable.dst_tj_id)
         if src_tj and dst_tj:
