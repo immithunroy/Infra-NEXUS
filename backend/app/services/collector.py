@@ -114,8 +114,8 @@ async def _upsert_onu(
         onu.down_reason = ""
     elif down_reason:
         onu.down_reason = down_reason
-    if description and not onu.name:
-        onu.name = description[:256]
+    if description and description.strip() and onu.name != description.strip():
+        onu.name = description.strip()[:256]
     # Only overwrite optics with a real reading; a None here would wipe the
     # freshest value a telemetry sample just stored.
     if rx is not None:
