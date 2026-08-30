@@ -166,16 +166,17 @@ export default function FiberMap() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editKind, setEditKind] = useState<string>("");
 
-  type PlanPhase = "idle" | "select-src" | "select-dst" | "fetching" | "select-route" | "draw" | "confirm";
+  type PlanPhase = "idle" | "select-src" | "select-dst" | "fetching" | "select-route" | "draw" | "confirm" | "custom-draw";
   const [planner, setPlanner] = useState<{ phase: PlanPhase; srcTj: TjBox | null; dstTj: TjBox | null; waypoints: L.LatLng[] }>({ phase: "idle", srcTj: null, dstTj: null, waypoints: [] });
   const [routeAlts, setRouteAlts] = useState<{ coords: [number, number][]; distance: number; duration: number }[]>([]);
+  const [customWaypoints, setCustomWaypoints] = useState<L.LatLng[]>([]);
   const [routing, setRouting] = useState(false);
 
   const calcWaypointDistKm = useCallback((wp: L.LatLng[]): number => { let d = 0; for (let i = 0; i < wp.length - 1; i++) d += haversine(wp[i].lat, wp[i].lng, wp[i + 1].lat, wp[i + 1].lng); return d / 1000; }, []);
   const fetchOsrmAlts = useCallback(async (src: TjBox, dst: TjBox) => {
     setRouting(true); setPlanner((p) => ({ ...p, phase: "fetching" as PlanPhase }));
     try {
-      const url = `https://router.project-osrm.org/route/v1/driving/${src.lng},${src.lat};${dst.lng},${dst.lat}?overview=full&geometries=geojson&alternatives=true`;
+      const url = `https://router.project-osrm.org/route/v1/driving/${src.lng},${src.lat};${dst.lng},${dst.lat}?overview=full&geometries=geojson&alternatives=3`;
       const res = await fetch(url); const data = await res.json();
       if (data.code !== "Ok" || !data.routes?.length) { setError("No route found between these TJs."); setPlanner((p) => ({ ...p, phase: "select-dst" as PlanPhase })); return; }
       const alts = data.routes.map((r: any) => ({ coords: r.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]] as [number, number]), distance: r.distance, duration: r.duration }));
@@ -217,7 +218,44 @@ export default function FiberMap() {
       return { phase: "idle" as PlanPhase, srcTj: null, dstTj: null, waypoints: [] };
     });
   }, []);
-  const cancelPlan = useCallback(() => { setPlanner({ phase: "idle", srcTj: null, dstTj: null, waypoints: [] }); setRouteAlts([]); }, []);
+  const cancelPlan = useCallback(() => {
+    setPlanner((p) => {
+      if (p.phase === "custom-draw") return { ...p, phase: "select-route" as PlanPhase };
+      return { phase: "idle", srcTj: null, dstTj: null, waypoints: [] };
+    });
+    if (planner.phase !== "custom-draw") setRouteAlts([]);
+    setCustomWaypoints([]);
+  }, [planner.phase]);
+
+  const startCustomDraw = useCallback(() => {
+    setPlanner((p) => ({ ...p, phase: "custom-draw" as PlanPhase }));
+  }, []);
+  const addCustomWaypoint = useCallback((lat: number, lng: number) => {
+    setCustomWaypoints((wp) => {
+      if (wp.length === 0) return [L.latLng(lat, lng)];
+      const pt = L.latLng(lat, lng); let best = 0, bestD = Infinity;
+      for (let i = 0; i < wp.length - 1; i++) { const d = pt.distanceTo(L.latLng((wp[i].lat + wp[i + 1].lat) / 2, (wp[i].lng + wp[i + 1].lng) / 2)); if (d < bestD) { bestD = d; best = i; } }
+      const newWp = [...wp]; newWp.splice(best + 1, 0, pt); return newWp;
+    });
+  }, []);
+  const removeCustomWaypoint = useCallback((idx: number) => {
+    setCustomWaypoints((wp) => { if (wp.length <= 1) return wp; const n = [...wp]; n.splice(idx, 1); return n; });
+  }, []);
+  const updateCustomWaypoint = useCallback((idx: number, lat: number, lng: number) => {
+    setCustomWaypoints((wp) => { if (idx < 0 || idx >= wp.length) return wp; const n = [...wp]; n[idx] = L.latLng(lat, lng); return n; });
+  }, []);
+  const undoCustomWaypoint = useCallback(() => {
+    setCustomWaypoints((wp) => wp.length > 0 ? wp.slice(0, -1) : wp);
+  }, []);
+  const clearCustomWaypoints = useCallback(() => { setCustomWaypoints([]); }, []);
+  const confirmCustomRoute = useCallback(() => {
+    setPlanner((p) => {
+      if (!p.srcTj || !p.dstTj || customWaypoints.length < 1) return p;
+      const allWp = [L.latLng(p.srcTj.lat, p.srcTj.lng), ...customWaypoints, L.latLng(p.dstTj.lat, p.dstTj.lng)];
+      return { ...p, phase: "draw" as PlanPhase, waypoints: allWp };
+    });
+    setCustomWaypoints([]);
+  }, [customWaypoints]);
 
   const [importing, setImporting] = useState(false);
   const [selectedTj, setSelectedTj] = useState<TjBox | null>(null);
@@ -646,6 +684,7 @@ export default function FiberMap() {
             onMapClick={(lat, lng) => {
               setSelectedWaypoint(null);
               if (cableEdit) addEditWaypoint(lat, lng);
+              else if (planner.phase === "custom-draw") addCustomWaypoint(lat, lng);
               else if (planner.phase === "draw") addWaypoint(lat, lng);
             }}
             onSelectRoute={selectRoute}
@@ -655,6 +694,13 @@ export default function FiberMap() {
             onStartPlan={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}
             onConfirmRoute={confirmRoute}
             onCancelPlan={cancelPlan}
+            customWaypoints={customWaypoints}
+            onStartCustomDraw={startCustomDraw}
+            onRemoveCustomWaypoint={removeCustomWaypoint}
+            onUpdateCustomWaypoint={updateCustomWaypoint}
+            onUndoCustomWaypoint={undoCustomWaypoint}
+            onClearCustomWaypoints={clearCustomWaypoints}
+            onConfirmCustomRoute={confirmCustomRoute}
             calcDistKm={calcWaypointDistKm}
           />
         </div>
@@ -1602,7 +1648,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, calcDistKm }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -1641,6 +1687,13 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onStartPlan: () => void;
   onConfirmRoute: () => void;
   onCancelPlan: () => void;
+  customWaypoints: L.LatLng[];
+  onStartCustomDraw: () => void;
+  onRemoveCustomWaypoint: (idx: number) => void;
+  onUpdateCustomWaypoint: (idx: number, lat: number, lng: number) => void;
+  onUndoCustomWaypoint: () => void;
+  onClearCustomWaypoints: () => void;
+  onConfirmCustomRoute: () => void;
   calcDistKm: (wp: L.LatLng[]) => number;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
@@ -1663,6 +1716,11 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onSelectEditWaypointRef.current = onSelectEditWaypoint;
   const tileLayersRef = useRef<Record<string, L.TileLayer>>({});
   const activeTileRef = useRef<L.TileLayer | null>(null);
+  const customLayersRef = useRef<L.Layer[]>([]);
+  const onRemoveCustomWaypointRef = useRef(onRemoveCustomWaypoint);
+  onRemoveCustomWaypointRef.current = onRemoveCustomWaypoint;
+  const onUpdateCustomWaypointRef = useRef(onUpdateCustomWaypoint);
+  onUpdateCustomWaypointRef.current = onUpdateCustomWaypoint;
 
   useEffect(() => {
     if (!mapEl || mapRef.current) return;
@@ -1770,6 +1828,36 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       });
     }
   }, [planner.phase, planner.srcTj?.id, planner.dstTj?.id, planner.waypoints, onRemoveWaypoint]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    customLayersRef.current.forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
+    customLayersRef.current = [];
+    if (planner.phase !== "custom-draw" || !planner.srcTj || !planner.dstTj) return;
+    const allWp = [L.latLng(planner.srcTj.lat, planner.srcTj.lng), ...customWaypoints, L.latLng(planner.dstTj.lat, planner.dstTj.lng)];
+    if (allWp.length >= 2) {
+      const pts: [number, number][] = allWp.map((ll) => [ll.lat, ll.lng]);
+      const pl = L.polyline(pts, { color: "#f59e0b", weight: 4, opacity: 0.85, dashArray: "8,4" }).addTo(map);
+      customLayersRef.current.push(pl);
+      const srcIcon = L.divIcon({ className: "", html: '<div style="width:12px;height:12px;background:#22c55e;border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize: [12, 12], iconAnchor: [6, 6] });
+      const dstIcon = L.divIcon({ className: "", html: '<div style="width:12px;height:12px;background:#3b82f6;border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize: [12, 12], iconAnchor: [6, 6] });
+      const srcM = L.marker([planner.srcTj.lat, planner.srcTj.lng], { icon: srcIcon }).addTo(map);
+      srcM.bindTooltip("Source: " + planner.srcTj.unique_id, { direction: "top" });
+      customLayersRef.current.push(srcM);
+      const dstM = L.marker([planner.dstTj.lat, planner.dstTj.lng], { icon: dstIcon }).addTo(map);
+      dstM.bindTooltip("Dest: " + planner.dstTj.unique_id, { direction: "top" });
+      customLayersRef.current.push(dstM);
+      const wpIcon = L.divIcon({ className: "", html: '<div style="width:12px;height:12px;background:#f59e0b;border:2px solid white;border-radius:50%;cursor:grab;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>', iconSize: [12, 12], iconAnchor: [6, 6] });
+      customWaypoints.forEach((ll, i) => {
+        const marker = L.marker([ll.lat, ll.lng], { icon: wpIcon, draggable: true }).addTo(map);
+        marker.bindTooltip(`WP${i + 1}<br>double-click to remove`, { direction: "top" });
+        marker.on("dragend", (e) => { const pos = e.target.getLatLng(); onUpdateCustomWaypointRef.current(i, pos.lat, pos.lng); });
+        marker.on("dblclick", (e) => { L.DomEvent.stopPropagation(e); onRemoveCustomWaypointRef.current(i); });
+        customLayersRef.current.push(marker);
+      });
+    }
+  }, [planner.phase, planner.srcTj?.id, planner.dstTj?.id, customWaypoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2089,17 +2177,40 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
             {planner.phase === "draw" && (
               <><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /><span className="text-xs font-medium">{planner.srcTj?.unique_id}</span></div><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-500" /><span className="text-xs font-medium">{planner.dstTj?.unique_id}</span></div><span className="text-[10px] text-slate-400 mx-1">|</span><span className="text-xs font-semibold text-red-600">Edit Route</span><span className="text-[10px] text-slate-400">— Click map to add points, double-click to remove</span></>
             )}
+            {planner.phase === "custom-draw" && (
+              <><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /><span className="text-xs font-medium">{planner.srcTj?.unique_id}</span></div><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg><div className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-500" /><span className="text-xs font-medium">{planner.dstTj?.unique_id}</span></div><span className="text-[10px] text-slate-400 mx-1">|</span><span className="text-xs font-semibold text-amber-600">Custom Route</span><span className="text-[10px] text-slate-400">— Click map to add points, double-click to remove</span></>
+            )}
           </div>
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
           {planner.phase === "draw" && planner.waypoints.length >= 2 && (
             <>
               <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(planner.waypoints).toFixed(2)} km · {planner.waypoints.length} pts</span>
               <span className="text-[10px] text-slate-400">|</span>
-              <span className="text-[10px] text-slate-500">+5%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.05).toLocaleString()} m · +10%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.10).toLocaleString()} m</span>
+              <span className="text-[10px] text-slate-500">+5%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.05).toLocaleString()} m · +10%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.10).toLocaleString()} m · +15%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.15).toLocaleString()} m · +20%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.20).toLocaleString()} m</span>
             </>
           )}
+          {planner.phase === "custom-draw" && customWaypoints.length >= 1 && (() => {
+            const src = planner.srcTj; const dst = planner.dstTj;
+            if (!src || !dst) return null;
+            const allWp = [L.latLng(src.lat, src.lng), ...customWaypoints, L.latLng(dst.lat, dst.lng)];
+            const distKm = calcDistKm(allWp);
+            return (
+              <>
+                <span className="text-[10px] text-slate-500 font-mono">{distKm.toFixed(2)} km · {allWp.length} pts</span>
+                <span className="text-[10px] text-slate-400">|</span>
+                <span className="text-[10px] text-slate-500">+5%: {Math.round(distKm * 1000 * 1.05).toLocaleString()} m · +10%: {Math.round(distKm * 1000 * 1.10).toLocaleString()} m · +15%: {Math.round(distKm * 1000 * 1.15).toLocaleString()} m · +20%: {Math.round(distKm * 1000 * 1.20).toLocaleString()} m</span>
+              </>
+            );
+          })()}
           {planner.phase === "draw" && (
             <button className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition" onClick={onConfirmRoute}>Confirm Route</button>
+          )}
+          {planner.phase === "custom-draw" && (
+            <>
+              <button className="rounded-md bg-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 transition" onClick={onUndoCustomWaypoint} disabled={customWaypoints.length === 0}>Undo</button>
+              <button className="rounded-md bg-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 transition" onClick={onClearCustomWaypoints} disabled={customWaypoints.length === 0}>Clear</button>
+              <button className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition" onClick={onConfirmCustomRoute} disabled={customWaypoints.length < 1}>Use Route</button>
+            </>
           )}
           <button className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition" onClick={onCancelPlan}>Cancel</button>
         </div>
@@ -2111,6 +2222,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-3">Select Route — {planner.srcTj?.unique_id} → {planner.dstTj?.unique_id}</div>
           <div className="space-y-2">
             {routeAlts.map((alt, i) => {
+              const distM = Math.round(alt.distance);
               const distKm = (alt.distance / 1000).toFixed(2);
               const wpCount = alt.coords.length;
               const colors = ["bg-emerald-500", "bg-amber-500", "bg-violet-500", "bg-rose-500"];
@@ -2121,14 +2233,24 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
                   <div className="flex-1">
                     <div className="text-xs font-bold text-slate-800 dark:text-white">Route {i + 1}</div>
                     <div className="text-[10px] text-slate-500">{wpCount} waypoints · {i === 0 ? "Shortest" : "Alternative"}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 font-mono">+5%: {Math.round(distM * 1.05).toLocaleString()} m · +10%: {Math.round(distM * 1.10).toLocaleString()} m · +15%: {Math.round(distM * 1.15).toLocaleString()} m · +20%: {Math.round(distM * 1.20).toLocaleString()} m</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold text-slate-900 dark:text-white">{distKm} km</div>
-                    <div className="text-[10px] text-slate-400">+10%: {Math.round(alt.distance * 1.10).toLocaleString()} m</div>
+                    <div className="text-[10px] text-slate-400">{distM.toLocaleString()} m</div>
                   </div>
                 </button>
               );
             })}
+            <button className="w-full flex items-center gap-3 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 p-3 hover:shadow-md hover:border-amber-400 transition text-left" onClick={onStartCustomDraw}>
+              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+              </div>
+              <div className="flex-1">
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Draw Custom Route</div>
+                <div className="text-[10px] text-slate-400">Click map points to create your own route</div>
+              </div>
+            </button>
           </div>
         </div>
       )}
