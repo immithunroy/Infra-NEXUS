@@ -339,10 +339,10 @@ async def export_fiber(db: AsyncSession = Depends(get_db)):
     # TJ Boxes sheet
     ws = wb.active
     ws.title = "TJ Boxes"
-    ws.append(["Name", "Type", "Capacity", "Trays", "Latitude", "Longitude", "Address", "Notes"])
+    ws.append(["Name", "Port", "Latitude", "Longitude", "Address", "Note"])
     res = await db.execute(select(TjBox).order_by(TjBox.id))
     for t in res.scalars().all():
-        ws.append([t.name, t.box_type, t.capacity, t.tray_count, t.lat, t.lng, t.address, t.notes])
+        ws.append([t.name, t.tj_port, t.lat, t.lng, t.address, t.notes])
 
     # Splitters sheet
     ws2 = wb.create_sheet("Splitters")
@@ -405,13 +405,13 @@ async def import_fiber(file: UploadFile = File(...), user: User = Depends(requir
                 continue
             box = TjBox(
                 unique_id=f"TJ-{tj_next}",
-                name=str(row[0] or ""), box_type=str(row[1] or "regular_tj"),
-                tj_port=int(row[8] or 8) if len(row) > 8 else 8,
-                splice_per_tray=int(row[9] or 12) if len(row) > 9 else 12,
-                tray_count=int(row[3] or 1),
-                capacity=int(row[3] or 1) * (int(row[9] or 12) if len(row) > 9 else 12),
-                lat=float(row[4] or 0), lng=float(row[5] or 0),
-                address=str(row[6] or ""), notes=str(row[7] or ""),
+                name=str(row[0] or ""), box_type="regular_tj",
+                tj_port=int(row[1] or 8),
+                splice_per_tray=12,
+                tray_count=1,
+                capacity=12,
+                lat=float(row[2] or 0), lng=float(row[3] or 0),
+                address=str(row[4] or ""), notes=str(row[5] or ""),
             )
             db.add(box)
             tj_next += 1
