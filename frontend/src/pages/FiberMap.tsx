@@ -497,7 +497,8 @@ export default function FiberMap() {
   };
 
   const handleRightClickAdd = (kind: string, lat: number, lng: number) => {
-    if (kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
+    if (kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); }
+    else if (kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
     else if (kind === "splitter") { setSplitterForm({ name: "", split_ratio: 2, lat, lng }); setShowForm("splitter"); }
     else if (kind === "cable") { setCableForm({ code: "", cable_type: "round", core_count: 12, segments: [] }); setShowForm("cable"); }
     else if (kind === "loop") { setLoopForm({ lat, lng, loop_length_m: 30 }); setShowForm("loop"); }
@@ -1685,6 +1686,9 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       const cLat = e.latlng.lat.toFixed(6);
       const cLng = e.latlng.lng.toFixed(6);
       menu.innerHTML = '<div style="padding:6px 12px;color:#94a3b8;font-size:11px;font-weight:600">' + cLat + ", " + cLng + "</div>"
+        + '<div class="ctx-i" data-kind="feas" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
+        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Feasibility Check</div>'
+        + '<div style="height:1px;background:#334155;margin:4px 0"></div>'
         + '<div class="ctx-i" data-kind="tj" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
         + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>Add TJ Box</div>'
         + '<div class="ctx-i" data-kind="cable" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
