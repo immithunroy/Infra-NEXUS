@@ -88,6 +88,26 @@ async def get_onu(onu_id: int, db: AsyncSession = Depends(get_db)):
     return _to_out(onu)
 
 
+@router.post("/{onu_id}/check-status")
+async def check_onu_status(onu_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
+    """Real-time ONU check via OLT CLI: optical power, status, last up time."""
+    onu = await _load_onu(db, onu_id)
+    if not onu.olt:
+        raise HTTPException(status_code=400, detail="OLT not associated with this ONU")
+    driver = BdcomCliDriver(onu.olt)
+    try:
+        result = await driver.check_onu_realtime(pon_port=onu.pon_port, onu_id=onu.onu_id)
+        # Update DB with fresh values
+        if result.get("rx_power") is not None:
+            onu.rx_power = result["rx_power"]
+        if result.get("status"):
+            onu.state = result["status"]
+        await db.commit()
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @router.post("", response_model=OnuOut)
 async def create_onu(body: OnuCreate, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
     """Add an ONU/ONT to the application inventory.
