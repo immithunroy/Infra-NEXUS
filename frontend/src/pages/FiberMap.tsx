@@ -258,12 +258,26 @@ export default function FiberMap() {
   }, [customWaypoints]);
 
   const startDrawCable = useCallback((tj: TjBox) => {
-    setDrawCable({ active: true, sourceTj: tj, routePoints: [L.latLng(tj.lat, tj.lng)] });
+    setDrawCable({ active: true, sourceTj: tj, routePoints: [L.latLng(tj.lat, tj.lng)], mousePos: null });
   }, []);
-  const addDrawWaypoint = useCallback((lat: number, lng: number) => {
+  const setDrawMousePos = useCallback((lat: number, lng: number) => {
     setDrawCable((d) => {
       if (!d.active) return d;
-      return { ...d, routePoints: [...d.routePoints, L.latLng(lat, lng)] };
+      return { ...d, mousePos: L.latLng(lat, lng) };
+    });
+  }, []);
+  const confirmDrawWaypoint = useCallback(() => {
+    setDrawCable((d) => {
+      if (!d.active || !d.mousePos) return d;
+      return { ...d, routePoints: [...d.routePoints, d.mousePos], mousePos: null };
+    });
+  }, []);
+  const undoDrawWaypoint = useCallback(() => {
+    setDrawCable((d) => {
+      if (!d.active || d.routePoints.length <= 1) return d;
+      const pts = [...d.routePoints];
+      pts.pop();
+      return { ...d, routePoints: pts };
     });
   }, []);
   const finishDrawCable = useCallback((dstTj: TjBox) => {
@@ -279,11 +293,11 @@ export default function FiberMap() {
         segments: segments as any[],
       });
       setShowForm("cable");
-      return { active: false, sourceTj: null, routePoints: [] };
+      return { active: false, sourceTj: null, routePoints: [], mousePos: null };
     });
   }, []);
   const cancelDrawCable = useCallback(() => {
-    setDrawCable({ active: false, sourceTj: null, routePoints: [] });
+    setDrawCable({ active: false, sourceTj: null, routePoints: [], mousePos: null });
   }, []);
 
   const [importing, setImporting] = useState(false);
@@ -296,7 +310,7 @@ export default function FiberMap() {
     cable: Cable;
   } | null>(null);
   const [selectedWaypoint, setSelectedWaypoint] = useState<number | null>(null);
-  const [drawCable, setDrawCable] = useState<{ active: boolean; sourceTj: TjBox | null; routePoints: L.LatLng[] }>({ active: false, sourceTj: null, routePoints: [] });
+  const [drawCable, setDrawCable] = useState<{ active: boolean; sourceTj: TjBox | null; routePoints: L.LatLng[]; mousePos: L.LatLng | null }>({ active: false, sourceTj: null, routePoints: [], mousePos: null });
   const fileRef = useRef<HTMLInputElement>(null);
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
@@ -721,7 +735,7 @@ export default function FiberMap() {
             onMapClick={(lat, lng) => {
               setSelectedWaypoint(null);
               if (drawCable.active) {
-                addDrawWaypoint(lat, lng);
+                confirmDrawWaypoint();
               } else if (cableEdit) addEditWaypoint(lat, lng);
               else if (planner.phase === "custom-draw") addCustomWaypoint(lat, lng);
               else if (planner.phase === "draw") addWaypoint(lat, lng);
@@ -743,6 +757,9 @@ export default function FiberMap() {
             calcDistKm={calcWaypointDistKm}
             drawCable={drawCable}
             onStartDrawCable={startDrawCable}
+            onSetDrawMousePos={setDrawMousePos}
+            onConfirmDrawWaypoint={confirmDrawWaypoint}
+            onUndoDrawWaypoint={undoDrawWaypoint}
             onCancelDrawCable={cancelDrawCable}
           />
         </div>
@@ -1737,8 +1754,11 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onClearCustomWaypoints: () => void;
   onConfirmCustomRoute: () => void;
   calcDistKm: (wp: L.LatLng[]) => number;
-  drawCable: { active: boolean; sourceTj: TjBox | null; routePoints: L.LatLng[] };
+  drawCable: { active: boolean; sourceTj: TjBox | null; routePoints: L.LatLng[]; mousePos: L.LatLng | null };
   onStartDrawCable: (tj: TjBox) => void;
+  onSetDrawMousePos: (lat: number, lng: number) => void;
+  onConfirmDrawWaypoint: () => void;
+  onUndoDrawWaypoint: () => void;
   onCancelDrawCable: () => void;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
@@ -1768,6 +1788,10 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onUpdateCustomWaypointRef.current = onUpdateCustomWaypoint;
   const onStartDrawCableRef = useRef(onStartDrawCable);
   onStartDrawCableRef.current = onStartDrawCable;
+  const onSetDrawMousePosRef = useRef(onSetDrawMousePos);
+  onSetDrawMousePosRef.current = onSetDrawMousePos;
+  const onUndoDrawWaypointRef = useRef(onUndoDrawWaypoint);
+  onUndoDrawWaypointRef.current = onUndoDrawWaypoint;
   const drawCableRef = useRef(drawCable);
   drawCableRef.current = drawCable;
 
@@ -1833,6 +1857,12 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       if (onMapClickRef.current) onMapClickRef.current(e.latlng.lat, e.latlng.lng);
     });
 
+    map.on("mousemove", (e: L.LeafletMouseEvent) => {
+      if (drawCableRef.current.active) {
+        onSetDrawMousePosRef.current(e.latlng.lat, e.latlng.lng);
+      }
+    });
+
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
   }, [mapEl, center]);
@@ -1842,10 +1872,10 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
   useEffect(() => {
     if (!drawCable.active) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onCancelDrawCable(); };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); onUndoDrawWaypointRef.current(); } };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [drawCable.active, onCancelDrawCable]);
+  }, [drawCable.active]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1922,7 +1952,8 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     drawCableLayersRef.current.forEach((l) => { if (map.hasLayer(l)) map.removeLayer(l); });
     drawCableLayersRef.current = [];
     if (!drawCable.active || drawCable.routePoints.length < 1) return;
-    const pts: [number, number][] = drawCable.routePoints.map((ll) => [ll.lat, ll.lng]);
+    const allPts = drawCable.mousePos ? [...drawCable.routePoints, drawCable.mousePos] : drawCable.routePoints;
+    const pts: [number, number][] = allPts.map((ll) => [ll.lat, ll.lng]);
     if (pts.length >= 2) {
       const pl = L.polyline(pts, { color: "#22c55e", weight: 4, opacity: 0.85, dashArray: "8,4" }).addTo(map);
       drawCableLayersRef.current.push(pl);
@@ -1940,7 +1971,12 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       m.bindTooltip("WP" + i, { direction: "top" });
       drawCableLayersRef.current.push(m);
     }
-  }, [drawCable.active, drawCable.routePoints, drawCable.sourceTj?.id]);
+    if (drawCable.mousePos) {
+      const m = L.circleMarker([drawCable.mousePos.lat, drawCable.mousePos.lng], { radius: 4, color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.7, weight: 1, dashArray: "3,3" }).addTo(map);
+      m.bindTooltip("Click to place", { direction: "top" });
+      drawCableLayersRef.current.push(m);
+    }
+  }, [drawCable.active, drawCable.routePoints, drawCable.mousePos, drawCable.sourceTj?.id]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2272,14 +2308,15 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
             <span className="text-xs font-medium">{drawCable.sourceTj?.unique_id}</span>
           </div>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          <span className="text-xs font-semibold text-emerald-600">Click map for waypoints · Click TJ to finish</span>
+          <span className="text-xs font-semibold text-emerald-600">Move mouse · Click to place · Click TJ to finish</span>
           {drawCable.routePoints.length > 1 && (
             <>
               <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
-              <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(drawCable.routePoints).toFixed(2)} km · {drawCable.routePoints.length} pts</span>
+              <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(drawCable.routePoints).toFixed(2)} km · {drawCable.routePoints.length - 1} pts</span>
             </>
           )}
-          <button className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition" onClick={onCancelDrawCable}>Cancel Drawing</button>
+          <span className="text-[10px] text-slate-400">ESC=undo</span>
+          <button className="rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition" onClick={onCancelDrawCable}>Cancel</button>
         </div>
       )}
 
