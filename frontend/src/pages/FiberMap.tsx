@@ -88,8 +88,8 @@ function cableLengthM(cable: Cable): number {
 const SPLITTER_LOSS_DB: Record<number, number> = { 2: 3.5, 4: 7.0, 8: 10.5, 16: 14.0, 32: 17.5, 64: 20.5 };
 function splitterLoss(ratio: number): number { return SPLITTER_LOSS_DB[ratio] ?? 10 * Math.log10(ratio) + 0.5; }
 
-const CITY_LAT = 22.699957217056024;
-const CITY_LNG = 90.35805423412117;
+const CITY_LAT = 22.700673;
+const CITY_LNG = 90.354323;
 const CITY_CENTER = { lat: CITY_LAT, lng: CITY_LNG };
 
 function TjSearchSelect({ label, tjBoxes, value, onChange, excludeId }: {
@@ -1652,7 +1652,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
   useEffect(() => {
     if (!mapEl || mapRef.current) return;
-    const map = L.map(mapEl, { zoomControl: true }).setView([center.lat, center.lng], 13);
+    const map = L.map(mapEl, { zoomControl: true }).setView([center.lat, center.lng], 12);
 
     const tiles: Record<string, L.TileLayer> = {
       street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap", maxZoom: 19 }),
