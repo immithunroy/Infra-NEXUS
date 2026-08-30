@@ -528,7 +528,11 @@ export default function FiberMap() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
-      if (!res.ok) throw new Error("Import failed");
+      if (!res.ok) {
+        let msg = "Import failed";
+        try { const j = await res.json(); msg = j.detail || JSON.stringify(j); } catch {}
+        throw new Error(msg);
+      }
       await load();
     } catch (e) { setError(String(e)); }
     finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }

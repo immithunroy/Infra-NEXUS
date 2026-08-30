@@ -400,19 +400,32 @@ async def import_fiber(file: UploadFile = File(...), user: User = Depends(requir
     # TJ Boxes
     if "TJ Boxes" in wb.sheetnames:
         ws = wb["TJ Boxes"]
+        # Detect format: new (6-col: Name,Port,Lat,Lng,Address,Note) vs old (8-col: Name,Type,Capacity,Trays,Lat,Lng,Address,Note)
+        header = [str(c.value or "").lower() for c in ws[1]] if ws.max_row else []
+        new_format = "port" in header
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not row[0]:
                 continue
-            box = TjBox(
-                unique_id=f"TJ-{tj_next}",
-                name=str(row[0] or ""), box_type="regular_tj",
-                tj_port=int(row[1] or 8),
-                splice_per_tray=12,
-                tray_count=1,
-                capacity=12,
-                lat=float(row[2] or 0), lng=float(row[3] or 0),
-                address=str(row[4] or ""), notes=str(row[5] or ""),
-            )
+            if new_format:
+                box = TjBox(
+                    unique_id=f"TJ-{tj_next}",
+                    name=str(row[0] or ""), box_type="regular_tj",
+                    tj_port=int(row[1] or 8),
+                    splice_per_tray=12, tray_count=1, capacity=12,
+                    lat=float(row[2] or 0), lng=float(row[3] or 0),
+                    address=str(row[4] or ""), notes=str(row[5] or ""),
+                )
+            else:
+                box = TjBox(
+                    unique_id=f"TJ-{tj_next}",
+                    name=str(row[0] or ""), box_type=str(row[1] or "regular_tj"),
+                    tj_port=int(row[8] or 8) if len(row) > 8 else 8,
+                    splice_per_tray=int(row[9] or 12) if len(row) > 9 else 12,
+                    tray_count=int(row[3] or 1),
+                    capacity=int(row[3] or 1) * (int(row[9] or 12) if len(row) > 9 else 12),
+                    lat=float(row[4] or 0), lng=float(row[5] or 0),
+                    address=str(row[6] or ""), notes=str(row[7] or ""),
+                )
             db.add(box)
             tj_next += 1
             imported["tj_boxes"] += 1
