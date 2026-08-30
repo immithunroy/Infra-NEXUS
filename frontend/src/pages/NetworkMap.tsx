@@ -135,6 +135,8 @@ function MapView({
   isFullscreen,
   onToggleFullscreen,
   onAddGps,
+  baseMap,
+  onSetBaseMap,
 }: {
   points: MapPoint[];
   center: { lat: number; lng: number };
@@ -143,10 +145,14 @@ function MapView({
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   onAddGps: (lat: number, lng: number) => void;
+  baseMap: "street" | "satellite" | "terrain" | "hybrid";
+  onSetBaseMap: (l: "street" | "satellite" | "terrain" | "hybrid") => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
+  const tileLayersRef = useRef<Record<string, L.TileLayer>>({});
+  const activeTileRef = useRef<L.TileLayer | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const onAddRef = useRef(onAddGps);
@@ -155,10 +161,15 @@ function MapView({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = L.map(containerRef.current, { center: [CITY_LAT, CITY_LNG], zoom: 12 });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
+    const tiles: Record<string, L.TileLayer> = {
+      street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap", maxZoom: 19 }),
+      satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "&copy; Esri", maxZoom: 18 }),
+      terrain: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenTopoMap", maxZoom: 17 }),
+      hybrid: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap + Esri", maxZoom: 19 }),
+    };
+    tiles.street.addTo(map);
+    tileLayersRef.current = tiles;
+    activeTileRef.current = tiles.street;
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     map.on("click", () => onSelectRef.current(null));
@@ -197,8 +208,20 @@ function MapView({
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
+      tileLayersRef.current = {};
+      activeTileRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const tiles = tileLayersRef.current;
+    if (!map || !tiles[baseMap]) return;
+    if (activeTileRef.current === tiles[baseMap]) return;
+    if (activeTileRef.current) map.removeLayer(activeTileRef.current);
+    tiles[baseMap].addTo(map);
+    activeTileRef.current = tiles[baseMap];
+  }, [baseMap]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -237,6 +260,14 @@ function MapView({
   return (
     <div className="relative h-full">
       <div ref={containerRef} className="w-full h-full" style={{ minHeight: "400px" }} />
+      <div className="absolute top-4 right-4 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-3 w-52">
+        <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">Base Map</div>
+        <div className="grid grid-cols-2 gap-1">
+          {([["street","Street"],["satellite","Satellite"],["terrain","Terrain"],["hybrid","Hybrid"]] as const).map(([key,label]) => (
+            <button key={key} onClick={() => onSetBaseMap(key)} className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${baseMap === key ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"}`}>{label}</button>
+          ))}
+        </div>
+      </div>
       <button
         onClick={onToggleFullscreen}
         className="absolute bottom-4 right-4 z-[999] flex items-center gap-1.5 rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-700"
@@ -271,6 +302,7 @@ export default function NetworkMap() {
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [editUser, setEditUser] = useState<MapPoint | null>(null);
   const [editForm, setEditForm] = useState({ address: "", gps_lat: 0, gps_lng: 0 });
+  const [baseMap, setBaseMap] = useState<"street" | "satellite" | "terrain" | "hybrid">("street");
 
   const load = useCallback(() => {
     api
@@ -370,6 +402,8 @@ export default function NetworkMap() {
             isFullscreen={isFullscreen}
             onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
             onAddGps={(lat, lng) => setGpsForm({ lat, lng })}
+            baseMap={baseMap}
+            onSetBaseMap={setBaseMap}
           />
         </div>
 
