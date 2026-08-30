@@ -1812,11 +1812,14 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
       for (let si = 0; si < cable.segments.length; si++) {
         const seg = cable.segments[si];
-        const endMarker = L.circleMarker([seg.end_lat, seg.end_lng], { radius: 4, color, fillColor: color, fillOpacity: 1 });
+        const isEditing = editingCableId === cable.id;
+        const r = isEditing ? 5 : 2;
+        const sw = isEditing ? 2 : 1;
+        const endMarker = L.circleMarker([seg.end_lat, seg.end_lng], { radius: r, color, fillColor: color, fillOpacity: 1, weight: sw });
         endMarker.on("click", (e) => { L.DomEvent.stopPropagation(e); });
         endMarker.addTo(map);
         if (si === 0) {
-          const startMarker = L.circleMarker([seg.start_lat, seg.start_lng], { radius: 4, color, fillColor: color, fillOpacity: 1 });
+          const startMarker = L.circleMarker([seg.start_lat, seg.start_lng], { radius: r, color, fillColor: color, fillOpacity: 1, weight: sw });
           startMarker.on("click", (e) => { L.DomEvent.stopPropagation(e); });
           startMarker.addTo(map);
         }
