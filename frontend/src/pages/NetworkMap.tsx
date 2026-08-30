@@ -34,8 +34,8 @@ const statusLabel: Record<string, string> = {
 };
 
 // Default view: Barishal city, Bangladesh.
-const CITY_LAT = 22.7;
-const CITY_LNG = 90.3667;
+const CITY_LAT = 22.700673;
+const CITY_LNG = 90.354323;
 
 function buildIcon(color: string, blink: boolean) {
   const anim = blink ? "animation:blink 1s ease-in-out infinite;" : "";
@@ -154,7 +154,7 @@ function MapView({
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { center: [CITY_LAT, CITY_LNG], zoom: 13 });
+    const map = L.map(containerRef.current, { center: [CITY_LAT, CITY_LNG], zoom: 12 });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -210,7 +210,7 @@ function MapView({
       const bounds = L.latLngBounds(points.map((p) => [p.gps_lat, p.gps_lng] as [number, number]));
       map.fitBounds(bounds.pad(0.1), { maxZoom: 14 });
     } else {
-      map.setView([center.lat, center.lng], 13);
+      map.setView([center.lat, center.lng], 12);
     }
     for (const p of points) {
       const color = statusColor[p.status] || statusColor.unknown;
