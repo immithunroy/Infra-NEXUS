@@ -351,7 +351,7 @@ export default function Devices() {
 
   return (
     <div className="space-y-8">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Devices</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">OLT and Mikrotik servers</p>
@@ -652,7 +652,7 @@ export default function Devices() {
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setModal(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">
               {modal.id ? "Edit" : "Add"}               {modal.kind === "olt" ? "OLT Device" : modal.kind === "switch" ? "Switch" : "Mikrotik Server"}
             </h2>
@@ -661,7 +661,7 @@ export default function Devices() {
                 <label className="label">Name</label>
                 <input className="input" value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} required />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">IP Address</label>
                   <input className="input font-mono" value={modal.ip} onChange={(e) => setModal({ ...modal, ip: e.target.value })} required />
@@ -677,7 +677,7 @@ export default function Devices() {
 
               {modal.kind === "olt" && (
                 <>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="label">Vendor</label>
                       <select className="input" value={modal.vendor} onChange={(e) => setModal({ ...modal, vendor: e.target.value })}>
@@ -703,7 +703,7 @@ export default function Devices() {
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="label">Port ({modal.access_method === "both" ? "SSH" : modal.access_method})</label>
                       <input type="number" className="input" value={modal.port} onChange={(e) => setModal({ ...modal, port: Number(e.target.value) })} />
@@ -720,7 +720,7 @@ export default function Devices() {
                       <input className="input" value={modal.snmp_community} onChange={(e) => setModal({ ...modal, snmp_community: e.target.value })} disabled={!modal.snmp_enabled} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="label">Username</label>
                       <input className="input" value={modal.username} onChange={(e) => setModal({ ...modal, username: e.target.value })} />
@@ -734,7 +734,7 @@ export default function Devices() {
                       <input className="input" type="password" value={modal.enable_password} onChange={(e) => setModal({ ...modal, enable_password: e.target.value })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="label">NOC</label>
                       <select className="input" value={modal.noc_id || ""} onChange={(e) => setModal({ ...modal, noc_id: e.target.value ? Number(e.target.value) : null })}>
@@ -755,7 +755,7 @@ export default function Devices() {
 
               {modal.kind === "mikrotik" && (
                 <>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="label">API port</label>
                       <input type="number" className="input" value={modal.api_port} onChange={(e) => setModal({ ...modal, api_port: Number(e.target.value) })} />
@@ -775,7 +775,7 @@ export default function Devices() {
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="label">Username</label>
                       <input className="input" value={modal.username} onChange={(e) => setModal({ ...modal, username: e.target.value })} />
@@ -789,7 +789,7 @@ export default function Devices() {
                       <input className="input" type="password" value={modal.enable_password} onChange={(e) => setModal({ ...modal, enable_password: e.target.value })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="label">NOC</label>
                       <select className="input" value={modal.noc_id || ""} onChange={(e) => setModal({ ...modal, noc_id: e.target.value ? Number(e.target.value) : null })}>
@@ -810,7 +810,7 @@ export default function Devices() {
 
               {modal.kind === "switch" && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="label">Vendor</label>
                       <select className="input" value={modal.vendor} onChange={(e) => setModal({ ...modal, vendor: e.target.value })}>
@@ -822,7 +822,7 @@ export default function Devices() {
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="label">Management Access</label>
                       <select className="input" value={modal.access_method} onChange={(e) => setModal({ ...modal, access_method: e.target.value })}>
@@ -849,7 +849,7 @@ export default function Devices() {
                       <input className="input" value={modal.snmp_community} onChange={(e) => setModal({ ...modal, snmp_community: e.target.value })} />
                     </div>
                   )}
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="label">Username</label>
                       <input className="input" value={modal.username} onChange={(e) => setModal({ ...modal, username: e.target.value })} />
@@ -863,7 +863,7 @@ export default function Devices() {
                       <input className="input" type="password" value={modal.enable_password} onChange={(e) => setModal({ ...modal, enable_password: e.target.value })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="label">NOC</label>
                       <select className="input" value={modal.noc_id || ""} onChange={(e) => setModal({ ...modal, noc_id: e.target.value ? Number(e.target.value) : null })}>
@@ -895,7 +895,7 @@ export default function Devices() {
       {/* NOC Modal */}
       {nocModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setNocModal(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">{nocModal.id ? "Edit NOC" : "New NOC"}</h2>
             <div className="space-y-3">
               <div>
@@ -906,7 +906,7 @@ export default function Devices() {
                 <label className="label">Address *</label>
                 <input className="input" value={nocModal.address} onChange={(e) => setNocModal({ ...nocModal, address: e.target.value })} placeholder="123 Main St, Barishal" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Latitude</label>
                   <input className="input" type="number" step="any" value={nocModal.gps_lat} onChange={(e) => setNocModal({ ...nocModal, gps_lat: e.target.value })} placeholder="22.701" />
@@ -916,7 +916,7 @@ export default function Devices() {
                   <input className="input" type="number" step="any" value={nocModal.gps_lng} onChange={(e) => setNocModal({ ...nocModal, gps_lng: e.target.value })} placeholder="90.353" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Contact Name</label>
                   <input className="input" value={nocModal.contact_name} onChange={(e) => setNocModal({ ...nocModal, contact_name: e.target.value })} />
@@ -942,7 +942,7 @@ export default function Devices() {
       {/* POP Modal */}
       {popModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setPopModal(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">{popModal.id ? "Edit POP" : "New POP"}</h2>
             <div className="space-y-3">
               <div>
@@ -953,7 +953,7 @@ export default function Devices() {
                 <label className="label">Address *</label>
                 <input className="input" value={popModal.address} onChange={(e) => setPopModal({ ...popModal, address: e.target.value })} placeholder="Sadar Road, Barishal" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Latitude</label>
                   <input className="input" type="number" step="any" value={popModal.gps_lat} onChange={(e) => setPopModal({ ...popModal, gps_lat: e.target.value })} placeholder="22.715" />
@@ -963,7 +963,7 @@ export default function Devices() {
                   <input className="input" type="number" step="any" value={popModal.gps_lng} onChange={(e) => setPopModal({ ...popModal, gps_lng: e.target.value })} placeholder="90.370" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Contact Name</label>
                   <input className="input" value={popModal.contact_name} onChange={(e) => setPopModal({ ...popModal, contact_name: e.target.value })} />

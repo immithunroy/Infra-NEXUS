@@ -27,7 +27,7 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900">
-      <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-xl dark:bg-slate-900 dark:ring-1 dark:ring-slate-700">
+      <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:ring-1 dark:ring-slate-700 sm:p-8">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-600 text-white">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -377,23 +377,23 @@ function WeakSignalsCard({ olts }: { olts: OltUsage[] }) {
           Weakest Optical Signals <span className="font-normal text-slate-400">(Top {limit})</span>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="label">OLT</label>
-            <select className="input w-44" value={oltId} onChange={(e) => { setOltId(e.target.value); setPort(""); }}>
+            <select className="input w-full sm:w-44" value={oltId} onChange={(e) => { setOltId(e.target.value); setPort(""); }}>
               <option value="">All OLTs</option>
               {olts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="label">Port</label>
-            <select className="input w-40" value={port} onChange={(e) => setPort(e.target.value)}>
+            <select className="input w-full sm:w-40" value={port} onChange={(e) => setPort(e.target.value)}>
               <option value="">All ports</option>
               {portOptions.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="label">Top N</label>
-            <select className="input w-24" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+            <select className="input w-full sm:w-24" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
               {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
@@ -665,7 +665,7 @@ export default function Dashboard() {
               </div>
             </div>
             {(liveMassDowns.length > 0 || data.mass_down_ports.length > 0) ? (
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
                 {(liveMassDowns.length > 0 ? liveMassDowns : data.mass_down_ports).slice(0, 10).map((m) => (
                   <button
                     key={`${m.olt_id}-${m.port}`}

@@ -3,8 +3,13 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    overflow-x: hidden;
+  }
   body {
     @apply bg-slate-100 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200;
+    overflow-x: hidden;
   }
 }
 
@@ -49,4 +54,26 @@
 }
 .leaflet-marker-icon {
   cursor: pointer !important;
+}
+
+@media (max-width: 640px) {
+  .modal-responsive {
+    @apply mx-2 my-4 max-w-full p-4;
+  }
+  .modal-responsive form .grid {
+    @apply grid-cols-1;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300 dark:bg-slate-600;
+  }
 }

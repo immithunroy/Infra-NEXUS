@@ -241,27 +241,27 @@ export default function LiveDowns() {
 
       {/* Control card */}
       <div className="card flex flex-wrap items-end gap-3 p-4">
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">OLT</label>
-          <select className="input w-56" value={oltId} onChange={(e) => onOltChange(e.target.value)}>
+          <select className="input w-full sm:w-56" value={oltId} onChange={(e) => onOltChange(e.target.value)}>
             <option value="">Select OLT…</option>
             {olts.map((o) => <option key={o.id} value={o.id}>{o.name} ({o.pon_type})</option>)}
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">PON Port</label>
-          <select className="input w-40" value={port} onChange={(e) => setPort(e.target.value)}>
+          <select className="input w-full sm:w-40" value={port} onChange={(e) => setPort(e.target.value)}>
             <option value="">All ports</option>
             {ports.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">Interval (s)</label>
-          <input type="number" min={10} max={300} className="input w-24" value={interval} onChange={(e) => setIntervalSec(Number(e.target.value))} />
+          <input type="number" min={10} max={300} className="input w-full sm:w-24" value={interval} onChange={(e) => setIntervalSec(Number(e.target.value))} />
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">Mass-outage ≥ ONUs</label>
-          <input type="number" min={2} max={64} className="input w-24" value={massThreshold} onChange={(e) => setMassThreshold(Number(e.target.value))} />
+          <input type="number" min={2} max={64} className="input w-full sm:w-24" value={massThreshold} onChange={(e) => setMassThreshold(Number(e.target.value))} />
         </div>
         <div className="ml-auto flex items-center gap-2">
           {writeOk && (
@@ -403,7 +403,7 @@ export default function LiveDowns() {
 
       {areaOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setAreaOpen(false)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-1 text-lg font-bold text-slate-900 dark:text-white">Area labels</h2>
             <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
               Name each PON port (e.g. "Rampura South") so power-outage areas on the dashboard show the location, not just the port number.

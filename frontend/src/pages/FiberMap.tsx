@@ -636,7 +636,7 @@ export default function FiberMap() {
   return (
     <div className={isFullscreen ? "fixed inset-0 z-[9998] bg-white dark:bg-slate-900 flex flex-col" : "flex flex-col relative"} style={{ zIndex: 1, height: isFullscreen ? "100vh" : "calc(100vh - 4rem)" }}>
       {/* Top bar: all controls in one row */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0">
         {!isFullscreen && <h1 className="text-lg font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Fiber Map</h1>}
         <select className="input w-28 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
           <option value="all">All</option><option value="cable">Cables</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
@@ -897,7 +897,7 @@ export default function FiberMap() {
 
       {selectedCable && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedCable(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 mb-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selectedCable.code}</h2>
@@ -917,11 +917,11 @@ export default function FiberMap() {
                 const totalM = lenM + totalLoopM;
                 return (
                   <>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Straight Distance</div><div className="text-lg font-bold">{straightM > 0 ? (straightM / 1000).toFixed(2) + " km" : "—"}</div></div>
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Cable Length</div><div className="text-lg font-bold">{(lenM / 1000).toFixed(2)} km</div></div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="rounded-lg bg-cyan-50 dark:bg-cyan-900/20 p-3"><div className="text-xs text-cyan-600">Loop Slack</div><div className="text-lg font-bold text-cyan-700">{totalLoopM > 0 ? totalLoopM + "m (" + loopSum.length + " loops)" : "None"}</div></div>
                       <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3"><div className="text-xs text-amber-600">Total Length</div><div className="text-lg font-bold text-amber-700">{(totalM / 1000).toFixed(2)} km</div></div>
                     </div>
@@ -957,22 +957,22 @@ export default function FiberMap() {
 
       {showForm === "cable" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setShowForm(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold">{editingId ? "Edit" : "Add"} Cable</h2>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Link ID</label><input className="input bg-slate-100 dark:bg-slate-800" value={cableForm.link_id || ""} readOnly placeholder="Auto-generated" /></div>
                 <div><label className="label">Link Name</label><input className="input" value={cableForm.link_name || ""} onChange={(e) => setCableForm({ ...cableForm, link_name: e.target.value })} placeholder="e.g. Barishal Main Trunk" /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <TjSearchSelect label="Source TJ" tjBoxes={tjBoxes} value={cableForm.src_tj_id || null} onChange={(id) => setCableForm({ ...cableForm, src_tj_id: id })} excludeId={cableForm.dst_tj_id || null} />
                 <TjSearchSelect label="Destination TJ" tjBoxes={tjBoxes} value={cableForm.dst_tj_id || null} onChange={(id) => setCableForm({ ...cableForm, dst_tj_id: id })} excludeId={cableForm.src_tj_id || null} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Manufacturer *</label><input className="input" value={cableForm.manufacturer || ""} onChange={(e) => setCableForm({ ...cableForm, manufacturer: e.target.value })} required /></div>
                 <div><label className="label">Cable Code *</label><input className="input" value={cableForm.code || ""} onChange={(e) => setCableForm({ ...cableForm, code: e.target.value })} placeholder="e.g. FOC-001" required /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Type</label><select className="input" value={cableForm.cable_type || "round"} onChange={(e) => setCableForm({ ...cableForm, cable_type: e.target.value })}>
                   <option value="round">Round Fiber</option><option value="figure8">Figure 8 Messenger</option>
                 </select></div>
@@ -980,7 +980,7 @@ export default function FiberMap() {
                   {[2, 4, 8, 12, 24, 36, 48, 144].map((n) => <option key={n} value={n}>{n} cores</option>)}
                 </select></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Route Type</label><select className="input" value={cableForm.route_type || "driving"} onChange={(e) => setCableForm({ ...cableForm, route_type: e.target.value })}>
                   <option value="driving">Driving Route</option><option value="foot">Walking Route</option>
                 </select></div>
@@ -999,14 +999,14 @@ export default function FiberMap() {
 
       {showForm === "tj" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setShowForm(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold">{editingId ? "Edit" : "Add"} TJ / Enclosure</h2>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">TJ ID</label><input className="input bg-slate-100 dark:bg-slate-800" value={tjForm.unique_id || ""} readOnly placeholder="Auto-generated" /></div>
                 <div><label className="label">TJ Name</label><input className="input" value={tjForm.name || ""} onChange={(e) => setTjForm({ ...tjForm, name: e.target.value })} required /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">TJ Type</label><select className="input" value={tjForm.box_type || "regular_tj"} onChange={(e) => {
                   const box_type = e.target.value;
                   const isLarge = box_type === "enclosure" || box_type === "dome";
@@ -1019,7 +1019,7 @@ export default function FiberMap() {
                 </select></div>
               </div>
               {(tjForm.box_type === "enclosure" || tjForm.box_type === "dome") && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div><label className="label">Tray Count</label><select className="input" value={tjForm.tray_count || 1} onChange={(e) => setTjForm({ ...tjForm, tray_count: Number(e.target.value) })}>
                     {[1, 2, 4, 8, 12].map((n) => <option key={n} value={n}>{n} trays</option>)}
                   </select></div>
@@ -1028,7 +1028,7 @@ export default function FiberMap() {
                   </select></div>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Latitude</label><input type="number" step="any" className="input" value={tjForm.lat || ""} onChange={(e) => setTjForm({ ...tjForm, lat: Number(e.target.value) })} required /></div>
                 <div><label className="label">Longitude</label><input type="number" step="any" className="input" value={tjForm.lng || ""} onChange={(e) => setTjForm({ ...tjForm, lng: Number(e.target.value) })} required /></div>
               </div>
@@ -1045,7 +1045,7 @@ export default function FiberMap() {
 
       {showForm === "splitter" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setShowForm(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold">{editingId ? "Edit" : "Add"} Splitter</h2>
             <div className="space-y-3">
               {(() => {
@@ -1061,13 +1061,13 @@ export default function FiberMap() {
                   <div className="text-xs text-red-500">No parent TJ selected. Close and re-open from a TJ.</div>
                 );
               })()}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Name</label><input className="input" value={splitterForm.name || ""} onChange={(e) => setSplitterForm({ ...splitterForm, name: e.target.value })} /></div>
                 <div><label className="label">Split Ratio</label><select className="input" value={splitterForm.split_ratio || 2} onChange={(e) => setSplitterForm({ ...splitterForm, split_ratio: Number(e.target.value) })}>
                   {[2, 4, 8, 16, 32, 64].map((n) => <option key={n} value={n}>1:{n}</option>)}
                 </select></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Input Core</label><input type="number" className="input" value={splitterForm.input_core || 0} onChange={(e) => setSplitterForm({ ...splitterForm, input_core: Number(e.target.value) })} /></div>
                 <div><label className="label">Output Cores</label><input className="input" placeholder="e.g. 1,2,3,4" value={splitterForm.output_cores || ""} onChange={(e) => setSplitterForm({ ...splitterForm, output_cores: e.target.value })} /></div>
               </div>
@@ -1090,7 +1090,7 @@ export default function FiberMap() {
                 <option value="">Select Cable</option>
                 {cables.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.core_count}C</option>)}
               </select></div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Latitude</label><input type="number" step="any" className="input" value={loopForm.lat || ""} onChange={(e) => setLoopForm({ ...loopForm, lat: Number(e.target.value) })} required /></div>
                 <div><label className="label">Longitude</label><input type="number" step="any" className="input" value={loopForm.lng || ""} onChange={(e) => setLoopForm({ ...loopForm, lng: Number(e.target.value) })} required /></div>
               </div>
@@ -1115,7 +1115,7 @@ export default function FiberMap() {
                 <option value="">Select Cable</option>
                 {cables.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.core_count}C</option>)}
               </select></div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Latitude</label><input type="number" step="any" className="input" value={cutForm.lat || ""} onChange={(e) => setCutForm({ ...cutForm, lat: Number(e.target.value) })} required /></div>
                 <div><label className="label">Longitude</label><input type="number" step="any" className="input" value={cutForm.lng || ""} onChange={(e) => setCutForm({ ...cutForm, lng: Number(e.target.value) })} required /></div>
               </div>
@@ -1596,7 +1596,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-5 max-h-[80vh] overflow-y-auto">
             <h3 className="text-sm font-bold mb-3">{editSplice ? "Edit Splice" : "New Splice"}</h3>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Cable A</label>
                   <input className="input text-[10px] py-1 mb-1" placeholder="Search cable..." value={cableSearchA} onChange={(e) => setCableSearchA(e.target.value)} />
@@ -1621,7 +1621,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                 </div>
               </div>
               <div className="text-center text-xs text-slate-400">↔ Splice ↔</div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Cable B</label>
                   <input className="input text-[10px] py-1 mb-1" placeholder="Search cable..." value={cableSearchB} onChange={(e) => setCableSearchB(e.target.value)} />
@@ -2417,7 +2417,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         </div>
       )}
 
-      <div className="absolute top-4 right-4 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-3 w-52">
+      <div className="absolute top-2 right-2 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-2 sm:top-4 sm:right-4 sm:p-3 w-40 sm:w-52 max-h-[80vh] overflow-y-auto scrollbar-thin">
         <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">Base Map</div>
         <div className="grid grid-cols-2 gap-1 mb-3">
           {([["street","Street"],["satellite","Satellite"],["terrain","Terrain"],["hybrid","Hybrid"]] as const).map(([key,label]) => (

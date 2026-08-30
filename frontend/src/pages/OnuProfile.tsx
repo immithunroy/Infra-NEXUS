@@ -191,7 +191,7 @@ export default function OnuProfile() {
       {realtime && (
         <div className="card p-4 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
           <h3 className="mb-3 text-sm font-semibold text-emerald-700 dark:text-emerald-400">Real-Time Status</h3>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:grid-cols-3">
             <InfoBox
               label="Status"
               value={
@@ -228,7 +228,7 @@ export default function OnuProfile() {
           </div>
         )}
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
           <InfoBox label="Serial" value={onu.serial} mono />
           <InfoBox label="MAC" value={<MacCell mac={onu.last_mac || onu.mac} vendor={onu.mac_vendor} />} />
           <InfoBox label="PON Port" value={onu.pon_port} mono />
@@ -307,7 +307,7 @@ export default function OnuProfile() {
       {/* Delete from OLT */}
       {writeOk && (
         <div className="card border-2 border-red-200 p-4 dark:border-red-900/50">
-          <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40">
               <svg className="h-5 w-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
@@ -328,7 +328,7 @@ export default function OnuProfile() {
       {(onu.gps_lat != null || onu.address) && (
         <div className="card p-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Location</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {onu.gps_lat != null && <InfoBox label="GPS" value={`${onu.gps_lat.toFixed(6)}, ${onu.gps_lng?.toFixed(6)}`} mono />}
             {onu.gps_accuracy != null && <InfoBox label="Accuracy" value={`±${onu.gps_accuracy.toFixed(2)} m`} />}
             {onu.address && <InfoBox label="Address" value={onu.address} />}
@@ -340,7 +340,7 @@ export default function OnuProfile() {
       {(onu.phone || onu.email) && (
         <div className="card p-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Contact</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {onu.phone && <InfoBox label="Phone" value={onu.phone} />}
             {onu.email && <InfoBox label="Email" value={onu.email} />}
           </div>
@@ -358,26 +358,26 @@ export default function OnuProfile() {
       {/* Edit modal */}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setEditing(false)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold">Edit ONU</h2>
             <form onSubmit={handleSave} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                 <div><label className="label">Subscriber</label><input className="input" value={form.subscriber} onChange={(e) => setForm({ ...form, subscriber: e.target.value })} /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Serial</label><input className="input" value={form.serial} onChange={(e) => setForm({ ...form, serial: e.target.value })} /></div>
                 <div><label className="label">MAC</label><input className="input" value={form.mac} onChange={(e) => setForm({ ...form, mac: e.target.value })} /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">PON Port</label><input className="input" value={form.pon_port} onChange={(e) => setForm({ ...form, pon_port: e.target.value })} /></div>
                 <div><label className="label">ONU ID</label><input type="number" className="input" value={form.onu_id} onChange={(e) => setForm({ ...form, onu_id: Number(e.target.value) })} /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">VLAN</label><input type="number" className="input" value={form.vlan} onChange={(e) => setForm({ ...form, vlan: Number(e.target.value) })} /></div>
                 <div><label className="label">Address</label><input className="input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Phone</label><input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
                 <div><label className="label">Email</label><input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
               </div>

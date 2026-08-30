@@ -297,7 +297,7 @@ export default function Routing() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">BGP Routing</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{sessions.length} sessions &middot; {sessions.filter((s) => s.state === "established").length} established</p>
@@ -355,24 +355,24 @@ export default function Routing() {
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 dark:border-slate-700 dark:bg-slate-900">
             <span className="text-[10px] font-semibold uppercase text-slate-400">Filters</span>
-            <select className="input !py-1 !text-[11px] !w-36" value={filterDevice} onChange={(e) => setFilterDevice(e.target.value ? Number(e.target.value) : "")}>
+            <select className="input w-full !py-1 !text-[11px] sm:w-36" value={filterDevice} onChange={(e) => setFilterDevice(e.target.value ? Number(e.target.value) : "")}>
               <option value="">All Routers</option>
               {mikrotiks.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
-            <select className="input !py-1 !text-[11px] !w-28" value={filterFamily} onChange={(e) => setFilterFamily(e.target.value)}>
+            <select className="input w-full !py-1 !text-[11px] sm:w-28" value={filterFamily} onChange={(e) => setFilterFamily(e.target.value)}>
               <option value="">All Family</option>
               <option value="ipv4">IPv4</option>
               <option value="ipv6">IPv6</option>
             </select>
-            <select className="input !py-1 !text-[11px] !w-28" value={filterState} onChange={(e) => setFilterState(e.target.value)}>
+            <select className="input w-full !py-1 !text-[11px] sm:w-28" value={filterState} onChange={(e) => setFilterState(e.target.value)}>
               <option value="">All State</option>
               <option value="established">Established</option>
               <option value="active">Active</option>
               <option value="connect">Connect</option>
               <option value="idle">Idle</option>
             </select>
-            <input className="input !py-1 !text-[11px] !w-36" placeholder="ASN / Name..." value={filterAsn} onChange={(e) => setFilterAsn(e.target.value)} />
-            <input className="input !py-1 !text-[11px] !w-44" placeholder="Search all fields..." value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} />
+            <input className="input w-full !py-1 !text-[11px] sm:w-36" placeholder="ASN / Name..." value={filterAsn} onChange={(e) => setFilterAsn(e.target.value)} />
+            <input className="input w-full !py-1 !text-[11px] sm:w-44" placeholder="Search all fields..." value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} />
             {hasFilters && (
               <button className="text-[10px] text-red-500 hover:underline" onClick={() => { setFilterDevice(""); setFilterFamily(""); setFilterState(""); setFilterAsn(""); setFilterSearch(""); }}>Clear</button>
             )}

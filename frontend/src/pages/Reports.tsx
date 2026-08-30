@@ -159,24 +159,24 @@ export default function Reports() {
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="label">OLT</label>
-            <select className="input w-44" value={oltId} onChange={(e) => { setOltId(e.target.value); setPort(""); }}>
+            <select className="input w-full sm:w-44" value={oltId} onChange={(e) => { setOltId(e.target.value); setPort(""); }}>
               <option value="">All OLTs</option>
               {olts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="label">Port</label>
-            <select className="input w-44" value={port} onChange={(e) => setPort(e.target.value)}>
+            <select className="input w-full sm:w-44" value={port} onChange={(e) => setPort(e.target.value)}>
               <option value="">All ports</option>
               {portOptions.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           {tab === "optical" && (
-            <div>
+            <div className="w-full sm:w-auto">
               <label className="label">RX Threshold</label>
-              <select className="input w-40" value={threshold} onChange={(e) => setThreshold(Number(e.target.value) as typeof threshold)}>
+              <select className="input w-full sm:w-40" value={threshold} onChange={(e) => setThreshold(Number(e.target.value) as typeof threshold)}>
                 <option value={0}>All</option>
                 <option value={-25}>&lt;= -25 dBm</option>
                 <option value={-28}>&lt;= -28 dBm</option>
@@ -186,9 +186,9 @@ export default function Reports() {
             </div>
           )}
           {tab !== "ports" && (
-            <div>
+            <div className="w-full sm:w-auto">
               <label className="label">Window (days)</label>
-              <select className="input w-32" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+              <select className="input w-full sm:w-32" value={days} onChange={(e) => setDays(Number(e.target.value))}>
                 {[3, 7, 14, 30].map((d) => <option key={d} value={d}>{d} days</option>)}
               </select>
             </div>

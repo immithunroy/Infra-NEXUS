@@ -260,7 +260,7 @@ function MapView({
   return (
     <div className="relative h-full">
       <div ref={containerRef} className="w-full h-full" style={{ minHeight: "400px" }} />
-      <div className="absolute top-4 right-4 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-3 w-52">
+      <div className="absolute top-2 right-2 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-2 sm:top-4 sm:right-4 sm:p-3 w-40 sm:w-52">
         <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">Base Map</div>
         <div className="grid grid-cols-2 gap-1">
           {([["street","Street"],["satellite","Satellite"],["terrain","Terrain"],["hybrid","Hybrid"]] as const).map(([key,label]) => (
@@ -373,7 +373,7 @@ export default function NetworkMap() {
   return (
     <div className={isFullscreen ? "fixed inset-0 z-[9998] bg-white dark:bg-slate-900 flex flex-col" : "flex flex-col relative"} style={{ zIndex: 1, height: isFullscreen ? "100vh" : "calc(100vh - 4rem)" }}>
       {/* Top bar */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0">
         {!isFullscreen && <h1 className="text-lg font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">User Map</h1>}
         <select className="input w-28 text-xs py-1" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="all">All Status</option>
@@ -498,7 +498,7 @@ export default function NetworkMap() {
             <h2 className="mb-4 text-lg font-bold">Edit {editUser.subscriber || editUser.name}</h2>
             <div className="space-y-3">
               <div><label className="label">Address</label><input className="input" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Latitude</label><input type="number" step="any" className="input" value={editForm.gps_lat} onChange={(e) => setEditForm({ ...editForm, gps_lat: Number(e.target.value) })} /></div>
                 <div><label className="label">Longitude</label><input type="number" step="any" className="input" value={editForm.gps_lng} onChange={(e) => setEditForm({ ...editForm, gps_lng: Number(e.target.value) })} /></div>
               </div>

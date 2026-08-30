@@ -224,7 +224,7 @@ export default function Tickets() {
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setModal(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">
               {modal.id ? "Edit ticket" : "New ticket"}
             </h2>
@@ -237,7 +237,7 @@ export default function Tickets() {
                 <label className="label">Description</label>
                 <textarea className="input min-h-[80px]" value={modal.description} onChange={(e) => setModal({ ...modal, description: e.target.value })} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Priority</label>
                   <select className="input" value={modal.priority} onChange={(e) => setModal({ ...modal, priority: e.target.value })}>
@@ -252,7 +252,7 @@ export default function Tickets() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Subscriber (PPPoE ID)</label>
                   <input className="input font-mono" value={modal.subscriber} onChange={(e) => setModal({ ...modal, subscriber: e.target.value })} placeholder="e.g. 17040102" />

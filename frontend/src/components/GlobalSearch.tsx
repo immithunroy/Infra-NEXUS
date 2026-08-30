@@ -56,7 +56,7 @@ export default function GlobalSearch() {
   const total = results ? results.onus.length + results.olts.length + results.mikrotiks.length : 0;
 
   return (
-    <div ref={boxRef} className="relative w-full max-w-md">
+    <div ref={boxRef} className="relative w-full max-w-full sm:max-w-md">
       <div className="relative">
         <svg
           width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"

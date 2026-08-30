@@ -238,7 +238,7 @@ export default function Onus() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">ONU / ONT Inventory</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -374,23 +374,23 @@ export default function Onus() {
       )}
 
       <div className="card flex flex-wrap items-end gap-3 p-4">
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">OLT</label>
-          <select className="input w-48" value={filter.olt_id} onChange={(e) => setFilter({ ...filter, olt_id: e.target.value, pon_port: "" })}>
+          <select className="input w-full sm:w-48" value={filter.olt_id} onChange={(e) => setFilter({ ...filter, olt_id: e.target.value, pon_port: "" })}>
             <option value="">All</option>
             {olts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">PON Port</label>
-          <select className="input w-48" value={filter.pon_port} onChange={(e) => setFilter({ ...filter, pon_port: e.target.value })}>
+          <select className="input w-full sm:w-48" value={filter.pon_port} onChange={(e) => setFilter({ ...filter, pon_port: e.target.value })}>
             <option value="">All ports</option>
             {portOptions.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">State</label>
-          <select className="input w-32" value={filter.state} onChange={(e) => setFilter({ ...filter, state: e.target.value })}>
+          <select className="input w-full sm:w-32" value={filter.state} onChange={(e) => setFilter({ ...filter, state: e.target.value })}>
             <option value="">All</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
@@ -398,17 +398,17 @@ export default function Onus() {
             <option value="unknown">Unknown</option>
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">Source</label>
-          <select className="input w-32" value={filter.source} onChange={(e) => setFilter({ ...filter, source: e.target.value })}>
+          <select className="input w-full sm:w-32" value={filter.source} onChange={(e) => setFilter({ ...filter, source: e.target.value })}>
             <option value="">All</option>
             <option value="manual">Manual</option>
             <option value="auto">Auto</option>
           </select>
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="label">Binding</label>
-          <select className="input w-32" value={filter.bound} onChange={(e) => setFilter({ ...filter, bound: e.target.value })}>
+          <select className="input w-full sm:w-32" value={filter.bound} onChange={(e) => setFilter({ ...filter, bound: e.target.value })}>
             <option value="">All</option>
             <option value="1">Bound</option>
             <option value="0">Unbound</option>
@@ -512,7 +512,7 @@ export default function Onus() {
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setModal(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">
               {modal.id ? "Edit ONU" : "Add ONU to inventory"}
             </h2>
@@ -531,7 +531,7 @@ export default function Onus() {
                   </select>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">Customer / Name</label>
                   <input className="input" value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} />
@@ -541,7 +541,7 @@ export default function Onus() {
                   <input className="input font-mono" value={modal.pon_port} onChange={(e) => setModal({ ...modal, pon_port: e.target.value })} placeholder="GPON0/1:5" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">ONU serial</label>
                   <input className="input font-mono" value={modal.serial} onChange={(e) => setModal({ ...modal, serial: e.target.value })} placeholder="BDCM12345678" />
@@ -551,7 +551,7 @@ export default function Onus() {
                   <input className="input font-mono" value={modal.mac} onChange={(e) => setModal({ ...modal, mac: e.target.value })} placeholder="fc:fa:f7:9d:00:ea" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">ONU ID</label>
                   <input type="number" className="input" value={modal.onu_id} onChange={(e) => setModal({ ...modal, onu_id: Number(e.target.value) })} />
