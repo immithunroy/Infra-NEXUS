@@ -380,32 +380,31 @@ class BdcomCliDriver(BaseDriver):
             raise
         try:
             pon_type = self.device.pon_type.lower()
-            pon_base = pon_port.upper().replace("EPON", "epon").replace("GPON", "gpon")
-            pon_if = pon_port.upper()
+            # Strip ONU ID suffix if present (e.g. "EPON0/5:16" -> "EPON0/5")
+            base_port = pon_port.split(":")[0] if ":" in pon_port else pon_port
+            pon_num = base_port.replace("EPON", "").replace("GPON", "").replace("epon", "").replace("gpon", "")
 
             # Optical power
             rx_power = None
             try:
                 if pon_type == "gpon":
                     optical = await self._exec(
-                        f"show gpon optical-transceiver-diagnosis interface gpon {pon_base.replace('gpon', '')}:{onu_id}",
+                        f"show gpon optical-transceiver-diagnosis interface gpon {pon_num}:{onu_id}",
                         timeout=15,
                     )
                 else:
                     optical = await self._exec(
-                        f"show epon optical-transceiver-diagnosis interface epon {pon_base.replace('epon', '')}:{onu_id}",
+                        f"show epon optical-transceiver-diagnosis interface epon {pon_num}:{onu_id}",
                         timeout=15,
                     )
                 for line in optical.splitlines():
                     stripped = line.strip()
-                    if ":" in stripped and stripped.split()[0].replace("/", "").replace(":", "").replace("epon", "").replace("gpon", "").strip().isdigit() is False:
-                        # e.g. "epon0/3:5    -22.0" or " gpon0/3:7    -33.9"
-                        parts = stripped.split()
-                        if len(parts) >= 2:
-                            try:
-                                rx_power = float(parts[-1])
-                            except ValueError:
-                                pass
+                    parts = stripped.split()
+                    if len(parts) >= 2 and ":" in parts[0]:
+                        try:
+                            rx_power = float(parts[-1])
+                        except ValueError:
+                            pass
             except Exception:
                 pass
 
@@ -414,15 +413,14 @@ class BdcomCliDriver(BaseDriver):
             last_transition = None
             try:
                 if pon_type == "gpon":
-                    iface_out = await self._exec(f"show interface gpon {pon_base.replace('gpon', '')}:{onu_id}", timeout=10)
+                    iface_out = await self._exec(f"show interface gpon {pon_num}:{onu_id}", timeout=10)
                 else:
-                    iface_out = await self._exec(f"show interface epon {pon_base.replace('epon', '')}:{onu_id}", timeout=10)
+                    iface_out = await self._exec(f"show interface epon {pon_num}:{onu_id}", timeout=10)
                 for line in iface_out.splitlines():
                     low = line.strip().lower()
                     if "is up" in low or "is down" in low:
                         status = "up" if "is up" in low else "down"
                     if "last transition" in low:
-                        # last transition 2026-8-30 6:39:22
                         idx = low.index("last transition")
                         last_transition = line.strip()[idx + len("last transition"):].strip()
             except Exception:
