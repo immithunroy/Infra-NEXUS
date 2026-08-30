@@ -1,8 +1,11 @@
 """Periodic background scheduler for OLT / Mikrotik scans and MAC binding."""
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from datetime import timedelta, time as dt_time
+from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -19,116 +22,177 @@ logger = logging.getLogger("olt_commander.scheduler")
 
 _scheduler: AsyncIOScheduler | None = None
 
+# In-memory job execution tracking: job_id -> {last_run, status, error}
+_job_status: dict[str, dict[str, Any]] = {}
+
+
+def _track_job(job_id: str) -> None:
+    """Mark a job as currently running."""
+    _job_status[job_id] = {"last_run": None, "status": "running", "error": ""}
+
+
+def _finish_job(job_id: str, success: bool, error: str = "") -> None:
+    """Mark a job as finished."""
+    _job_status[job_id] = {"last_run": utcnow().isoformat(), "status": "success" if success else "failed", "error": error}
+
+
+def get_scheduler_status() -> list[dict[str, Any]]:
+    """Return status for all scheduled jobs."""
+    if _scheduler is None:
+        return []
+    results = []
+    jobs_def = [
+        {"id": "scan_olts", "name": "OLT Scan", "desc": "Scan all enabled OLTs for ONU/MAC data"},
+        {"id": "scan_mikrotiks", "name": "Mikrotik Scan", "desc": "Scan all enabled Mikrotik devices"},
+        {"id": "bind_macs", "name": "MAC Binding", "desc": "Match collected MACs against subscriber database"},
+        {"id": "telemetry", "name": "OLT Telemetry", "desc": "Collect optical power readings via SNMP"},
+        {"id": "acs_poll", "name": "ACS Poll", "desc": "Queue TR-069 monitoring jobs for online CPEs"},
+        {"id": "olt_write_all", "name": "OLT Config Save", "desc": "Persist running config to flash on all OLTs"},
+        {"id": "mac_vendor_sync", "name": "MAC Vendor Sync", "desc": "Update MAC vendor OUI database from external API"},
+    ]
+    for jdef in jobs_def:
+        job = _scheduler.get_job(jdef["id"])
+        tracked = _job_status.get(jdef["id"], {})
+        next_run = job.next_run_time.isoformat() if job and job.next_run_time else None
+        results.append({
+            "id": jdef["id"],
+            "name": jdef["name"],
+            "desc": jdef["desc"],
+            "enabled": job is not None,
+            "next_run": next_run,
+            "last_run": tracked.get("last_run"),
+            "status": tracked.get("status", "pending"),
+            "error": tracked.get("error", ""),
+        })
+    return results
+
 
 async def _scan_all_olts() -> None:
-    async with SessionLocal() as session:
-        from sqlalchemy import select
+    _track_job("scan_olts")
+    try:
+        async with SessionLocal() as session:
+            from sqlalchemy import select
 
-        from ..models import OLTDevice
+            from ..models import OLTDevice
 
-        devices = (await session.execute(select(OLTDevice).where(OLTDevice.enabled.is_(True)))).scalars().all()
-        for device in devices:
-            try:
-                await collector.scan_olt(session, device.id)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("OLT scan failed for %s: %s", device.name, exc)
+            devices = (await session.execute(select(OLTDevice).where(OLTDevice.enabled.is_(True)))).scalars().all()
+            for device in devices:
+                try:
+                    await collector.scan_olt(session, device.id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("OLT scan failed for %s: %s", device.name, exc)
+        _finish_job("scan_olts", True)
+    except Exception as exc:
+        _finish_job("scan_olts", False, str(exc)[:500])
 
 
 async def _scan_all_mikrotiks() -> None:
-    async with SessionLocal() as session:
-        from sqlalchemy import select
+    _track_job("scan_mikrotiks")
+    try:
+        async with SessionLocal() as session:
+            from sqlalchemy import select
 
-        from ..models import MikrotikDevice
+            from ..models import MikrotikDevice
 
-        devices = (
-            await session.execute(select(MikrotikDevice).where(MikrotikDevice.enabled.is_(True)))
-        ).scalars().all()
-        for device in devices:
-            try:
-                await collector.scan_mikrotik(session, device.id)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("Mikrotik scan failed for %s: %s", device.name, exc)
+            devices = (
+                await session.execute(select(MikrotikDevice).where(MikrotikDevice.enabled.is_(True)))
+            ).scalars().all()
+            for device in devices:
+                try:
+                    await collector.scan_mikrotik(session, device.id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Mikrotik scan failed for %s: %s", device.name, exc)
+        _finish_job("scan_mikrotiks", True)
+    except Exception as exc:
+        _finish_job("scan_mikrotiks", False, str(exc)[:500])
 
 
 async def _collect_all_telemetry() -> None:
-    async with SessionLocal() as session:
-        from sqlalchemy import select
+    _track_job("telemetry")
+    try:
+        async with SessionLocal() as session:
+            from sqlalchemy import select
 
-        from ..models import OLTDevice
+            from ..models import OLTDevice
 
-        devices = (await session.execute(select(OLTDevice).where(OLTDevice.enabled.is_(True)))).scalars().all()
-        for device in devices:
-            try:
-                await collector.collect_telemetry(session, device.id)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("Telemetry failed for %s: %s", device.name, exc)
+            devices = (await session.execute(select(OLTDevice).where(OLTDevice.enabled.is_(True)))).scalars().all()
+            for device in devices:
+                try:
+                    await collector.collect_telemetry(session, device.id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Telemetry failed for %s: %s", device.name, exc)
+        _finish_job("telemetry", True)
+    except Exception as exc:
+        _finish_job("telemetry", False, str(exc)[:500])
 
 
 async def _poll_acs_metrics() -> None:
-    """Queue a monitoring poll for online ACS devices.
+    """Queue a monitoring poll for online ACS devices."""
+    _track_job("acs_poll")
+    try:
+        async with SessionLocal() as session:
+            from sqlalchemy import func, select
 
-    Creates a lightweight ``monitor`` job for each online device that supports
-    monitoring parameters.  When the CPE next sends a GetRPC, the handler
-    dispatches a GetParameterValues RPC and the response is stored as metrics.
-    """
-    async with SessionLocal() as session:
-        from sqlalchemy import func, select
+            from ..models import AcsDevice, AcsJob, AcsParameter
+            from ..utils.time import utcnow
 
-        from ..models import AcsDevice, AcsJob, AcsParameter
-        from ..utils.time import utcnow
-
-        devices = (await session.execute(select(AcsDevice).where(AcsDevice.online.is_(True)))).scalars().all()
-        now = utcnow()
-        for device in devices:
-            try:
-                # Only poll devices that have previously reported monitoring params
-                # (avoids Fault 9814 on basic CPEs).
-                count = (
-                    await session.execute(
-                        select(func.count(AcsParameter.id)).where(
-                            AcsParameter.device_id == device.id,
-                            AcsParameter.name.like("InternetGatewayDevice.WANDevice.%TotalBytesReceived%")
-                            | AcsParameter.name.like("InternetGatewayDevice.WANDevice.%TotalBytesSent%")
-                            | AcsParameter.name.like("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%")
-                            | AcsParameter.name.like("InternetGatewayDevice.DeviceInfo.CPUUsage%")
-                            | AcsParameter.name.like("InternetGatewayDevice.DeviceInfo.MemoryStatus.%")
+            devices = (await session.execute(select(AcsDevice).where(AcsDevice.online.is_(True)))).scalars().all()
+            now = utcnow()
+            for device in devices:
+                try:
+                    count = (
+                        await session.execute(
+                            select(func.count(AcsParameter.id)).where(
+                                AcsParameter.device_id == device.id,
+                                AcsParameter.name.like("InternetGatewayDevice.WANDevice.%TotalBytesReceived%")
+                                | AcsParameter.name.like("InternetGatewayDevice.WANDevice.%TotalBytesSent%")
+                                | AcsParameter.name.like("InternetGatewayDevice.LANDevice.1.WLANConfiguration.%")
+                                | AcsParameter.name.like("InternetGatewayDevice.DeviceInfo.CPUUsage%")
+                                | AcsParameter.name.like("InternetGatewayDevice.DeviceInfo.MemoryStatus.%")
+                            )
                         )
-                    )
-                ).scalar() or 0
-                if count == 0:
-                    continue
+                    ).scalar() or 0
+                    if count == 0:
+                        continue
 
-                # Skip if a monitor job is already queued or sent (avoid flooding)
-                pending = (
-                    await session.execute(
-                        select(func.count(AcsJob.id)).where(
-                            AcsJob.device_id == device.id,
-                            AcsJob.action == "monitor",
-                            AcsJob.status.in_(["queued", "sent"]),
+                    pending = (
+                        await session.execute(
+                            select(func.count(AcsJob.id)).where(
+                                AcsJob.device_id == device.id,
+                                AcsJob.action == "monitor",
+                                AcsJob.status.in_(["queued", "sent"]),
+                            )
                         )
-                    )
-                ).scalar() or 0
-                if pending > 0:
-                    continue
+                    ).scalar() or 0
+                    if pending > 0:
+                        continue
 
-                job = AcsJob(
-                    device_id=device.id,
-                    action="monitor",
-                    payload="{}",
-                    command_key=f"monitor-{now.strftime('%Y%m%d%H%M%S')}-{device.id}",
-                )
-                session.add(job)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("ACS metric poll failed for device %s: %s", device.id, exc)
-        await session.commit()
+                    job = AcsJob(
+                        device_id=device.id,
+                        action="monitor",
+                        payload="{}",
+                        command_key=f"monitor-{now.strftime('%Y%m%d%H%M%S')}-{device.id}",
+                    )
+                    session.add(job)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("ACS metric poll failed for device %s: %s", device.id, exc)
+            await session.commit()
+        _finish_job("acs_poll", True)
+    except Exception as exc:
+        _finish_job("acs_poll", False, str(exc)[:500])
 
 
 async def _bind() -> None:
-    async with SessionLocal() as session:
-        try:
-            await run_bindings(session)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Binding run failed: %s", exc)
+    _track_job("bind_macs")
+    try:
+        async with SessionLocal() as session:
+            try:
+                await run_bindings(session)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Binding run failed: %s", exc)
+        _finish_job("bind_macs", True)
+    except Exception as exc:
+        _finish_job("bind_macs", False, str(exc)[:500])
 
 
 # ---------------------------------------------------------------------------
@@ -137,13 +201,15 @@ async def _bind() -> None:
 
 async def _sync_mac_vendors() -> None:
     """Sync MAC vendor data from external API.  Runs daily at 04:00."""
-    async with SessionLocal() as session:
-        try:
+    _track_job("mac_vendor_sync")
+    try:
+        async with SessionLocal() as session:
             await sync_all_vendors(session)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("MAC vendor sync failed at 04:00: %s", exc)
-            # Schedule retry at 05:00
-            if _scheduler is not None:
+        _finish_job("mac_vendor_sync", True)
+    except Exception as exc:  # noqa: BLE001
+        _finish_job("mac_vendor_sync", False, str(exc)[:500])
+        logger.exception("MAC vendor sync failed at 04:00: %s", exc)
+        if _scheduler is not None:
                 _scheduler.add_job(
                     _sync_mac_vendors_retry,
                     CronTrigger(hour=5, minute=0),
@@ -170,50 +236,56 @@ async def _sync_mac_vendors_retry() -> None:
 
 async def _write_all_olts() -> None:
     """Connect to each enabled OLT and run ``write all`` to persist config."""
+    _track_job("olt_write_all")
     from datetime import datetime as _dt
 
     from ..drivers.bdcom import BdcomCliDriver
     from ..models import OLTDevice, OltWriteLog
 
-    async with SessionLocal() as session:
-        devices = (await session.execute(select(OLTDevice).where(OLTDevice.enabled.is_(True)))).scalars().all()
-
-    for device in devices:
-        started = utcnow()
-        log = OltWriteLog(olt_id=device.id, olt_name=device.name, status="running", started_at=started)
+    try:
         async with SessionLocal() as session:
-            session.add(log)
-            await session.commit()
-            log_id = log.id
+            devices = (await session.execute(select(OLTDevice).where(OLTDevice.enabled.is_(True)))).scalars().all()
+        all_ok = True
+        for device in devices:
+            started = utcnow()
+            log = OltWriteLog(olt_id=device.id, olt_name=device.name, status="running", started_at=started)
+            async with SessionLocal() as session:
+                session.add(log)
+                await session.commit()
+                log_id = log.id
 
-        driver = BdcomCliDriver(device)
-        try:
-            await driver.connect()
-            await driver._exec("enable", timeout=10)
-            await driver._sendline("write all")
-            await asyncio.sleep(15)
-            await driver._read_until_prompt(timeout=30)
-            finished = utcnow()
-            async with SessionLocal() as session:
-                row = await session.get(OltWriteLog, log_id)
-                if row:
-                    row.status = "success"
-                    row.message = "Config saved successfully"
-                    row.finished_at = finished
-                    await session.commit()
-            logger.info("OLT write all succeeded for %s", device.name)
-        except Exception as exc:  # noqa: BLE001
-            finished = utcnow()
-            async with SessionLocal() as session:
-                row = await session.get(OltWriteLog, log_id)
-                if row:
-                    row.status = "failed"
-                    row.message = str(exc)[:500]
-                    row.finished_at = finished
-                    await session.commit()
-            logger.exception("OLT write all failed for %s: %s", device.name, exc)
-        finally:
-            driver.close()
+            driver = BdcomCliDriver(device)
+            try:
+                await driver.connect()
+                await driver._exec("enable", timeout=10)
+                await driver._sendline("write all")
+                await asyncio.sleep(15)
+                await driver._read_until_prompt(timeout=30)
+                finished = utcnow()
+                async with SessionLocal() as session:
+                    row = await session.get(OltWriteLog, log_id)
+                    if row:
+                        row.status = "success"
+                        row.message = "Config saved successfully"
+                        row.finished_at = finished
+                        await session.commit()
+                logger.info("OLT write all succeeded for %s", device.name)
+            except Exception as exc:  # noqa: BLE001
+                all_ok = False
+                finished = utcnow()
+                async with SessionLocal() as session:
+                    row = await session.get(OltWriteLog, log_id)
+                    if row:
+                        row.status = "failed"
+                        row.message = str(exc)[:500]
+                        row.finished_at = finished
+                        await session.commit()
+                logger.exception("OLT write all failed for %s: %s", device.name, exc)
+            finally:
+                driver.close()
+        _finish_job("olt_write_all", all_ok)
+    except Exception as exc:
+        _finish_job("olt_write_all", False, str(exc)[:500])
 
 
 async def _write_all_olts_retry() -> None:

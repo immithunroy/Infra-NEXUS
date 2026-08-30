@@ -10,7 +10,7 @@ from .config import get_settings
 from .database import SessionLocal, init_db
 from .models import User
 from .security import hash_password
-from .services.scheduler import start_scheduler, stop_scheduler
+from .services.scheduler import start_scheduler, stop_scheduler, get_scheduler_status
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("olt_commander")
@@ -73,3 +73,8 @@ app.include_router(noc_pop.router)
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/scheduler/status")
+async def scheduler_status():
+    return get_scheduler_status()
