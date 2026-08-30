@@ -147,7 +147,9 @@ async def create_tj_box(body: TjBoxCreate, user: User = Depends(require_write), 
             next_num = int(last.split("-")[1]) + 1
         except (IndexError, ValueError):
             pass
-    box = TjBox(unique_id=f"TJ-{next_num}", **body.model_dump())
+    data = body.model_dump()
+    data["capacity"] = data.get("tray_count", 1) * data.get("splice_per_tray", 12)
+    box = TjBox(unique_id=f"TJ-{next_num}", **data)
     db.add(box)
     await db.commit()
     await db.refresh(box)
@@ -161,6 +163,7 @@ async def update_tj_box(box_id: int, body: TjBoxUpdate, user: User = Depends(req
         raise HTTPException(status_code=404, detail="TJ Box not found")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(box, field, value)
+    box.capacity = box.tray_count * box.splice_per_tray
     await db.commit()
     await db.refresh(box)
     return box
@@ -402,8 +405,11 @@ async def import_fiber(file: UploadFile = File(...), user: User = Depends(requir
                 continue
             box = TjBox(
                 unique_id=f"TJ-{tj_next}",
-                name=str(row[0] or ""), box_type=str(row[1] or "tj"),
-                capacity=int(row[2] or 4), tray_count=int(row[3] or 1),
+                name=str(row[0] or ""), box_type=str(row[1] or "regular_tj"),
+                tj_port=int(row[8] or 8) if len(row) > 8 else 8,
+                splice_per_tray=int(row[9] or 12) if len(row) > 9 else 12,
+                tray_count=int(row[3] or 1),
+                capacity=int(row[3] or 1) * (int(row[9] or 12) if len(row) > 9 else 12),
                 lat=float(row[4] or 0), lng=float(row[5] or 0),
                 address=str(row[6] or ""), notes=str(row[7] or ""),
             )

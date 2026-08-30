@@ -427,10 +427,11 @@ class TjBox(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     unique_id: Mapped[str] = mapped_column(String(16), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128), index=True)
-    box_type: Mapped[str] = mapped_column(String(32), default="tj")  # home_tj | regular_tj | enclosure | dome
-    tj_port: Mapped[int] = mapped_column(Integer, default=4)
-    capacity: Mapped[int] = mapped_column(Integer, default=4)  # splice capacity
+    box_type: Mapped[str] = mapped_column(String(32), default="regular_tj")  # home_tj | regular_tj | enclosure | dome
+    tj_port: Mapped[int] = mapped_column(Integer, default=8)
+    capacity: Mapped[int] = mapped_column(Integer, default=12)  # total splice capacity (tray_count * splice_per_tray)
     tray_count: Mapped[int] = mapped_column(Integer, default=1)
+    splice_per_tray: Mapped[int] = mapped_column(Integer, default=12)  # default 12, custom models may differ
     lat: Mapped[float] = mapped_column()
     lng: Mapped[float] = mapped_column()
     address: Mapped[str] = mapped_column(String(256), default="")

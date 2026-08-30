@@ -1097,9 +1097,10 @@ class CableOut(CableBase):
 class TjBoxBase(BaseModel):
     name: str
     box_type: str = "regular_tj"
-    tj_port: int = 4
-    capacity: int = 4
+    tj_port: int = 8
+    capacity: int = 12
     tray_count: int = 1
+    splice_per_tray: int = 12
     lat: float
     lng: float
     address: str = ""
@@ -1120,6 +1121,7 @@ class TjBoxUpdate(BaseModel):
     tj_port: int | None = None
     capacity: int | None = None
     tray_count: int | None = None
+    splice_per_tray: int | None = None
     lat: float | None = None
     lng: float | None = None
     address: str | None = None
