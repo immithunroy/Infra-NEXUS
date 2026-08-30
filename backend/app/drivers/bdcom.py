@@ -374,18 +374,14 @@ class BdcomCliDriver(BaseDriver):
 
     async def check_onu_realtime(self, pon_port: str, onu_id: int) -> dict:
         """Real-time CLI check: optical power, status, last up time."""
-        import logging
-        log = logging.getLogger("bdcom.check")
         try:
             await self.connect()
         except DriverError:
             raise
         try:
             pon_type = self.device.pon_type.lower()
-            # Strip ONU ID suffix if present (e.g. "EPON0/5:16" -> "EPON0/5")
             base_port = pon_port.split(":")[0] if ":" in pon_port else pon_port
             pon_num = base_port.replace("EPON", "").replace("GPON", "").replace("epon", "").replace("gpon", "")
-            log.warning("check_onu_realtime: pon_port=%s onu_id=%s pon_num=%s pon_type=%s", pon_port, onu_id, pon_num, pon_type)
 
             # Optical power
             rx_power = None
@@ -394,20 +390,17 @@ class BdcomCliDriver(BaseDriver):
                     cmd = f"show gpon optical-transceiver-diagnosis interface gpon {pon_num}:{onu_id}"
                 else:
                     cmd = f"show epon optical-transceiver-diagnosis interface epon {pon_num}:{onu_id}"
-                log.warning("check_onu_realtime optical cmd: %s", cmd)
                 optical = await self._exec(cmd, timeout=15)
-                log.warning("check_onu_realtime optical out: %r", optical[:300])
                 for line in optical.splitlines():
                     stripped = line.strip()
                     parts = stripped.split()
                     if len(parts) >= 2 and ":" in parts[0]:
                         try:
                             rx_power = float(parts[-1])
-                            log.warning("check_onu_realtime parsed rx=%s", rx_power)
                         except ValueError:
                             pass
-            except Exception as exc:
-                log.warning("check_onu_realtime optical error: %s", exc)
+            except Exception:
+                pass
 
             # Interface status + last up time
             status = None
@@ -417,9 +410,7 @@ class BdcomCliDriver(BaseDriver):
                     cmd2 = f"show interface gpon {pon_num}:{onu_id}"
                 else:
                     cmd2 = f"show interface epon {pon_num}:{onu_id}"
-                log.warning("check_onu_realtime iface cmd: %s", cmd2)
                 iface_out = await self._exec(cmd2, timeout=10)
-                log.warning("check_onu_realtime iface out: %r", iface_out[:300])
                 for line in iface_out.splitlines():
                     low = line.strip().lower()
                     if "is up" in low or "is down" in low:
@@ -427,10 +418,9 @@ class BdcomCliDriver(BaseDriver):
                     if "last transition" in low:
                         idx = low.index("last transition")
                         last_transition = line.strip()[idx + len("last transition"):].strip()
-            except Exception as exc:
-                log.warning("check_onu_realtime iface error: %s", exc)
+            except Exception:
+                pass
 
-            log.warning("check_onu_realtime result: status=%s rx=%s last_trans=%s", status, rx_power, last_transition)
             return {
                 "ok": True,
                 "pon_port": pon_port,
