@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from ..database import get_db
 from ..drivers.bdcom import BdcomCliDriver
-from ..models import OLTDevice, Onu, OnuSource, OnuState, Ticket, TicketStatus, User
+from ..models import OLTDevice, Onu, OnuSource, Ticket, TicketStatus, User
 from ..schemas import OnuCreate, OnuOut, OnuPortControl, OnuUpdate
 from ..security import get_current_user, require_gps_write, require_write, user_role
 from ..services.mac_vendor import vendor_map
@@ -97,12 +97,6 @@ async def check_onu_status(onu_id: int, user: User = Depends(require_write), db:
     driver = BdcomCliDriver(onu.olt)
     try:
         result = await driver.check_onu_realtime(pon_port=onu.pon_port, onu_id=onu.onu_id)
-        # Update DB with fresh values
-        if result.get("rx_power") is not None:
-            onu.rx_power = result["rx_power"]
-        if result.get("status"):
-            onu.state = OnuState.active if result["status"] == "up" else OnuState.inactive
-        await db.commit()
         return result
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
