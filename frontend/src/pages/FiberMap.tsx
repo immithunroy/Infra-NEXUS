@@ -1065,11 +1065,14 @@ export default function FiberMap() {
                         <tr className="border-b border-slate-200 dark:border-slate-700">
                           <th className="text-left py-2 text-slate-600 dark:text-slate-400">TJ</th>
                           <th className="text-right py-2 text-slate-600 dark:text-slate-400">Distance</th>
-                          <th className="text-left py-2 text-slate-600 dark:text-slate-400">Cable Destinations</th>
+                          <th className="text-right py-2 text-slate-600 dark:text-slate-400">Cable Required</th>
+                          <th className="text-left py-2 text-slate-600 dark:text-slate-400">Destinations</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {feasResults.map((r, i) => (
+                        {feasResults.map((r, i) => {
+                          const distM = Math.round(r.distance * 1000);
+                          return (
                           <tr key={r.tj.id} className="border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" onClick={() => {
                             if (mapRef.current) {
                               mapRef.current.flyTo([r.tj.lat, r.tj.lng], 16, { duration: 1.2 });
@@ -1082,11 +1085,21 @@ export default function FiberMap() {
                               {i === 0 && <span className="ml-2 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">NEAREST</span>}
                             </td>
                             <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{r.distance.toFixed(2)} km</td>
+                            <td className="py-2 text-right">
+                              <div className="font-mono text-slate-700 dark:text-slate-300">{distM.toLocaleString()} m</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5 space-x-2">
+                                <span>+5%: {Math.round(distM * 1.05).toLocaleString()} m</span>
+                                <span>+10%: {Math.round(distM * 1.10).toLocaleString()} m</span>
+                                <span>+15%: {Math.round(distM * 1.15).toLocaleString()} m</span>
+                                <span>+20%: {Math.round(distM * 1.20).toLocaleString()} m</span>
+                              </div>
+                            </td>
                             <td className="py-2 text-slate-600 dark:text-slate-400">
                               {r.destinations.length > 0 ? r.destinations.join(", ") : <span className="italic text-slate-400">No cables</span>}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   )}
