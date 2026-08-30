@@ -156,6 +156,9 @@ export default function FiberMap() {
   const [showForm, setShowForm] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const [baseMap, setBaseMap] = useState<"street" | "satellite" | "terrain" | "hybrid">("street");
+  const [netLayers, setNetLayers] = useState({ olt: true, pop: true, tjBox: true, splitter: true, customer: true, fiberCable: true, cableRoute: true });
+
   const [cableForm, setCableForm] = useState<Partial<Cable>>({});
   const [tjForm, setTjForm] = useState<Partial<TjBox>>({});
   const [splitterForm, setSplitterForm] = useState<Partial<Splitter>>({});
@@ -608,6 +611,10 @@ export default function FiberMap() {
             routeAlts={routeAlts}
             routing={routing}
             isFullscreen={isFullscreen}
+            baseMap={baseMap}
+            netLayers={netLayers}
+            onSetBaseMap={setBaseMap}
+            onSetNetLayers={setNetLayers}
             onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
             onTjClick={(tj) => {
               if (planner.phase === "select-src") {
@@ -1581,7 +1588,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, calcDistKm }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, calcDistKm }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -1590,6 +1597,10 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   routeAlts: { coords: [number, number][]; distance: number; duration: number }[];
   routing: boolean;
   isFullscreen: boolean;
+  baseMap: "street" | "satellite" | "terrain" | "hybrid";
+  netLayers: { olt: boolean; pop: boolean; tjBox: boolean; splitter: boolean; customer: boolean; fiberCable: boolean; cableRoute: boolean };
+  onSetBaseMap: (m: "street" | "satellite" | "terrain" | "hybrid") => void;
+  onSetNetLayers: (l: { olt: boolean; pop: boolean; tjBox: boolean; splitter: boolean; customer: boolean; fiberCable: boolean; cableRoute: boolean }) => void;
   onToggleFullscreen: () => void;
   onTjClick: (tj: TjBox) => void;
   onDrawCreated: (e: any) => void;
@@ -1636,13 +1647,22 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onStartCableEditRef.current = onStartCableEdit;
   const onSelectEditWaypointRef = useRef(onSelectEditWaypoint);
   onSelectEditWaypointRef.current = onSelectEditWaypoint;
+  const tileLayersRef = useRef<Record<string, L.TileLayer>>({});
+  const activeTileRef = useRef<L.TileLayer | null>(null);
 
   useEffect(() => {
     if (!mapEl || mapRef.current) return;
     const map = L.map(mapEl, { zoomControl: true }).setView([center.lat, center.lng], 13);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap", maxZoom: 19,
-    }).addTo(map);
+
+    const tiles: Record<string, L.TileLayer> = {
+      street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap", maxZoom: 19 }),
+      satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "&copy; Esri", maxZoom: 18 }),
+      terrain: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenTopoMap", maxZoom: 17 }),
+      hybrid: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap + Esri", maxZoom: 19 }),
+    };
+    tiles.street.addTo(map);
+    tileLayersRef.current = tiles;
+    activeTileRef.current = tiles.street;
 
     const drawControl = new L.Control.Draw({
       draw: {
@@ -1698,6 +1718,16 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
   useEffect(() => {
     const map = mapRef.current;
+    const tiles = tileLayersRef.current;
+    if (!map || !tiles[baseMap]) return;
+    if (activeTileRef.current === tiles[baseMap]) return;
+    if (activeTileRef.current) map.removeLayer(activeTileRef.current);
+    tiles[baseMap].addTo(map);
+    activeTileRef.current = tiles[baseMap];
+  }, [baseMap]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map) return;
     routeMarkersRef.current.forEach((m) => map.removeLayer(m));
     routeMarkersRef.current = [];
@@ -1741,6 +1771,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     const onLoopClickFn = onLoopClick;
     const onCutClickFn = onCutClick;
 
+    if (netLayers.fiberCable) {
     for (const cable of cables) {
       if (!cable.segments?.length) continue;
       if (editingCableId === cable.id) continue;
@@ -1791,7 +1822,9 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         }
       }
     }
+    }
 
+    if (netLayers.tjBox) {
     for (const tj of tjBoxes) {
       const hostedSps = splitters.filter((s) => s.tj_box_id === tj.id);
       const hasSplitters = hostedSps.length > 0;
@@ -1827,6 +1860,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       });
       marker.addTo(map);
     }
+    }
 
     for (const loop of loops) {
       const marker = L.marker([loop.lat, loop.lng], { icon: loopIcon() })
@@ -1859,7 +1893,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       });
       marker.addTo(map);
     }
-  }, [cables, tjBoxes, splitters, loops, cuts]);
+  }, [cables, tjBoxes, splitters, loops, cuts, netLayers]);
 
   // Cable edit overlay: renders editable waypoints and route polyline
   const cableEditLayersRef = useRef<L.Layer[]>([]);
@@ -1990,6 +2024,14 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     layer.addTo(map);
   }, [nocPopData]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = nocPopLayerRef.current;
+    if (!map || !layer) return;
+    if (netLayers.pop) { if (!map.hasLayer(layer)) layer.addTo(map); }
+    else { if (map.hasLayer(layer)) map.removeLayer(layer); }
+  }, [netLayers.pop]);
+
   return (
     <div className="relative h-full">
       <div ref={setMapEl} className="w-full h-full" style={{ minHeight: isFullscreen ? "100%" : "400px" }} />
@@ -2070,6 +2112,33 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           </div>
         </div>
       )}
+
+      <div className="absolute top-4 right-4 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-3 w-52">
+        <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">Base Map</div>
+        <div className="grid grid-cols-2 gap-1 mb-3">
+          {([["street","Street"],["satellite","Satellite"],["terrain","Terrain"],["hybrid","Hybrid"]] as const).map(([key,label]) => (
+            <button key={key} onClick={() => onSetBaseMap(key)} className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${baseMap === key ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"}`}>{label}</button>
+          ))}
+        </div>
+        <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">Network Layers</div>
+        <div className="space-y-1">
+          {([
+            ["pop","NOC/POP","#f97316"],
+            ["tjBox","TJ Box","#6366f1"],
+            ["splitter","Splitter","#f59e0b"],
+            ["fiberCable","Fiber Cable","#22c55e"],
+            ["cableRoute","Cable Route","#8b5cf6"],
+            ["olt","OLT","#ef4444"],
+            ["customer","Customer","#06b6d4"],
+          ] as const).map(([key,label,color]) => (
+            <label key={key} className="flex items-center gap-2 cursor-pointer group">
+              <input type="checkbox" checked={netLayers[key]} onChange={() => onSetNetLayers({ ...netLayers, [key]: !netLayers[key] })} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition">{label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
 
       <button
         onClick={onToggleFullscreen}

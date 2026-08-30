@@ -238,7 +238,7 @@ export default function Routing() {
 
   const toggleUpstream = useCallback(async (id: number) => {
     try {
-      const res = await api.put<{ id: number; is_upstream: boolean }>(`/devices/bgp/sessions/${id}/toggle-upstream`);
+      const res = await api.put<{ id: number; is_upstream: boolean }>(`/devices/bgp/sessions/${id}/toggle-upstream`, {});
       setSessions((prev) => prev.map((s) => s.id === id ? { ...s, is_upstream: res.is_upstream } : s));
     } catch {}
   }, []);
