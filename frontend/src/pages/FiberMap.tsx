@@ -19,7 +19,7 @@ const CORE_COLORS: Record<number, string> = {
 };
 
 const TJ_CAPACITY_COLORS: Record<number, string> = {
-  4: "#6366f1", 8: "#0ea5e9", 12: "#22c55e", 16: "#f59e0b", 24: "#ef4444", 32: "#8b5cf6", 48: "#ec4899", 96: "#14b8a6",
+  2: "#a855f7", 4: "#6366f1", 8: "#0ea5e9", 10: "#14b8a6", 12: "#22c55e",
 };
 
 const SPLITTER_RATIO_COLORS: Record<number, string> = {
@@ -909,7 +909,7 @@ export default function FiberMap() {
                   <option value="home_tj">Home TJ</option><option value="regular_tj">Regular TJ</option><option value="enclosure">Enclosure</option><option value="dome">Dome / Bamboo</option>
                 </select></div>
                 <div><label className="label">TJ Port</label><select className="input" value={tjForm.tj_port || 4} onChange={(e) => setTjForm({ ...tjForm, tj_port: Number(e.target.value) })}>
-                  {[2, 4, 6, 8, 10, 12].map((n) => <option key={n} value={n}>{n} ports</option>)}
+                  {[2, 4, 8, 10, 12].map((n) => <option key={n} value={n}>{n} ports</option>)}
                 </select></div>
               </div>
               {(tjForm.box_type === "enclosure" || tjForm.box_type === "dome") && (
