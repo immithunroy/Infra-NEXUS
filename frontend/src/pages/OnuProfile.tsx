@@ -187,6 +187,31 @@ export default function OnuProfile() {
         </div>
       )}
 
+      {/* Real-Time Check Result — positioned below header */}
+      {realtime && (
+        <div className="card p-4 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+          <h3 className="mb-3 text-sm font-semibold text-emerald-700 dark:text-emerald-400">Real-Time Status</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <InfoBox
+              label="Status"
+              value={
+                realtime.status === "up"
+                  ? <span className="text-emerald-600 font-bold">UP</span>
+                  : realtime.status === "down"
+                    ? <span className="text-red-600 font-bold">DOWN</span>
+                    : "—"
+              }
+            />
+            <InfoBox
+              label="RX Power"
+              value={realtime.rx_power != null ? `${realtime.rx_power} dBm` : "—"}
+              danger={realtime.rx_power != null && realtime.rx_power < -25}
+            />
+            <InfoBox label="Last Up" value={realtime.last_transition || "—"} />
+          </div>
+        </div>
+      )}
+
       {/* Main info card */}
       <div className="card p-6">
         <div className="flex items-start justify-between gap-4">
@@ -220,30 +245,6 @@ export default function OnuProfile() {
         </div>
       </div>
 
-      {/* Real-Time Check Result */}
-      {realtime && (
-        <div className="card p-4 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
-          <h3 className="mb-3 text-sm font-semibold text-emerald-700 dark:text-emerald-400">Real-Time Status</h3>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <InfoBox
-              label="Status"
-              value={
-                realtime.status === "up"
-                  ? <span className="text-emerald-600 font-bold">UP</span>
-                  : realtime.status === "down"
-                    ? <span className="text-red-600 font-bold">DOWN</span>
-                    : "—"
-              }
-            />
-            <InfoBox
-              label="RX Power"
-              value={realtime.rx_power != null ? `${realtime.rx_power} dBm` : "—"}
-              danger={realtime.rx_power != null && realtime.rx_power < -25}
-            />
-            <InfoBox label="Last Up" value={realtime.last_transition || "—"} />
-          </div>
-        </div>
-      )}
       {writeOk && (
         <div className="card p-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Ethernet Port Control</h3>

@@ -176,8 +176,8 @@ async def _snmp_optical(device: OLTDevice, rx_oid: str, tx_oid: str) -> dict[str
 async def _snmp_optical_epon(device: OLTDevice) -> dict[str, OpticalSample]:
     return await _snmp_optical(
         device,
-        "1.3.6.1.4.1.3320.101.10.5.1.5",
-        "1.3.6.1.4.1.3320.101.10.5.1.6",
+        "1.3.6.1.4.1.3320.101.10.10.1.5",  # eponOnuOpticalRxPower (ONU RX)
+        "1.3.6.1.4.1.3320.101.10.10.1.6",   # eponOnuOpticalTxPower (ONU TX)
     )
 
 
