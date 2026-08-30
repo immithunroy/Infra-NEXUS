@@ -397,58 +397,56 @@ async def import_fiber(file: UploadFile = File(...), user: User = Depends(requir
         try: sp_next = int(last.split("-")[1]) + 1
         except: pass
 
+    def _map_columns(ws):
+        """Build {header_name: col_index} dict from row 1, then return list-of-dicts for data rows."""
+        headers = [str(c.value or "").strip().lower() for c in ws[1]] if ws.max_row else []
+        rows = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            rows.append({headers[i]: row[i] for i in range(min(len(headers), len(row)))})
+        return rows
+
     # TJ Boxes
     if "TJ Boxes" in wb.sheetnames:
-        ws = wb["TJ Boxes"]
-        # Detect format: new (6-col: Name,Port,Lat,Lng,Address,Note) vs old (8-col: Name,Type,Capacity,Trays,Lat,Lng,Address,Note)
-        header = [str(c.value or "").lower() for c in ws[1]] if ws.max_row else []
-        new_format = "port" in header
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row[0]:
+        tj_rows = _map_columns(wb["TJ Boxes"])
+        for r in tj_rows:
+            name = str(r.get("name") or "").strip()
+            if not name:
                 continue
-            if new_format:
-                box = TjBox(
-                    unique_id=f"TJ-{tj_next}",
-                    name=str(row[0] or ""), box_type="regular_tj",
-                    tj_port=int(row[1] or 8),
-                    splice_per_tray=12, tray_count=1, capacity=12,
-                    lat=float(row[2] or 0), lng=float(row[3] or 0),
-                    address=str(row[4] or ""), notes=str(row[5] or ""),
-                )
-            else:
-                box = TjBox(
-                    unique_id=f"TJ-{tj_next}",
-                    name=str(row[0] or ""), box_type=str(row[1] or "regular_tj"),
-                    tj_port=int(row[8] or 8) if len(row) > 8 else 8,
-                    splice_per_tray=int(row[9] or 12) if len(row) > 9 else 12,
-                    tray_count=int(row[3] or 1),
-                    capacity=int(row[3] or 1) * (int(row[9] or 12) if len(row) > 9 else 12),
-                    lat=float(row[4] or 0), lng=float(row[5] or 0),
-                    address=str(row[6] or ""), notes=str(row[7] or ""),
-                )
+            box = TjBox(
+                unique_id=f"TJ-{tj_next}",
+                name=name, box_type="regular_tj",
+                tj_port=int(r.get("port") or 8),
+                splice_per_tray=12, tray_count=1, capacity=12,
+                lat=float(r.get("latitude") or 0), lng=float(r.get("longitude") or 0),
+                address=str(r.get("address") or ""), notes=str(r.get("note") or ""),
+            )
             db.add(box)
             tj_next += 1
             imported["tj_boxes"] += 1
 
     # Splitters
     if "Splitters" in wb.sheetnames:
-        ws = wb["Splitters"]
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row[4] or not row[5]:
+        sp_rows = _map_columns(wb["Splitters"])
+        for r in sp_rows:
+            name = str(r.get("name") or "").strip()
+            lat = r.get("latitude")
+            lng = r.get("longitude")
+            if not name or not lat or not lng:
                 continue
             tj_box_id = None
-            if row[2]:
-                box_res = await db.execute(select(TjBox).where(TjBox.name == str(row[2])))
+            tj_name = str(r.get("tj box name") or r.get("tj_box_name") or "").strip()
+            if tj_name:
+                box_res = await db.execute(select(TjBox).where(TjBox.name == tj_name))
                 box = box_res.scalars().first()
                 if box:
                     tj_box_id = box.id
             splitter = Splitter(
                 unique_id=f"SP-{sp_next}",
-                name=str(row[0] or ""), split_ratio=int(row[1] or 2),
-                tj_box_id=tj_box_id, input_core=int(row[3] or 0),
-                output_cores=str(row[4] or ""),
-                lat=float(row[5] or 0), lng=float(row[6] or 0),
-                notes=str(row[7] or ""),
+                name=name, split_ratio=int(r.get("split ratio") or 2),
+                tj_box_id=tj_box_id, input_core=int(r.get("input core") or 0),
+                output_cores=str(r.get("output cores") or ""),
+                lat=float(lat), lng=float(lng),
+                notes=str(r.get("notes") or r.get("note") or ""),
             )
             db.add(splitter)
             sp_next += 1
@@ -456,33 +454,35 @@ async def import_fiber(file: UploadFile = File(...), user: User = Depends(requir
 
     # Cables
     if "Cables" in wb.sheetnames:
-        ws = wb["Cables"]
         cable_cache: dict[str, Cable] = {}
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row[0]:
-                continue
-            link_id = str(row[0])
+        cbl_rows = _map_columns(wb["Cables"])
+        for r in cbl_rows:
+            link_id = str(r.get("link id") or "").strip()
+            if not link_id:
+                max_res = await db.execute(select(Cable.id).order_by(Cable.id.desc()).limit(1))
+                max_id = max_res.scalar() or 0
+                link_id = f"LINK-{max_id + 1001}"
             if link_id not in cable_cache:
-                # Auto-generate link_id if empty
-                if not link_id:
-                    max_res = await db.execute(select(Cable.id).order_by(Cable.id.desc()).limit(1))
-                    max_id = max_res.scalar() or 0
-                    link_id = f"LINK-{max_id + 1001}"
                 cable = Cable(
-                    link_id=link_id, link_name=str(row[1] or ""), code=str(row[2] or ""),
-                    core_count=int(row[3] or 12), cable_type=str(row[4] or "round"),
-                    manufacturer=str(row[5] or ""), manufacturing_year=int(row[6] or 0),
-                    route_type=str(row[7] or "driving"), notes=str(row[8] or ""),
+                    link_id=link_id,
+                    link_name=str(r.get("link name") or ""), code=str(r.get("code") or ""),
+                    core_count=int(r.get("core count") or 12), cable_type=str(r.get("type") or "round"),
+                    manufacturer=str(r.get("manufacturer") or ""), manufacturing_year=int(r.get("year") or 0),
+                    route_type=str(r.get("route type") or "driving"), notes=str(r.get("notes") or r.get("note") or ""),
                 )
                 db.add(cable)
                 await db.flush()
                 cable_cache[link_id] = cable
                 imported["cables"] += 1
-            if row[9] and row[10] and row[11] and row[12]:
+            seg_lat = r.get("segment lat")
+            seg_lng = r.get("segment lng")
+            seg_end_lat = r.get("segment end lat")
+            seg_end_lng = r.get("segment end lng")
+            if seg_lat and seg_lng and seg_end_lat and seg_end_lng:
                 seg = CableSegment(
                     cable_id=cable_cache[link_id].id,
-                    start_lat=float(row[9]), start_lng=float(row[10]),
-                    end_lat=float(row[11]), end_lng=float(row[12]),
+                    start_lat=float(seg_lat), start_lng=float(seg_lng),
+                    end_lat=float(seg_end_lat), end_lng=float(seg_end_lng),
                 )
                 db.add(seg)
 
