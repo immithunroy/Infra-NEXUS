@@ -244,7 +244,7 @@ export default function FiberMap() {
   const [feasCheckOpen, setFeasCheckOpen] = useState(false);
   const [feasLat, setFeasLat] = useState("");
   const [feasLng, setFeasLng] = useState("");
-  const [feasResults, setFeasResults] = useState<{ tj: TjBox; distance: number; destinations: string[] }[]>([]);
+  const [feasResults, setFeasResults] = useState<{ tj: TjBox; distanceM: number; destinations: string[] }[]>([]);
   const [feasChecked, setFeasChecked] = useState(false);
 
   const mapRef = useRef<L.Map | null>(null);
@@ -527,7 +527,7 @@ export default function FiberMap() {
       return;
     }
     const results = tjBoxes.map((tj) => {
-      const distance = haversine(lat, lng, tj.lat, tj.lng);
+      const distanceM = haversine(lat, lng, tj.lat, tj.lng);
       const connectedCables = cables.filter((c) =>
         c.segments?.some((s) =>
           (Math.abs(s.start_lat - tj.lat) < 0.001 && Math.abs(s.start_lng - tj.lng) < 0.001) ||
@@ -540,9 +540,9 @@ export default function FiberMap() {
         }
         return c.code;
       }))];
-      return { tj, distance, destinations };
+      return { tj, distanceM, destinations };
     });
-    results.sort((a, b) => a.distance - b.distance);
+    results.sort((a, b) => a.distanceM - b.distanceM);
     setFeasResults(results.slice(0, 3));
     setFeasChecked(true);
   };
@@ -1071,7 +1071,7 @@ export default function FiberMap() {
                       </thead>
                       <tbody>
                         {feasResults.map((r, i) => {
-                          const distM = Math.round(r.distance * 1000);
+                          const distM = Math.round(r.distanceM);
                           return (
                           <tr key={r.tj.id} className="border-b border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" onClick={() => {
                             if (mapRef.current) {
@@ -1084,7 +1084,7 @@ export default function FiberMap() {
                               {r.tj.name && <span className="ml-1 text-slate-500 dark:text-slate-400">{r.tj.name}</span>}
                               {i === 0 && <span className="ml-2 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">NEAREST</span>}
                             </td>
-                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{r.distance.toFixed(2)} km</td>
+                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{(r.distanceM / 1000).toFixed(2)} km</td>
                             <td className="py-2 text-right">
                               <div className="font-mono text-slate-700 dark:text-slate-300">{distM.toLocaleString()} m</div>
                               <div className="text-[10px] text-slate-400 mt-0.5 space-x-2">
