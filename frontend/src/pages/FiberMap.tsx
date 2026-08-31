@@ -790,6 +790,10 @@ export default function FiberMap() {
             onConfirmDrawWaypoint={confirmDrawWaypoint}
             onUndoDrawWaypoint={undoDrawWaypoint}
             onCancelDrawCable={cancelDrawCable}
+            onStartDragTj={startDragTj}
+            dragTj={dragTj}
+            onSaveDragTj={saveDragTj}
+            onCancelDragTj={cancelDragTj}
           />
         </div>
 
@@ -1837,7 +1841,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm, drawCable, onStartDrawCable, onSetDrawMousePos, onConfirmDrawWaypoint, onUndoDrawWaypoint, onCancelDrawCable }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm, drawCable, onStartDrawCable, onSetDrawMousePos, onConfirmDrawWaypoint, onUndoDrawWaypoint, onCancelDrawCable, onStartDragTj, dragTj, onSaveDragTj, onCancelDragTj }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -1890,6 +1894,10 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onConfirmDrawWaypoint: () => void;
   onUndoDrawWaypoint: () => void;
   onCancelDrawCable: () => void;
+  onStartDragTj: (tj: TjBox, marker: L.Marker) => void;
+  dragTj: { active: boolean; tj: TjBox | null; marker: L.Marker | null };
+  onSaveDragTj: () => void;
+  onCancelDragTj: () => void;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
   const drawControlRef = useRef<L.Control.Draw | null>(null);
@@ -2239,7 +2247,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           menu.remove();
         });
         menu.querySelector('[data-action="drag-tj"]')?.addEventListener("click", () => {
-          startDragTj(tj, marker);
+          onStartDragTj(tj, marker);
           menu.remove();
         });
         menu.querySelector('[data-action="view-details"]')?.addEventListener("click", () => {
@@ -2467,8 +2475,8 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 rounded-xl bg-white/95 dark:bg-slate-900/95 px-4 py-2.5 shadow-2xl border border-amber-300 dark:border-amber-700 backdrop-blur-sm">
           <span className="text-xs font-semibold text-amber-600">Dragging TJ: {dragTj.tj?.unique_id}</span>
           <span className="text-[10px] text-slate-400">Drag the marker to move, then Save</span>
-          <button className="rounded-md bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 transition" onClick={saveDragTj}>Save</button>
-          <button className="rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition" onClick={cancelDragTj}>Cancel</button>
+          <button className="rounded-md bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 transition" onClick={onSaveDragTj}>Save</button>
+          <button className="rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition" onClick={onCancelDragTj}>Cancel</button>
         </div>
       )}
 
