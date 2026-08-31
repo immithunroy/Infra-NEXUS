@@ -1213,10 +1213,15 @@ class FiberLoopOut(FiberLoopBase):
 # ---------------------------------------------------------------- splices
 class SpliceBase(BaseModel):
     tj_id: int
-    cable_a_id: int
-    core_a: int
-    cable_b_id: int
-    core_b: int
+    cable_a_id: int | None = None
+    core_a: int = 0
+    cable_b_id: int | None = None
+    core_b: int = 0
+    splitter_a_id: int | None = None
+    splitter_b_id: int | None = None
+    port_a: int = 0
+    port_b: int = 0
+    tray_id: int = 1
     status: str = "active"
     notes: str = ""
 
@@ -1230,6 +1235,11 @@ class SpliceUpdate(BaseModel):
     core_a: int | None = None
     cable_b_id: int | None = None
     core_b: int | None = None
+    splitter_a_id: int | None = None
+    splitter_b_id: int | None = None
+    port_a: int | None = None
+    port_b: int | None = None
+    tray_id: int | None = None
     status: str | None = None
     notes: str | None = None
 
@@ -1241,6 +1251,10 @@ class SpliceOut(SpliceBase):
     created_at: datetime | None = None
     cable_a_code: str = ""
     cable_b_code: str = ""
+    splitter_a_name: str = ""
+    splitter_b_name: str = ""
+    splitter_a_ratio: int = 0
+    splitter_b_ratio: int = 0
 
 
 # ---------------------------------------------------------------- cable cuts

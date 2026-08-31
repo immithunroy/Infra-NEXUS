@@ -169,6 +169,76 @@ async def update_tj_box(box_id: int, body: TjBoxUpdate, user: User = Depends(req
     return box
 
 
+@router.put("/tj-boxes/{box_id}/move")
+async def move_tj_box(box_id: int, body: TjBoxUpdate, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
+    """Move a TJ box to new coordinates. Updates connected cable endpoints automatically."""
+    from sqlalchemy import or_
+    
+    box = await db.get(TjBox, box_id)
+    if box is None:
+        raise HTTPException(status_code=404, detail="TJ Box not found")
+    
+    new_lat = body.lat if body.lat is not None else box.lat
+    new_lng = body.lng if body.lng is not None else box.lng
+    
+    # Calculate offset
+    lat_offset = new_lat - box.lat
+    lng_offset = new_lng - box.lng
+    
+    if lat_offset == 0 and lng_offset == 0:
+        return box
+    
+    # Update TJ location
+    box.lat = new_lat
+    box.lng = new_lng
+    await db.flush()
+    
+    # Update connected cable segments - move endpoints that are near the old TJ location
+    cables_res = await db.execute(
+        select(Cable).where(or_(Cable.src_tj_id == box_id, Cable.dst_tj_id == box_id))
+    )
+    cables = cables_res.scalars().all()
+    
+    for cable in cables:
+        segs_res = await db.execute(
+            select(CableSegment).where(CableSegment.cable_id == cable.id).order_by(CableSegment.order_index)
+        )
+        segments = segs_res.scalars().all()
+        
+        if not segments:
+            continue
+        
+        # Update first segment start if src TJ
+        if cable.src_tj_id == box_id:
+            segments[0].start_lat = new_lat
+            segments[0].start_lng = new_lng
+        
+        # Update last segment end if dst TJ
+        if cable.dst_tj_id == box_id:
+            segments[-1].end_lat = new_lat
+            segments[-1].end_lng = new_lng
+        
+        # Update intermediate segment endpoints if they match old position
+        for seg in segments:
+            if abs(seg.start_lat - (new_lat - lat_offset)) < 0.0001 and abs(seg.start_lng - (new_lng - lng_offset)) < 0.0001:
+                seg.start_lat = new_lat
+                seg.start_lng = new_lng
+            if abs(seg.end_lat - (new_lat - lat_offset)) < 0.0001 and abs(seg.end_lng - (new_lng - lng_offset)) < 0.0001:
+                seg.end_lat = new_lat
+                seg.end_lng = new_lng
+    
+    # Update hosted splitters
+    splitters_res = await db.execute(select(Splitter).where(Splitter.tj_box_id == box_id))
+    splitters = splitters_res.scalars().all()
+    for splitter in splitters:
+        splitter.lat = new_lat
+        splitter.lng = new_lng
+    
+    await db.commit()
+    await db.refresh(box)
+    return box
+
+
 @router.delete("/tj-boxes/{box_id}", status_code=204)
 async def delete_tj_box(box_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
     box = await db.get(TjBox, box_id)
@@ -497,63 +567,166 @@ async def list_splices(tj_id: int | None = None, limit: int = 200, offset: int =
     q = select(Splice)
     if tj_id is not None:
         q = q.where(Splice.tj_id == tj_id)
-    q = q.order_by(Splice.id).limit(limit).offset(offset)
+    q = q.order_by(Splice.tray_id, Splice.id).limit(limit).offset(offset)
     res = await db.execute(q)
     splices = res.scalars().all()
-    # Batch cable lookup
+    # Batch lookup
     cable_ids = set()
+    splitter_ids = set()
     for sp in splices:
-        cable_ids.add(sp.cable_a_id)
-        cable_ids.add(sp.cable_b_id)
+        if sp.cable_a_id: cable_ids.add(sp.cable_a_id)
+        if sp.cable_b_id: cable_ids.add(sp.cable_b_id)
+        if sp.splitter_a_id: splitter_ids.add(sp.splitter_a_id)
+        if sp.splitter_b_id: splitter_ids.add(sp.splitter_b_id)
     cable_map = {}
     if cable_ids:
         cables_res = await db.execute(select(Cable.id, Cable.code).where(Cable.id.in_(cable_ids)))
         cable_map = {c.id: c.code for c in cables_res.all()}
+    splitter_map = {}
+    splitter_ratio_map = {}
+    if splitter_ids:
+        splitters_res = await db.execute(select(Splitter.id, Splitter.name, Splitter.split_ratio).where(Splitter.id.in_(splitter_ids)))
+        for s in splitters_res.all():
+            splitter_map[s.id] = s.name
+            splitter_ratio_map[s.id] = s.split_ratio
     out = []
     for sp in splices:
         d = SpliceOut.model_validate(sp)
-        d.cable_a_code = cable_map.get(sp.cable_a_id, "?")
-        d.cable_b_code = cable_map.get(sp.cable_b_id, "?")
+        d.cable_a_code = cable_map.get(sp.cable_a_id, "") if sp.cable_a_id else ""
+        d.cable_b_code = cable_map.get(sp.cable_b_id, "") if sp.cable_b_id else ""
+        d.splitter_a_name = splitter_map.get(sp.splitter_a_id, "") if sp.splitter_a_id else ""
+        d.splitter_b_name = splitter_map.get(sp.splitter_b_id, "") if sp.splitter_b_id else ""
+        d.splitter_a_ratio = splitter_ratio_map.get(sp.splitter_a_id, 0) if sp.splitter_a_id else 0
+        d.splitter_b_ratio = splitter_ratio_map.get(sp.splitter_b_id, 0) if sp.splitter_b_id else 0
         out.append(d)
     return out
 
 
 @router.post("/splices", response_model=SpliceOut, status_code=201, dependencies=[Depends(require_write)])
 async def create_splice(body: SpliceCreate, db: AsyncSession = Depends(get_db)):
-    # Validate that neither core is already occupied by an active/spare splice
     from sqlalchemy import and_, or_
-    existing = (await db.execute(
+    
+    # Validate: must have at least one endpoint (cable or splitter on each side)
+    if not body.cable_a_id and not body.splitter_a_id:
+        raise HTTPException(400, "Must specify either cable_a_id or splitter_a_id")
+    if not body.cable_b_id and not body.splitter_b_id:
+        raise HTTPException(400, "Must specify either cable_b_id or splitter_b_id")
+    
+    # Validate: cannot have both cable and splitter on same side
+    if body.cable_a_id and body.splitter_a_id:
+        raise HTTPException(400, "Cannot specify both cable_a_id and splitter_a_id")
+    if body.cable_b_id and body.splitter_b_id:
+        raise HTTPException(400, "Cannot specify both cable_b_id and splitter_b_id")
+    
+    # Validate: cannot self-splice (same cable+core or same splitter+port)
+    if body.cable_a_id and body.cable_b_id and body.cable_a_id == body.cable_b_id and body.core_a == body.core_b:
+        raise HTTPException(400, "Cannot splice a cable core to itself")
+    if body.splitter_a_id and body.splitter_b_id and body.splitter_a_id == body.splitter_b_id and body.port_a == body.port_b:
+        raise HTTPException(400, "Cannot splice a splitter port to itself")
+    
+    # Validate: both endpoints must belong to the same TJ
+    if body.cable_a_id:
+        cable_a = await db.get(Cable, body.cable_a_id)
+        if not cable_a:
+            raise HTTPException(400, "Cable A not found")
+        if cable_a.src_tj_id != body.tj_id and cable_a.dst_tj_id != body.tj_id:
+            raise HTTPException(400, "Cable A is not connected to this TJ")
+    if body.cable_b_id:
+        cable_b = await db.get(Cable, body.cable_b_id)
+        if not cable_b:
+            raise HTTPException(400, "Cable B not found")
+        if cable_b.src_tj_id != body.tj_id and cable_b.dst_tj_id != body.tj_id:
+            raise HTTPException(400, "Cable B is not connected to this TJ")
+    if body.splitter_a_id:
+        splitter_a = await db.get(Splitter, body.splitter_a_id)
+        if not splitter_a:
+            raise HTTPException(400, "Splitter A not found")
+        if splitter_a.tj_box_id != body.tj_id:
+            raise HTTPException(400, "Splitter A is not hosted at this TJ")
+    if body.splitter_b_id:
+        splitter_b = await db.get(Splitter, body.splitter_b_id)
+        if not splitter_b:
+            raise HTTPException(400, "Splitter B not found")
+        if splitter_b.tj_box_id != body.tj_id:
+            raise HTTPException(400, "Splitter B is not hosted at this TJ")
+    
+    # Check for duplicate splice
+    existing_dup = (await db.execute(
         select(Splice).where(
             Splice.tj_id == body.tj_id,
             Splice.status.in_(["active", "spare"]),
             or_(
-                and_(Splice.cable_a_id == body.cable_a_id, Splice.core_a == body.core_a),
-                and_(Splice.cable_b_id == body.cable_a_id, Splice.core_b == body.core_a),
-                and_(Splice.cable_a_id == body.cable_b_id, Splice.core_a == body.core_b),
-                and_(Splice.cable_b_id == body.cable_b_id, Splice.core_b == body.core_b),
+                and_(
+                    Splice.cable_a_id == body.cable_a_id, Splice.core_a == body.core_a,
+                    Splice.cable_b_id == body.cable_b_id, Splice.core_b == body.core_b,
+                    Splice.splitter_a_id == body.splitter_a_id, Splice.port_a == body.port_a,
+                    Splice.splitter_b_id == body.splitter_b_id, Splice.port_b == body.port_b,
+                ),
+                and_(
+                    Splice.cable_a_id == body.cable_b_id, Splice.core_a == body.core_b,
+                    Splice.cable_b_id == body.cable_a_id, Splice.core_b == body.core_a,
+                    Splice.splitter_a_id == body.splitter_b_id, Splice.port_a == body.port_b,
+                    Splice.splitter_b_id == body.splitter_a_id, Splice.port_b == body.port_a,
+                ),
             )
         )
     )).scalars().all()
-    if existing:
-        occupied = existing[0]
-        if occupied.cable_a_id == body.cable_a_id and occupied.core_a == body.core_a:
-            raise HTTPException(400, f"Core {body.core_a} on cable A is already spliced (splice #{occupied.id})")
-        if occupied.cable_b_id == body.cable_a_id and occupied.core_b == body.core_a:
-            raise HTTPException(400, f"Core {body.core_a} on cable A is already spliced (splice #{occupied.id})")
-        if occupied.cable_a_id == body.cable_b_id and occupied.core_a == body.core_b:
-            raise HTTPException(400, f"Core {body.core_b} on cable B is already spliced (splice #{occupied.id})")
-        if occupied.cable_b_id == body.cable_b_id and occupied.core_b == body.core_b:
-            raise HTTPException(400, f"Core {body.core_b} on cable B is already spliced (splice #{occupied.id})")
+    if existing_dup:
+        raise HTTPException(400, "This splice already exists")
+    
+    # Validate core/port occupancy
+    def _check_occupied(cable_id, core, splitter_id, port, side_label):
+        if cable_id:
+            occ = (await db.execute(
+                select(Splice).where(
+                    Splice.tj_id == body.tj_id,
+                    Splice.status.in_(["active", "spare"]),
+                    or_(
+                        and_(Splice.cable_a_id == cable_id, Splice.core_a == core),
+                        and_(Splice.cable_b_id == cable_id, Splice.core_b == core),
+                    )
+                )
+            )).scalars().first()
+            if occ:
+                raise HTTPException(400, f"{side_label}: Core {core} is already occupied by splice #{occ.id}")
+        elif splitter_id:
+            occ = (await db.execute(
+                select(Splice).where(
+                    Splice.tj_id == body.tj_id,
+                    Splice.status.in_(["active", "spare"]),
+                    or_(
+                        and_(Splice.splitter_a_id == splitter_id, Splice.port_a == port),
+                        and_(Splice.splitter_b_id == splitter_id, Splice.port_b == port),
+                    )
+                )
+            )).scalars().first()
+            if occ:
+                raise HTTPException(400, f"{side_label}: Port {port} is already occupied by splice #{occ.id}")
+
+    await _check_occupied(body.cable_a_id, body.core_a, body.splitter_a_id, body.port_a, "Endpoint A")
+    await _check_occupied(body.cable_b_id, body.core_b, body.splitter_b_id, body.port_b, "Endpoint B")
 
     splice = Splice(**body.model_dump())
     db.add(splice)
     await db.commit()
     await db.refresh(splice)
-    cables_res = await db.execute(select(Cable).where(Cable.id.in_([splice.cable_a_id, splice.cable_b_id])))
-    cable_map = {c.id: c.code for c in cables_res.scalars().all()}
+    
+    # Build response
     d = SpliceOut.model_validate(splice)
-    d.cable_a_code = cable_map.get(splice.cable_a_id, "?")
-    d.cable_b_code = cable_map.get(splice.cable_b_id, "?")
+    if splice.cable_a_id:
+        ca = await db.get(Cable, splice.cable_a_id)
+        d.cable_a_code = ca.code if ca else ""
+    if splice.cable_b_id:
+        cb = await db.get(Cable, splice.cable_b_id)
+        d.cable_b_code = cb.code if cb else ""
+    if splice.splitter_a_id:
+        sa = await db.get(Splitter, splice.splitter_a_id)
+        d.splitter_a_name = sa.name if sa else ""
+        d.splitter_a_ratio = sa.split_ratio if sa else 0
+    if splice.splitter_b_id:
+        sb = await db.get(Splitter, splice.splitter_b_id)
+        d.splitter_b_name = sb.name if sb else ""
+        d.splitter_b_ratio = sb.split_ratio if sb else 0
     return d
 
 
@@ -570,37 +743,70 @@ async def update_splice(splice_id: int, body: SpliceUpdate, db: AsyncSession = D
     eff_core_a = eff.get("core_a", splice.core_a)
     eff_cable_b = eff.get("cable_b_id", splice.cable_b_id)
     eff_core_b = eff.get("core_b", splice.core_b)
+    eff_splitter_a = eff.get("splitter_a_id", splice.splitter_a_id)
+    eff_splitter_b = eff.get("splitter_b_id", splice.splitter_b_id)
+    eff_port_a = eff.get("port_a", splice.port_a)
+    eff_port_b = eff.get("port_b", splice.port_b)
     eff_status = eff.get("status", splice.status)
 
-    # If setting to active/spare, validate cores are not occupied by other splices
+    # If setting to active/spare, validate cores/ports are not occupied
     if eff_status in ("active", "spare"):
         from sqlalchemy import and_, or_
-        existing = (await db.execute(
-            select(Splice).where(
-                Splice.tj_id == splice.tj_id,
-                Splice.id != splice_id,
-                Splice.status.in_(["active", "spare"]),
-                or_(
-                    and_(Splice.cable_a_id == eff_cable_a, Splice.core_a == eff_core_a),
-                    and_(Splice.cable_b_id == eff_cable_a, Splice.core_b == eff_core_a),
-                    and_(Splice.cable_a_id == eff_cable_b, Splice.core_a == eff_core_b),
-                    and_(Splice.cable_b_id == eff_cable_b, Splice.core_b == eff_core_b),
-                )
-            )
-        )).scalars().all()
-        if existing:
-            occupied = existing[0]
-            raise HTTPException(400, f"Core is already occupied by splice #{occupied.id}")
+        
+        def _check_occupied_for_update(cable_id, core, splitter_id, port, side_label):
+            if cable_id:
+                occ = (await db.execute(
+                    select(Splice).where(
+                        Splice.tj_id == splice.tj_id,
+                        Splice.id != splice_id,
+                        Splice.status.in_(["active", "spare"]),
+                        or_(
+                            and_(Splice.cable_a_id == cable_id, Splice.core_a == core),
+                            and_(Splice.cable_b_id == cable_id, Splice.core_b == core),
+                        )
+                    )
+                )).scalars().first()
+                if occ:
+                    raise HTTPException(400, f"{side_label}: Core {core} is already occupied by splice #{occ.id}")
+            elif splitter_id:
+                occ = (await db.execute(
+                    select(Splice).where(
+                        Splice.tj_id == splice.tj_id,
+                        Splice.id != splice_id,
+                        Splice.status.in_(["active", "spare"]),
+                        or_(
+                            and_(Splice.splitter_a_id == splitter_id, Splice.port_a == port),
+                            and_(Splice.splitter_b_id == splitter_id, Splice.port_b == port),
+                        )
+                    )
+                )).scalars().first()
+                if occ:
+                    raise HTTPException(400, f"{side_label}: Port {port} is already occupied by splice #{occ.id}")
+
+        await _check_occupied_for_update(eff_cable_a, eff_core_a, eff_splitter_a, eff_port_a, "Endpoint A")
+        await _check_occupied_for_update(eff_cable_b, eff_core_b, eff_splitter_b, eff_port_b, "Endpoint B")
 
     for k, v in eff.items():
         setattr(splice, k, v)
     await db.commit()
     await db.refresh(splice)
-    cables_res = await db.execute(select(Cable).where(Cable.id.in_([splice.cable_a_id, splice.cable_b_id])))
-    cable_map = {c.id: c.code for c in cables_res.scalars().all()}
+    
+    # Build response
     d = SpliceOut.model_validate(splice)
-    d.cable_a_code = cable_map.get(splice.cable_a_id, "?")
-    d.cable_b_code = cable_map.get(splice.cable_b_id, "?")
+    if splice.cable_a_id:
+        ca = await db.get(Cable, splice.cable_a_id)
+        d.cable_a_code = ca.code if ca else ""
+    if splice.cable_b_id:
+        cb = await db.get(Cable, splice.cable_b_id)
+        d.cable_b_code = cb.code if cb else ""
+    if splice.splitter_a_id:
+        sa = await db.get(Splitter, splice.splitter_a_id)
+        d.splitter_a_name = sa.name if sa else ""
+        d.splitter_a_ratio = sa.split_ratio if sa else 0
+    if splice.splitter_b_id:
+        sb = await db.get(Splitter, splice.splitter_b_id)
+        d.splitter_b_name = sb.name if sb else ""
+        d.splitter_b_ratio = sb.split_ratio if sb else 0
     return d
 
 

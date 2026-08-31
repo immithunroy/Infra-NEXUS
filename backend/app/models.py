@@ -391,15 +391,23 @@ class FiberLoop(Base):
 
 
 class Splice(Base):
-    """A splice connection between two cable cores at a TJ box."""
+    """A splice connection between cable cores and/or splitter ports at a TJ box.
+    
+    Supports: cable<->cable, cable<->splitter, splitter<->cable, splitter<->splitter
+    """
     __tablename__ = "splices"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     tj_id: Mapped[int] = mapped_column(ForeignKey("tj_boxes.id", ondelete="CASCADE"), index=True)
-    cable_a_id: Mapped[int] = mapped_column(ForeignKey("cables.id", ondelete="CASCADE"), index=True)
-    core_a: Mapped[int] = mapped_column(Integer)  # core number on cable A
-    cable_b_id: Mapped[int] = mapped_column(ForeignKey("cables.id", ondelete="CASCADE"), index=True)
-    core_b: Mapped[int] = mapped_column(Integer)  # core number on cable B
+    cable_a_id: Mapped[int | None] = mapped_column(ForeignKey("cables.id", ondelete="CASCADE"), nullable=True, index=True)
+    core_a: Mapped[int] = mapped_column(Integer, default=0)  # core number on cable A (0 if using splitter)
+    cable_b_id: Mapped[int | None] = mapped_column(ForeignKey("cables.id", ondelete="CASCADE"), nullable=True, index=True)
+    core_b: Mapped[int] = mapped_column(Integer, default=0)  # core number on cable B (0 if using splitter)
+    splitter_a_id: Mapped[int | None] = mapped_column(ForeignKey("splitters.id", ondelete="SET NULL"), nullable=True, index=True)
+    splitter_b_id: Mapped[int | None] = mapped_column(ForeignKey("splitters.id", ondelete="SET NULL"), nullable=True, index=True)
+    port_a: Mapped[int] = mapped_column(Integer, default=0)  # splitter port: 0=input, 1+=output
+    port_b: Mapped[int] = mapped_column(Integer, default=0)  # splitter port: 0=input, 1+=output
+    tray_id: Mapped[int] = mapped_column(Integer, default=1)  # splice tray assignment
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | spare | broken
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
