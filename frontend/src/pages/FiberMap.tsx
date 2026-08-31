@@ -319,7 +319,7 @@ export default function FiberMap() {
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to move TJ");
     }
-  }, [dragTj, load]);
+  }, [dragTj]);
 
   const cancelDragTj = useCallback(() => {
     if (dragTj.marker && dragTj.tj) {
