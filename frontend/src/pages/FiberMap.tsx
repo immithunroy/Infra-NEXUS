@@ -959,7 +959,7 @@ export default function FiberMap() {
       {showForm === "cable" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setShowForm(null)}>
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="mb-4 text-lg font-bold">{editingId ? "Edit" : "Add"} Cable</h2>
+            <h2 className="mb-4 text-lg font-bold">{editingId ? "Edit" : "Add"} Link</h2>
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><label className="label">Link ID</label><input className="input bg-slate-100 dark:bg-slate-800" value={cableForm.link_id || ""} readOnly placeholder="Auto-generated" /></div>
