@@ -675,7 +675,7 @@ async def create_splice(body: SpliceCreate, db: AsyncSession = Depends(get_db)):
         raise HTTPException(400, "This splice already exists")
     
     # Validate core/port occupancy
-    def _check_occupied(cable_id, core, splitter_id, port, side_label):
+    async def _check_occupied(cable_id, core, splitter_id, port, side_label):
         if cable_id:
             occ = (await db.execute(
                 select(Splice).where(
@@ -753,7 +753,7 @@ async def update_splice(splice_id: int, body: SpliceUpdate, db: AsyncSession = D
     if eff_status in ("active", "spare"):
         from sqlalchemy import and_, or_
         
-        def _check_occupied_for_update(cable_id, core, splitter_id, port, side_label):
+        async def _check_occupied_for_update(cable_id, core, splitter_id, port, side_label):
             if cable_id:
                 occ = (await db.execute(
                     select(Splice).where(
