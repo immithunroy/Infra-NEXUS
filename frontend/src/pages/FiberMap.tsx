@@ -669,56 +669,45 @@ export default function FiberMap() {
           {/* Floating toolbar */}
           <div className="absolute top-3 left-3 z-[1000] flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
             {!isFullscreen && <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Fiber Map</h1>}
-            {/* Base Map selector */}
-            <div className="flex gap-0.5">
-              {([["street","Street"],["satellite","Sat"],["terrain","Terrain"],["hybrid","Hybrid"]] as const).map(([key,label]) => (
-                <button key={key} onClick={() => setBaseMap(key)} className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${baseMap === key ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"}`}>{label}</button>
-              ))}
-            </div>
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-            {/* Network Layer checkboxes */}
-            {([
-              ["pop","POP","#f97316"],
-              ["tjBox","TJ","#6366f1"],
-              ["splitter","SP","#f59e0b"],
-              ["fiberCable","Link","#22c55e"],
-              ["cableRoute","Route","#8b5cf6"],
-              ["olt","OLT","#ef4444"],
-              ["customer","Cust","#06b6d4"],
-            ] as const).map(([key,label,color]) => (
-              <label key={key} className="flex items-center gap-0.5 cursor-pointer group" title={label}>
-                <input type="checkbox" checked={netLayers[key]} onChange={() => setNetLayers({ ...netLayers, [key]: !netLayers[key] })} className="w-3 h-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">{label}</span>
-              </label>
-            ))}
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-            {/* Entity filters */}
-            <select className="input w-20 text-[10px] py-0.5" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
-              <option value="all">All</option><option value="cable">Links</option><option value="tj">TJs</option><option value="splitter">Splitters</option>
+            <select className="input w-24 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
+              <option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
             </select>
-            <input className="input w-24 text-[10px] py-0.5" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
+            {(filterType === "all" || filterType === "cable") && (
+              <select className="input w-20 text-xs py-1" value={filterCore} onChange={(e) => setFilterCore(e.target.value)}>
+                <option value="all">All cores</option>
+                {Object.keys(CORE_COLORS).map((k) => <option key={k} value={k}>{k} core</option>)}
+              </select>
+            )}
+            {(filterType === "all" || filterType === "tj") && (
+              <select className="input w-20 text-xs py-1" value={filterPort} onChange={(e) => setFilterPort(e.target.value)}>
+                <option value="all">All ports</option>
+                {Object.keys(TJ_CAPACITY_COLORS).map((k) => <option key={k} value={k}>{k} port</option>)}
+              </select>
+            )}
+            {(filterType === "all" || filterType === "splitter") && (
+              <select className="input w-20 text-xs py-1" value={filterRatio} onChange={(e) => setFilterRatio(e.target.value)}>
+                <option value="all">All ratios</option>
+                {Object.keys(SPLITTER_RATIO_COLORS).map((k) => <option key={k} value={k}>1:{k}</option>)}
+              </select>
+            )}
+            <input className="input w-32 text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
             <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredCables.length}c {filteredTj.length}tj {filteredSplitters.length}sp</span>
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
             <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleImport(e.target.files[0]); }} />
-            <button className="btn-secondary text-[10px] py-0.5 px-1.5" onClick={handleExport}>Export</button>
-            <button className="btn-secondary text-[10px] py-0.5 px-1.5" onClick={() => fileRef.current?.click()} disabled={importing}>{importing ? "..." : "Import"}</button>
+            <button className="btn-secondary text-xs py-1 px-2" onClick={handleExport}>Export</button>
+            <button className="btn-secondary text-xs py-1 px-2" onClick={() => fileRef.current?.click()} disabled={importing}>{importing ? "..." : "Import"}</button>
             {writeOk && (
               <>
-                <button className="btn-secondary text-[10px] py-0.5 px-1.5" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
-                <button className={`text-[10px] py-0.5 px-1.5 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
+                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
+                <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
                   {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
                 </button>
-                <button className="btn-secondary text-[10px] py-0.5 px-1.5" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
-                <button className="btn-secondary text-[10px] py-0.5 px-1.5" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>
+                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
+                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>
                   Feasibility
                 </button>
               </>
             )}
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-            <button onClick={() => setIsFullscreen(!isFullscreen)} className="text-[10px] py-0.5 px-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
-              {isFullscreen ? "Exit" : "Expand"}
-            </button>
           </div>
           <FiberMapView
             cables={filteredCables}
@@ -2592,6 +2581,46 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           </div>
         </div>
       )}
+
+      <div className="absolute top-2 right-2 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-2 sm:top-4 sm:right-4 sm:p-3 w-40 sm:w-52 max-h-[80vh] overflow-y-auto scrollbar-thin">
+        <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">Base Map</div>
+        <div className="grid grid-cols-2 gap-1 mb-3">
+          {([["street","Street"],["satellite","Satellite"],["terrain","Terrain"],["hybrid","Hybrid"]] as const).map(([key,label]) => (
+            <button key={key} onClick={() => onSetBaseMap(key)} className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${baseMap === key ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"}`}>{label}</button>
+          ))}
+        </div>
+        <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">Network Layers</div>
+        <div className="space-y-1">
+          {([
+            ["pop","NOC/POP","#f97316"],
+            ["tjBox","TJ Box","#6366f1"],
+            ["splitter","Splitter","#f59e0b"],
+            ["fiberCable","Fiber Link","#22c55e"],
+            ["cableRoute","Link Route","#8b5cf6"],
+            ["olt","OLT","#ef4444"],
+            ["customer","Customer","#06b6d4"],
+          ] as const).map(([key,label,color]) => (
+            <label key={key} className="flex items-center gap-2 cursor-pointer group">
+              <input type="checkbox" checked={netLayers[key]} onChange={() => onSetNetLayers({ ...netLayers, [key]: !netLayers[key] })} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition">{label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <button
+        onClick={onToggleFullscreen}
+        className="absolute bottom-4 right-4 z-[999] flex items-center gap-1.5 rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-700"
+        title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+      >
+        {isFullscreen ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 00-2 2v3m20 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+        )}
+        {isFullscreen ? "Exit" : "Fullscreen"}
+      </button>
     </div>
   );
 }
