@@ -87,3 +87,42 @@ export async function downloadFile(path: string, fallbackName: string): Promise<
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+export async function uploadPhoto(
+  entityType: string,
+  entityId: string,
+  photoType: string,
+  file: File,
+  latitude?: number | null,
+  longitude?: number | null,
+  capturedAt?: string
+): Promise<{ id: number; photo_type: string; storage_key: string; file_size: number; width: number; height: number; url: string }> {
+  const token = getToken();
+  const params = new URLSearchParams({ photo_type: photoType });
+  if (latitude != null) params.set("latitude", String(latitude));
+  if (longitude != null) params.set("longitude", String(longitude));
+  if (capturedAt) params.set("captured_at", capturedAt);
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/photos/${entityType}/${entityId}?${params.toString()}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (res.status === 401) {
+    setToken(null);
+    if (window.location.pathname !== "/login") window.location.href = "/login";
+    throw new ApiError(401, "Unauthorized");
+  }
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      const body = await res.json();
+      message = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    } catch { /* ignore */ }
+    throw new ApiError(res.status, message);
+  }
+  return res.json();
+}

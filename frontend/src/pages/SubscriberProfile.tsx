@@ -1,12 +1,13 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AcsDevice, AcsWifiStatus, canOps, RemoteAccess, SubscriberProfile } from "../api/types";
+import { AcsDevice, AcsWifiStatus, canOps, RemoteAccess, SubscriberProfile, SUBSCRIBER_PHOTO_TYPES, SUBSCRIBER_PHOTO_LABELS } from "../api/types";
 import { useUserRole } from "../lib/role";
 import { fmtTime, fmtTimeShort } from "../lib/time";
 import StatusBadge from "../components/StatusBadge";
 import ActionResultBanner from "../components/ActionResultBanner";
 import WarningBanner from "../components/WarningBanner";
+import PhotoGallery from "../components/PhotoGallery";
 
 const ranges = [
   { label: "24h", hours: 24 },
@@ -687,6 +688,16 @@ export default function SubscriberProfilePage() {
         <span className="text-slate-300 dark:text-slate-600">|</span>
         <span>{profile.mac_history.length}× MAC changes</span>
         {profile.down_reason && <><span className="text-slate-300 dark:text-slate-600">|</span> <span className="text-amber-600 dark:text-amber-400">dereg: {profile.down_reason}</span></>}
+      </div>
+
+      {/* ── Field Photos ── */}
+      <div className="card p-4">
+        <PhotoGallery
+          entityType="subscriber"
+          entityId={subscriber}
+          photoTypes={SUBSCRIBER_PHOTO_TYPES}
+          photoLabels={SUBSCRIBER_PHOTO_LABELS}
+        />
       </div>
 
       {/* ── Charts ── */}

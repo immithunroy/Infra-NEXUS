@@ -969,3 +969,56 @@ export function canApprove(role?: string): boolean {
 export function canSubmit(role?: string): boolean {
   return role === "admin" || role === "global_write" || role === "field_team";
 }
+
+// ── Field Photos ──────────────────────────────────────────────────────────────
+
+export interface FieldPhotoItem {
+  photo_type: string;
+  uploaded: boolean;
+  id?: number;
+  url?: string;
+  file_size?: number;
+  width?: number;
+  height?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  captured_at?: string | null;
+  captured_by?: string;
+  created_at?: string;
+}
+
+export interface FieldPhotoListResponse {
+  entity_type: string;
+  entity_id: string;
+  total_required: number;
+  totalUploaded: number;
+  photos: FieldPhotoItem[];
+}
+
+export interface FieldPhotoUploadResponse {
+  id: number;
+  photo_type: string;
+  storage_key: string;
+  file_size: number;
+  width: number;
+  height: number;
+  url: string;
+}
+
+export const TJ_PHOTO_TYPES = ["overall", "internal", "identification"] as const;
+export type TjPhotoType = (typeof TJ_PHOTO_TYPES)[number];
+
+export const TJ_PHOTO_LABELS: Record<TjPhotoType, string> = {
+  overall: "Overall View",
+  internal: "Internal View",
+  identification: "Identification",
+};
+
+export const SUBSCRIBER_PHOTO_TYPES = ["overall", "equipment", "identification"] as const;
+export type SubscriberPhotoType = (typeof SUBSCRIBER_PHOTO_TYPES)[number];
+
+export const SUBSCRIBER_PHOTO_LABELS: Record<SubscriberPhotoType, string> = {
+  overall: "Installation View",
+  equipment: "ONU / Equipment",
+  identification: "Identification",
+};

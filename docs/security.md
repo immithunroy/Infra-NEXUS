@@ -357,3 +357,40 @@ psql -U olt -d infra_nexus -c "DELETE FROM users WHERE username = 'suspicious';"
 # 3. Review approval queue
 curl -H "Authorization: Bearer $TOKEN" https://nexus.qbinternet.com/api/approvals?status=pending
 ```
+
+### 10.4 Photo Upload Security
+
+Field photo uploads are subject to the following security controls:
+
+- **Authentication:** JWT token required for all photo endpoints
+- **Authorization:** Upload/delete restricted to `global_write`, `admin`, `noc` roles
+- **File type validation:** Only `image/jpeg`, `image/png`, `image/webp` accepted (MIME prefix `image/` + extension check)
+- **File size limit:** 10 MB maximum
+- **Path traversal protection:** Resolved file path must be within `PHOTO_UPLOAD_DIR`
+- **Storage isolation:** Photos stored in `{PHOTO_UPLOAD_DIR}/{entity_type}/{entity_id}/` — no user-controlled filenames
+- **Server-side processing:** All images re-encoded as JPEG (quality 85) with fixed dimensions (1440×1440), stripping EXIF and other metadata
+- **Watermarking:** Entity ID and GPS coordinates permanently embedded in image pixels — cannot be removed without image manipulation
+
+**Docker volume mount (recommended):**
+
+```yaml
+# docker-compose.yml
+services:
+  backend:
+    volumes:
+      - field-photos:/app/uploads/field-photos
+volumes:
+  field-photos:
+```
+
+**Backup:**
+
+```bash
+# Backup photos
+docker compose exec backend tar czf /tmp/photos-backup.tar.gz -C /app/uploads field-photos
+docker compose cp backend:/tmp/photos-backup.tar.gz ./backups/
+
+# Restore photos
+docker compose cp ./backups/photos-backup.tar.gz backend:/tmp/
+docker compose exec backend tar xzf /tmp/photos-backup.tar.gz -C /app/uploads
+```

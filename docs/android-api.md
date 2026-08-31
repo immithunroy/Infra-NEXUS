@@ -546,3 +546,9 @@ val canWrite = role in listOf("admin", "global_write")
 ### Direct Write (admin/global_write only)
 - `PUT /api/onus/{id}` — Update subscriber GPS/address
 - `PUT /api/tickets/{id}` — Update ticket status
+
+### Field Photos
+- `POST /api/photos/{entity_type}/{entity_id}?photo_type={type}` — Upload field photo (multipart/form-data)
+- `GET /api/photos/{entity_type}/{entity_id}` — List photos with completion status
+- `GET /api/photos/file/{path}` — Download photo file
+- `DELETE /api/photos/{entity_type}/{entity_id}/{photo_type}` — Delete a photo

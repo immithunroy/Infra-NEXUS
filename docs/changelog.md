@@ -77,6 +77,48 @@
 
 ---
 
+## 2026-08-31
+
+### Added
+
+- **Field Photos System** — Complete TJ and subscriber photo documentation workflow
+- `FieldPhoto` SQLAlchemy model for tracking field photos with GPS metadata
+- Photo upload API: `POST /api/photos/{entity_type}/{entity_id}` — server-side crop, resize, watermark
+- Photo list API: `GET /api/photos/{entity_type}/{entity_id}` — returns all 3 photo slots with status
+- Photo file serving: `GET /api/photos/file/{path}` — authenticated file access
+- Photo delete API: `DELETE /api/photos/{entity_type}/{entity_id}/{photo_type}`
+- `PhotoGallery` React component — responsive 3-column grid with upload, replace, delete, download
+- Photo viewer modal — full-screen in-app viewer with GPS info and download button
+- TJ photo gallery as a "Photos" tab in `TjDetailPanel` on the Fiber Map
+- Subscriber photo gallery section in `SubscriberProfile` page
+- `uploadPhoto()` client helper for multipart form uploads
+- Database migration: `003_field_photos.sql`
+
+### Database
+
+- New table: `field_photos` — 18 columns, indexed on `(entity_type, entity_id)` and unique on `(entity_type, entity_id, photo_type)`
+
+### API
+
+- `POST /api/photos/{entity_type}/{entity_id}` — Upload/replace field photo (multipart/form-data)
+- `GET /api/photos/{entity_type}/{entity_id}` — List photos for entity (3 slots)
+- `GET /api/photos/file/{path}` — Serve photo file (authenticated)
+- `DELETE /api/photos/{entity_type}/{entity_id}/{photo_type}` — Delete a photo
+
+### Security
+
+- Photo upload restricted to `global_write`, `admin`, `noc` roles
+- Photo serving requires JWT authentication
+- Path traversal blocked on file serving
+- Max file size: 10 MB
+- Only image MIME types accepted
+
+### Android Impact
+
+- Android app can upload field photos via `POST /api/photos/{entity_type}/{entity_id}`
+- Photo list endpoint provides completion status for 3 required slots per entity
+- GPS coordinates and capture timestamp embedded in watermark and metadata
+
 ## Future Entries
 
 Add new entries above this line in reverse chronological order.

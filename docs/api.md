@@ -1317,3 +1317,126 @@ GET /api/onus?limit=50&offset=100
 ```
 
 Default limits vary by endpoint (typically 50-200).
+
+---
+
+## 22. Field Photos API
+
+Base URL: `/api/photos`
+
+All endpoints require JWT authentication. Write operations (`upload`, `delete`) require `global_write`, `admin`, or `noc` roles.
+
+### 22.1 Upload / Replace Photo
+
+```
+POST /api/photos/{entity_type}/{entity_id}?photo_type={type}&latitude={lat}&longitude={lng}
+Content-Type: multipart/form-data
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `entity_type` | path | Yes | `tj` or `subscriber` |
+| `entity_id` | path | Yes | TJ unique_id or subscriber name |
+| `photo_type` | query | Yes | TJ: `overall`, `internal`, `identification`. Subscriber: `overall`, `equipment`, `identification` |
+| `latitude` | query | No | GPS latitude (decimal degrees) |
+| `longitude` | query | No | GPS longitude (decimal degrees) |
+| `captured_at` | query | No | ISO 8601 timestamp of when photo was taken |
+| `file` | form | Yes | Image file (JPEG, PNG, WebP, max 10 MB) |
+
+**Server-side processing:**
+- Crops to 1:1 square from center
+- Resizes to 1440×1440 (~2 MP)
+- Adds permanent watermark: entity ID + GPS coordinates (bottom-left)
+- Saves as JPEG (quality 85) regardless of input format
+
+**Response 200:**
+```json
+{
+  "id": 1,
+  "photo_type": "overall",
+  "storage_key": "tj/TJ-001/overall.jpg",
+  "file_size": 142000,
+  "width": 1440,
+  "height": 1440,
+  "url": "/api/photos/file/tj/TJ-001/overall.jpg"
+}
+```
+
+**Errors:**
+| Status | Meaning |
+|--------|---------|
+| 400 | Invalid entity type, photo type, file type, or file too large |
+| 401 | Unauthorized |
+| 403 | Insufficient permissions |
+
+### 22.2 List Photos
+
+```
+GET /api/photos/{entity_type}/{entity_id}
+```
+
+**Response 200:**
+```json
+{
+  "entity_type": "tj",
+  "entity_id": "TJ-001",
+  "total_required": 3,
+  "totalUploaded": 2,
+  "photos": [
+    {
+      "photo_type": "overall",
+      "uploaded": true,
+      "id": 1,
+      "url": "/api/photos/file/tj/TJ-001/overall.jpg",
+      "file_size": 142000,
+      "width": 1440,
+      "height": 1440,
+      "latitude": 23.8103,
+      "longitude": 90.4125,
+      "captured_at": "2026-08-31T10:30:00Z",
+      "captured_by": "field_user",
+      "created_at": "2026-08-31T10:30:05Z"
+    },
+    {
+      "photo_type": "internal",
+      "uploaded": false
+    },
+    {
+      "photo_type": "identification",
+      "uploaded": true,
+      "id": 2,
+      "url": "/api/photos/file/tj/TJ-001/identification.jpg"
+    }
+  ]
+}
+```
+
+### 22.3 Serve Photo File
+
+```
+GET /api/photos/file/{path}
+Authorization: Bearer {token}
+```
+
+Returns the actual image file with appropriate `Content-Type` header. Path traversal is blocked.
+
+### 22.4 Delete Photo
+
+```
+DELETE /api/photos/{entity_type}/{entity_id}/{photo_type}
+```
+
+Removes both the database record and the file from disk.
+
+**Response 200:**
+```json
+{"ok": true, "deleted": "overall"}
+```
+
+### 22.5 Storage
+
+Photos are stored at `{PHOTO_UPLOAD_DIR}/{entity_type}/{entity_id}/{photo_type}.jpg`.
+
+Default `PHOTO_UPLOAD_DIR` is `/app/uploads/field-photos` (Docker volume mount recommended).
+
+Each photo type is limited to exactly one file — uploading replaces the previous photo.

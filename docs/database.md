@@ -698,3 +698,47 @@ returned_for_correction → resubmitted → pending
 | `onu_outages` | Indefinite | Manual cleanup |
 | `fiber_approval_requests` | Indefinite | Manual cleanup |
 | `acs_metrics` | Indefinite | Manual cleanup |
+| `field_photos` | Indefinite | Manual cleanup |
+
+---
+
+## 10. Field Photos Table
+
+### `field_photos`
+
+Stores metadata for field documentation photos captured for TJ boxes and subscribers.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | SERIAL | PRIMARY KEY | Auto-increment ID |
+| `entity_type` | VARCHAR(32) | NOT NULL, INDEXED | `tj` or `subscriber` |
+| `entity_id` | VARCHAR(128) | NOT NULL, INDEXED | TJ unique_id or subscriber name |
+| `photo_type` | VARCHAR(32) | NOT NULL | Photo slot: `overall`, `internal`, `identification`, `equipment` |
+| `storage_key` | VARCHAR(256) | NOT NULL | Relative path: `{entity_type}/{entity_id}/{photo_type}.jpg` |
+| `original_filename` | VARCHAR(256) | DEFAULT '' | Original upload filename |
+| `mime_type` | VARCHAR(64) | DEFAULT 'image/jpeg' | Always JPEG after server processing |
+| `file_size` | INTEGER | DEFAULT 0 | File size in bytes |
+| `width` | INTEGER | DEFAULT 0 | Image width (always 1440 after processing) |
+| `height` | INTEGER | DEFAULT 0 | Image height (always 1440 after processing) |
+| `latitude` | DOUBLE PRECISION | nullable | GPS latitude (decimal degrees) |
+| `longitude` | DOUBLE PRECISION | nullable | GPS longitude (decimal degrees) |
+| `captured_at` | TIMESTAMPTZ | nullable | When the photo was taken (from client) |
+| `captured_by` | VARCHAR(128) | DEFAULT '' | Username of uploader |
+| `uploaded_by` | INTEGER | FK → users.id, nullable | User who uploaded |
+| `created_at` | TIMESTAMPTZ | SERVER DEFAULT now() | Upload timestamp |
+| `updated_at` | TIMESTAMPTZ | SERVER DEFAULT now() | Last update timestamp |
+
+**Indexes:**
+- `idx_field_photos_entity` ON `(entity_type, entity_id)`
+- `idx_field_photos_entity_type` ON `(entity_type, entity_id, photo_type)` — unique per entity+type
+
+**Photo types per entity:**
+
+| Entity | Photo Types | Purpose |
+|--------|-------------|---------|
+| TJ Box | `overall`, `internal`, `identification` | Overall view, internal wiring, TJ ID plate |
+| Subscriber | `overall`, `equipment`, `identification` | Installation view, ONU/equipment, subscriber ID |
+
+**Storage:** Files stored on disk at `{PHOTO_UPLOAD_DIR}/{entity_type}/{entity_id}/{photo_type}.jpg`. Each slot holds exactly one file — new uploads replace previous ones.
+
+**Server-side processing:** All uploaded images are cropped to 1:1 square, resized to 1440×1440, watermark applied (entity ID + GPS), saved as JPEG quality 85.

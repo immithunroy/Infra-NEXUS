@@ -786,3 +786,31 @@ class FiberApprovalRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resubmitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class FieldPhoto(Base):
+    """Field documentation photos for TJ boxes and subscribers.
+
+    Each entity (TJ or Subscriber) has exactly 3 required photo slots.
+    Photos are stored on disk and metadata is tracked in this table.
+    """
+
+    __tablename__ = "field_photos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(32), index=True)  # "tj" | "subscriber"
+    entity_id: Mapped[str] = mapped_column(String(128), index=True)  # TJ unique_id or subscriber string
+    photo_type: Mapped[str] = mapped_column(String(32))  # overall, internal, identification, equipment
+    storage_key: Mapped[str] = mapped_column(String(256))  # relative path: tj/TJ-001/overall.jpg
+    original_filename: Mapped[str] = mapped_column(String(256), default="")
+    mime_type: Mapped[str] = mapped_column(String(64), default="image/jpeg")
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    width: Mapped[int] = mapped_column(Integer, default=0)
+    height: Mapped[int] = mapped_column(Integer, default=0)
+    latitude: Mapped[float | None] = mapped_column(nullable=True)
+    longitude: Mapped[float | None] = mapped_column(nullable=True)
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    captured_by: Mapped[str] = mapped_column(String(128), default="")
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

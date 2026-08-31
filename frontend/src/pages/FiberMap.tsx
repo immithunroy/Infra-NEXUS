@@ -4,8 +4,9 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import "leaflet-draw";
 import ActionResultBanner from "../components/ActionResultBanner";
+import PhotoGallery from "../components/PhotoGallery";
 import { api, downloadFile } from "../api/client";
-import { Cable, TjBox, Splitter, FiberLoop, CableCut } from "../api/types";
+import { Cable, TjBox, Splitter, FiberLoop, CableCut, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS } from "../api/types";
 
 interface TempSegment {
   start_lat: number; start_lng: number; end_lat: number; end_lng: number; order_index: number;
@@ -1303,7 +1304,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   const [spliceSearch, setSpliceSearch] = useState("");
   const [cableSearchA, setCableSearchA] = useState("");
   const [cableSearchB, setCableSearchB] = useState("");
-  const [tjTab, setTjTab] = useState<"cable" | "splice">("cable");
+  const [tjTab, setTjTab] = useState<"cable" | "splice" | "photos">("cable");
   const [showTjEdit, setShowTjEdit] = useState(false);
   const [tjEditForm, setTjEditForm] = useState({ name: "", address: "", notes: "" });
   const SPLICE_PAGE_SIZE = 50;
@@ -1450,6 +1451,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
       <div className="flex border-b border-slate-200 dark:border-slate-700 mb-3">
         <button className={`px-3 py-1.5 text-xs font-medium border-b-2 transition ${tjTab === "cable" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`} onClick={() => setTjTab("cable")}>Cables ({connectedCables.length})</button>
         <button className={`px-3 py-1.5 text-xs font-medium border-b-2 transition ${tjTab === "splice" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`} onClick={() => setTjTab("splice")}>Splices ({tjSplices.length})</button>
+        <button className={`px-3 py-1.5 text-xs font-medium border-b-2 transition ${tjTab === "photos" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`} onClick={() => setTjTab("photos")}>Photos</button>
       </div>
 
       {/* Cable tab */}
@@ -1587,6 +1589,18 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
           ) : (
             <div className="text-xs text-slate-400">No splices yet. Click "+ Splice" to add one.</div>
           )}
+        </div>
+      )}
+
+      {/* Photos tab */}
+      {tjTab === "photos" && (
+        <div className="mb-4">
+          <PhotoGallery
+            entityType="tj"
+            entityId={tj.unique_id}
+            photoTypes={TJ_PHOTO_TYPES}
+            photoLabels={TJ_PHOTO_LABELS}
+          />
         </div>
       )}
 

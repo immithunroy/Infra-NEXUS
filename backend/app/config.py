@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     telemetry_interval: int = 300
     acs_poll_interval: int = 600
     mac_vendor_sync_interval: int = 86400  # seconds (24h)
+    photo_upload_dir: str = "/app/uploads/field-photos"
 
     @property
     def cors_origin_list(self) -> list[str]:
