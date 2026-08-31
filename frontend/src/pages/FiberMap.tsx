@@ -640,7 +640,7 @@ export default function FiberMap() {
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0">
         {!isFullscreen && <h1 className="text-lg font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Fiber Map</h1>}
         <select className="input w-28 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
-          <option value="all">All</option><option value="cable">Cables</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
+          <option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
         </select>
         {(filterType === "all" || filterType === "cable") && (
           <select className="input w-24 text-xs py-1" value={filterCore} onChange={(e) => setFilterCore(e.target.value)}>
@@ -668,9 +668,9 @@ export default function FiberMap() {
         <button className="btn-secondary text-xs py-1 px-2" onClick={() => fileRef.current?.click()} disabled={importing}>{importing ? "..." : "Import"}</button>
         {writeOk && (
           <>
-            <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Cable</button>
+            <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
             <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
-              {planner.phase !== "idle" ? "Planning..." : "Plan Cable"}
+              {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
             </button>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
             <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>
@@ -771,12 +771,12 @@ export default function FiberMap() {
           {/* Cables section */}
           <div className="border-b border-slate-200 dark:border-slate-700">
             <button onClick={() => setExpandCables(!expandCables)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left">
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Cables ({filteredCables.length})</span>
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Links ({filteredCables.length})</span>
               <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandCables ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
             {expandCables && (
               <div className="px-3 pb-2">
-                <input className="input text-xs w-full mb-2 py-1" placeholder="Search cables..." value={searchCables} onChange={(e) => setSearchCables(e.target.value)} />
+                <input className="input text-xs w-full mb-2 py-1" placeholder="Search links..." value={searchCables} onChange={(e) => setSearchCables(e.target.value)} />
                 <div className="space-y-1 max-h-[300px] overflow-y-auto">
                   {filteredCables.filter((c) => !searchCables || c.code.toLowerCase().includes(searchCables.toLowerCase()) || c.link_name.toLowerCase().includes(searchCables.toLowerCase())).map((c) => {
                     const lenM = cableLengthM(c);
@@ -920,7 +920,7 @@ export default function FiberMap() {
                   <>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Straight Distance</div><div className="text-lg font-bold">{straightM > 0 ? (straightM / 1000).toFixed(2) + " km" : "—"}</div></div>
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Cable Length</div><div className="text-lg font-bold">{(lenM / 1000).toFixed(2)} km</div></div>
+                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Link Length</div><div className="text-lg font-bold">{(lenM / 1000).toFixed(2)} km</div></div>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="rounded-lg bg-cyan-50 dark:bg-cyan-900/20 p-3"><div className="text-xs text-cyan-600">Loop Slack</div><div className="text-lg font-bold text-cyan-700">{totalLoopM > 0 ? totalLoopM + "m (" + loopSum.length + " loops)" : "None"}</div></div>
@@ -928,7 +928,7 @@ export default function FiberMap() {
                     </div>
                     {lenM > 0 && (
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3">
-                        <div className="text-xs text-slate-400 mb-2">Cable Requirement (with allowance)</div>
+                        <div className="text-xs text-slate-400 mb-2">Link Requirement (with allowance)</div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                           <div className="text-slate-500">Actual:</div><div className="font-mono font-semibold">{Math.round(lenM).toLocaleString()} m</div>
                           <div className="text-slate-500">+5%:</div><div className="font-mono">{Math.round(lenM * 1.05).toLocaleString()} m</div>
@@ -1087,8 +1087,8 @@ export default function FiberMap() {
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold">{loopForm.id ? "Edit" : "Add"} Fiber Loop</h2>
             <div className="space-y-3">
-              <div><label className="label">Cable</label><select className="input" value={loopForm.cable_id || ""} onChange={(e) => setLoopForm({ ...loopForm, cable_id: Number(e.target.value) })}>
-                <option value="">Select Cable</option>
+              <div><label className="label">Link</label><select className="input" value={loopForm.cable_id || ""} onChange={(e) => setLoopForm({ ...loopForm, cable_id: Number(e.target.value) })}>
+                <option value="">Select Link</option>
                 {cables.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.core_count}C</option>)}
               </select></div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1112,8 +1112,8 @@ export default function FiberMap() {
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-bold">{cutForm.id ? "Edit" : "Report"} Cable Cut</h2>
             <div className="space-y-3">
-              <div><label className="label">Cable</label><select className="input" value={cutForm.cable_id || ""} onChange={(e) => setCutForm({ ...cutForm, cable_id: Number(e.target.value) })}>
-                <option value="">Select Cable</option>
+              <div><label className="label">Link</label><select className="input" value={cutForm.cable_id || ""} onChange={(e) => setCutForm({ ...cutForm, cable_id: Number(e.target.value) })}>
+                <option value="">Select Link</option>
                 {cables.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.core_count}C</option>)}
               </select></div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1171,7 +1171,7 @@ export default function FiberMap() {
                         <tr className="border-b border-slate-200 dark:border-slate-700">
                           <th className="text-left py-2 text-slate-600 dark:text-slate-400">TJ</th>
                           <th className="text-right py-2 text-slate-600 dark:text-slate-400">Distance</th>
-                          <th className="text-right py-2 text-slate-600 dark:text-slate-400">Cable Required</th>
+                          <th className="text-right py-2 text-slate-600 dark:text-slate-400">Link Required</th>
                           <th className="text-left py-2 text-slate-600 dark:text-slate-400">Destinations</th>
                         </tr>
                       </thead>
@@ -1201,7 +1201,7 @@ export default function FiberMap() {
                               </div>
                             </td>
                             <td className="py-2 text-slate-600 dark:text-slate-400">
-                              {r.destinations.length > 0 ? r.destinations.join(", ") : <span className="italic text-slate-400">No cables</span>}
+                              {r.destinations.length > 0 ? r.destinations.join(", ") : <span className="italic text-slate-400">No links</span>}
                             </td>
                           </tr>
                           );
@@ -1443,13 +1443,13 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
             {tj.capacity > 8 && <div className="text-[9px] text-slate-400 mt-1">... {tj.capacity} cores total</div>}
           </div>
         ) : (
-          <div className="text-xs text-slate-400">No cables connected</div>
+          <div className="text-xs text-slate-400">No links connected</div>
         )}
       </div>
 
       {/* Tab bar */}
       <div className="flex border-b border-slate-200 dark:border-slate-700 mb-3">
-        <button className={`px-3 py-1.5 text-xs font-medium border-b-2 transition ${tjTab === "cable" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`} onClick={() => setTjTab("cable")}>Cables ({connectedCables.length})</button>
+        <button className={`px-3 py-1.5 text-xs font-medium border-b-2 transition ${tjTab === "cable" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`} onClick={() => setTjTab("cable")}>Links ({connectedCables.length})</button>
         <button className={`px-3 py-1.5 text-xs font-medium border-b-2 transition ${tjTab === "splice" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`} onClick={() => setTjTab("splice")}>Splices ({tjSplices.length})</button>
         <button className={`px-3 py-1.5 text-xs font-medium border-b-2 transition ${tjTab === "photos" ? "border-blue-500 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`} onClick={() => setTjTab("photos")}>Photos</button>
       </div>
@@ -1516,7 +1516,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
           </div>
 
           {connectedCables.length === 0 && hostedSplitters.length === 0 && (
-            <div className="text-xs text-slate-400">No cables connected</div>
+          <div className="text-xs text-slate-400">No links connected</div>
           )}
         </div>
       )}
@@ -1612,8 +1612,8 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="label">Cable A</label>
-                  <input className="input text-[10px] py-1 mb-1" placeholder="Search cable..." value={cableSearchA} onChange={(e) => setCableSearchA(e.target.value)} />
+                  <label className="label">Link A</label>
+                  <input className="input text-[10px] py-1 mb-1" placeholder="Search link..." value={cableSearchA} onChange={(e) => setCableSearchA(e.target.value)} />
                   <select className="input text-xs" size={Math.min(filteredCablesA.length, 5)} value={spliceForm.cable_a_id} onChange={(e) => {
                     const newCableId = Number(e.target.value);
                     const uc = unusedCores.find((u) => u.cable_id === newCableId);
@@ -1637,8 +1637,8 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
               <div className="text-center text-xs text-slate-400">↔ Splice ↔</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="label">Cable B</label>
-                  <input className="input text-[10px] py-1 mb-1" placeholder="Search cable..." value={cableSearchB} onChange={(e) => setCableSearchB(e.target.value)} />
+                  <label className="label">Link B</label>
+                  <input className="input text-[10px] py-1 mb-1" placeholder="Search link..." value={cableSearchB} onChange={(e) => setCableSearchB(e.target.value)} />
                   <select className="input text-xs" size={Math.min(filteredCablesB.length, 5)} value={spliceForm.cable_b_id} onChange={(e) => {
                     const newCableId = Number(e.target.value);
                     const uc = unusedCores.find((u) => u.cable_id === newCableId);
@@ -1850,7 +1850,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         + '<div class="ctx-i" data-kind="tj" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
         + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>Add TJ Box</div>'
         + '<div class="ctx-i" data-kind="cable" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
-        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M4 12h16M12 4v16"/></svg>Add Cable</div>'
+        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M4 12h16M12 4v16"/></svg>Add Link</div>'
         + '<div class="ctx-i" data-kind="loop" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
         + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><circle cx="12" cy="12" r="8" stroke-dasharray="4,2"/></svg>Add Loop</div>'
         + '<div class="ctx-i" data-kind="cut" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
@@ -2028,7 +2028,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         const straightM = dstTj && cable.segments.length ? haversine(cable.segments[0].start_lat, cable.segments[0].start_lng, dstTj.lat, dstTj.lng) : 0;
         const tipParts = [cable.link_id ? cable.link_id + " | " + (cable.link_name || cable.code) : "<b>" + cable.code + "</b>", (cable.manufacturer || "?") + " | " + cable.code, cable.core_count + " cores"];
         if (straightM > 0) tipParts.push("Straight: " + (straightM / 1000).toFixed(2) + " km");
-        tipParts.push("Cable: " + lenKm + " km");
+        tipParts.push("Link: " + lenKm + " km");
         if (loopSum > 0) tipParts.push("Loop: " + (loopSum / 1000).toFixed(2) + " km");
         tipParts.push("Total: " + (totalM / 1000).toFixed(2) + " km");
         tipParts.push("<i>click for details</i>");
@@ -2444,8 +2444,8 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
             ["pop","NOC/POP","#f97316"],
             ["tjBox","TJ Box","#6366f1"],
             ["splitter","Splitter","#f59e0b"],
-            ["fiberCable","Fiber Cable","#22c55e"],
-            ["cableRoute","Cable Route","#8b5cf6"],
+            ["fiberCable","Fiber Link","#22c55e"],
+            ["cableRoute","Link Route","#8b5cf6"],
             ["olt","OLT","#ef4444"],
             ["customer","Customer","#06b6d4"],
           ] as const).map(([key,label,color]) => (
