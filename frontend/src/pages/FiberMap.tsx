@@ -6,7 +6,7 @@ import "leaflet-draw";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
 import { api, downloadFile } from "../api/client";
-import { Cable, TjBox, Splitter, FiberLoop, CableCut, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS } from "../api/types";
+import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS } from "../api/types";
 
 interface TempSegment {
   start_lat: number; start_lng: number; end_lat: number; end_lng: number; order_index: number;
@@ -145,7 +145,7 @@ export default function FiberMap() {
   const [splitters, setSplitters] = useState<Splitter[]>([]);
   const [loops, setLoops] = useState<FiberLoop[]>([]);
   const [cuts, setCuts] = useState<CableCut[]>([]);
-  const [splices, setSplices] = useState<any[]>([]);
+  const [splices, setSplices] = useState<Splice[]>([]);
   const [nocPopData, setNocPopData] = useState<{ nocs: any[]; pops: any[] }>({ nocs: [], pops: [] });
   const [error, setError] = useState("");
 
@@ -301,6 +301,32 @@ export default function FiberMap() {
     setDrawCable({ active: false, sourceTj: null, routePoints: [], mousePos: null });
   }, []);
 
+  const startDragTj = useCallback((tj: TjBox, marker: L.Marker) => {
+    setDragTj({ active: true, tj, marker });
+    marker.dragging?.enable();
+  }, []);
+
+  const saveDragTj = useCallback(async () => {
+    if (!dragTj.tj || !dragTj.marker) return;
+    const pos = dragTj.marker.getLatLng();
+    try {
+      await api.put(`/fiber/tj-boxes/${dragTj.tj.id}/move`, { lat: pos.lat, lng: pos.lng });
+      dragTj.marker.dragging?.disable();
+      setDragTj({ active: false, tj: null, marker: null });
+      load();
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to move TJ");
+    }
+  }, [dragTj, load]);
+
+  const cancelDragTj = useCallback(() => {
+    if (dragTj.marker && dragTj.tj) {
+      dragTj.marker.setLatLng([dragTj.tj.lat, dragTj.tj.lng]);
+      dragTj.marker.dragging?.disable();
+    }
+    setDragTj({ active: false, tj: null, marker: null });
+  }, [dragTj]);
+
   const [importing, setImporting] = useState(false);
   const [selectedTj, setSelectedTj] = useState<TjBox | null>(null);
   const [selectedCable, setSelectedCable] = useState<Cable | null>(null);
@@ -312,6 +338,7 @@ export default function FiberMap() {
   } | null>(null);
   const [selectedWaypoint, setSelectedWaypoint] = useState<number | null>(null);
   const [drawCable, setDrawCable] = useState<{ active: boolean; sourceTj: TjBox | null; routePoints: L.LatLng[]; mousePos: L.LatLng | null }>({ active: false, sourceTj: null, routePoints: [], mousePos: null });
+  const [dragTj, setDragTj] = useState<{ active: boolean; tj: TjBox | null; marker: L.Marker | null }>({ active: false, tj: null, marker: null });
   const fileRef = useRef<HTMLInputElement>(null);
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
@@ -1298,7 +1325,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   const tjSplices = useMemo(() => splices.filter((sp) => sp.tj_id === tj.id), [splices, tj.id]);
   const [showSpliceForm, setShowSpliceForm] = useState(false);
   const [editSplice, setEditSplice] = useState<any>(null);
-  const [spliceForm, setSpliceForm] = useState({ cable_a_id: 0, core_a: 1, cable_b_id: 0, core_b: 1, status: "active", notes: "" });
+  const [spliceForm, setSpliceForm] = useState<{ cable_a_id: number | null; core_a: number; cable_b_id: number | null; core_b: number; splitter_a_id: number | null; splitter_b_id: number | null; port_a: number; port_b: number; tray_id: number; status: string; notes: string }>({ cable_a_id: null, core_a: 1, cable_b_id: null, core_b: 1, splitter_a_id: null, splitter_b_id: null, port_a: 0, port_b: 0, tray_id: 1, status: "active", notes: "" });
   const [unusedCores, setUnusedCores] = useState<any[]>([]);
   const [splicePage, setSplicePage] = useState(0);
   const [spliceSearch, setSpliceSearch] = useState("");
@@ -1345,24 +1372,44 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
     loadUnused();
     if (splice) {
       setEditSplice(splice);
-      setSpliceForm({ cable_a_id: splice.cable_a_id, core_a: splice.core_a, cable_b_id: splice.cable_b_id, core_b: splice.core_b, status: splice.status, notes: splice.notes || "" });
+      setSpliceForm({
+        cable_a_id: splice.cable_a_id || null, core_a: splice.core_a || 1,
+        cable_b_id: splice.cable_b_id || null, core_b: splice.core_b || 1,
+        splitter_a_id: splice.splitter_a_id || null, splitter_b_id: splice.splitter_b_id || null,
+        port_a: splice.port_a || 0, port_b: splice.port_b || 0,
+        tray_id: splice.tray_id || 1, status: splice.status || "active", notes: splice.notes || "",
+      });
     } else {
       setEditSplice(null);
-      setSpliceForm({ cable_a_id: connectedCables[0]?.id || 0, core_a: 1, cable_b_id: connectedCables[1]?.id || connectedCables[0]?.id || 0, core_b: 1, status: "active", notes: "" });
+      setSpliceForm({
+        cable_a_id: connectedCables[0]?.id || null, core_a: 1,
+        cable_b_id: connectedCables[1]?.id || connectedCables[0]?.id || null, core_b: 1,
+        splitter_a_id: null, splitter_b_id: null, port_a: 0, port_b: 0,
+        tray_id: 1, status: "active", notes: "",
+      });
     }
     setShowSpliceForm(true);
   };
 
   const saveSplice = async () => {
     try {
+      const payload = {
+        ...spliceForm,
+        cable_a_id: spliceForm.cable_a_id || null,
+        cable_b_id: spliceForm.cable_b_id || null,
+        splitter_a_id: spliceForm.splitter_a_id || null,
+        splitter_b_id: spliceForm.splitter_b_id || null,
+      };
       if (editSplice) {
-        await api.put(`/fiber/splices/${editSplice.id}`, spliceForm);
+        await api.put(`/fiber/splices/${editSplice.id}`, payload);
       } else {
-        await api.post("/fiber/splices", { ...spliceForm, tj_id: tj.id });
+        await api.post("/fiber/splices", { ...payload, tj_id: tj.id });
       }
       setShowSpliceForm(false);
       onSpliceChange();
-    } catch (e) { alert(String(e)); }
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || String(e));
+    }
   };
 
   const deleteSplice = async (id: number) => {
@@ -1391,59 +1438,53 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
 
       {/* Internal diagram */}
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60 mb-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">Splice Tray Diagram</h3>
-        {connectedCables.length > 0 ? (
-          <div className="space-y-2">
-            {/* Generate splice pairs from connected cables */}
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">Splice Tray ({tjSplices.length} splices)</h3>
+        {tjSplices.length > 0 ? (
+          <div className="space-y-1">
             {(() => {
-              const pairs: { left: { cable: typeof connectedCables[0]; core: number; color: string }; right: { cable: typeof connectedCables[0]; core: number; color: string } | null }[] = [];
-              for (let i = 0; i < connectedCables.length; i++) {
-                const c1 = connectedCables[i];
-                const c2 = connectedCables[i + 1] || null;
-                const coreCount = Math.min(c1.core_count, c2 ? c2.core_count : c1.core_count, 8);
-                for (let j = 0; j < coreCount; j++) {
-                  const coreColor = CORE_COLORS_ARR[j % CORE_COLORS_ARR.length];
-                  pairs.push({
-                    left: { cable: c1, core: j + 1, color: coreColor },
-                    right: c2 ? { cable: c2, core: j + 1, color: coreColor } : null,
-                  });
-                }
-                if (c2) i++; // skip next cable as it's paired
+              // Group splices by tray_id
+              const byTray: Record<number, typeof tjSplices> = {};
+              for (const sp of tjSplices) {
+                const tray = sp.tray_id || 1;
+                if (!byTray[tray]) byTray[tray] = [];
+                byTray[tray].push(sp);
               }
-              return pairs.slice(0, tj.capacity).map((pair, idx) => (
-                <div key={idx} className="flex items-center gap-1 group">
-                  {/* Left core */}
-                  <div className="flex items-center gap-1 min-w-[90px]">
-                    <CoreColorDot coreIndex={pair.left.core} size={12} />
-                    <span className="text-[9px] font-mono text-slate-500 truncate">{pair.left.cable.code}</span>
-                    <span className="text-[9px] font-mono font-semibold" style={{ color: pair.left.color }}>:{pair.left.core}</span>
-                  </div>
-                  {/* Splice sleeve */}
-                  <div className="relative flex items-center" title={`${pair.left.cable.code} core ${pair.left.core} (${pair.left.cable.core_count}C ${pair.left.cable.manufacturer || "?"}) ↔ ${pair.right ? pair.right.cable.code + " core " + pair.right.core + " (" + pair.right.cable.core_count + "C " + (pair.right.cable.manufacturer || "?") + ")" : "empty"}`}>
-                    <div className="w-8 h-2.5 rounded-full border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800 group-hover:border-indigo-400 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-950/40 transition-colors" />
-                    <div className="absolute left-0.5 right-0.5 h-0.5 rounded-full top-1/2 -translate-y-1/2" style={{ background: pair.right ? `linear-gradient(90deg, ${pair.left.color}, ${pair.right.color})` : pair.left.color + "44" }} />
-                  </div>
-                  {/* Right core */}
-                  <div className="flex items-center gap-1 min-w-[90px] justify-end">
-                    {pair.right ? (
-                      <>
-                        <span className="text-[9px] font-mono font-semibold" style={{ color: pair.right.color }}>:{pair.right.core}</span>
-                        <span className="text-[9px] font-mono text-slate-500 truncate">{pair.right.cable.code}</span>
-                        <CoreColorDot coreIndex={pair.right.core} size={12} />
-                      </>
-                    ) : (
-                      <span className="text-[9px] text-slate-300 dark:text-slate-600">—</span>
-                    )}
-                  </div>
-                  {/* Core number */}
-                  <span className="text-[8px] text-slate-300 dark:text-slate-600 ml-1">{idx + 1}</span>
+              return Object.entries(byTray).sort(([a], [b]) => Number(a) - Number(b)).map(([trayId, traySplices]) => (
+                <div key={trayId} className="mb-2">
+                  <div className="text-[9px] font-semibold text-slate-400 mb-1">Tray {trayId}</div>
+                  {traySplices.map((sp) => {
+                    const coreColorA = CORE_COLORS_ARR[((sp.core_a || 1) - 1) % CORE_COLORS_ARR.length];
+                    const coreColorB = CORE_COLORS_ARR[((sp.core_b || 1) - 1) % CORE_COLORS_ARR.length];
+                    const leftLabel = sp.cable_a_id ? `${sp.cable_a_code}:${sp.core_a}` : `${sp.splitter_a_name}:${sp.port_a === 0 ? "IN" : "OUT" + sp.port_a}`;
+                    const rightLabel = sp.cable_b_id ? `${sp.cable_b_code}:${sp.core_b}` : `${sp.splitter_b_name}:${sp.port_b === 0 ? "IN" : "OUT" + sp.port_b}`;
+                    const leftColor = sp.cable_a_id ? coreColorA : "#f59e0b";
+                    const rightColor = sp.cable_b_id ? coreColorB : "#f59e0b";
+                    return (
+                      <div key={sp.id} className="flex items-center gap-1 group" title={`${leftLabel} ↔ ${rightLabel}`}>
+                        <div className="flex items-center gap-1 min-w-[100px]">
+                          {sp.cable_a_id ? <CoreColorDot coreIndex={sp.core_a} size={10} /> : <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />}
+                          <span className="text-[9px] font-mono text-slate-600 truncate">{leftLabel}</span>
+                        </div>
+                        <div className="relative flex items-center">
+                          <div className="w-6 h-2 rounded-full border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800" />
+                          <div className="absolute left-0.5 right-0.5 h-0.5 rounded-full top-1/2 -translate-y-1/2" style={{ background: `linear-gradient(90deg, ${leftColor}, ${rightColor})` }} />
+                        </div>
+                        <div className="flex items-center gap-1 min-w-[100px] justify-end">
+                          <span className="text-[9px] font-mono text-slate-600 truncate">{rightLabel}</span>
+                          {sp.cable_b_id ? <CoreColorDot coreIndex={sp.core_b} size={10} /> : <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />}
+                        </div>
+                        <button className="opacity-0 group-hover:opacity-100 ml-1 text-red-400 hover:text-red-600 transition" onClick={() => deleteSplice(sp.id)}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ));
             })()}
-            {tj.capacity > 8 && <div className="text-[9px] text-slate-400 mt-1">... {tj.capacity} cores total</div>}
           </div>
         ) : (
-          <div className="text-xs text-slate-400">No links connected</div>
+          <div className="text-xs text-slate-400">No splices — all cores are free</div>
         )}
       </div>
 
@@ -1537,32 +1578,28 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
                 {pagedSplices.map((sp) => {
                   const ca = connectedCables.find((c) => c.id === sp.cable_a_id);
                   const cb = connectedCables.find((c) => c.id === sp.cable_b_id);
+                  const sa = hostedSplitters.find((s) => s.id === sp.splitter_a_id);
+                  const sb = hostedSplitters.find((s) => s.id === sp.splitter_b_id);
+                  const leftLabel = sp.cable_a_id ? sp.cable_a_code : `${sa?.name || sa?.unique_id || "?"}: ${sp.port_a === 0 ? "IN" : "OUT" + sp.port_a}`;
+                  const rightLabel = sp.cable_b_id ? sp.cable_b_code : `${sb?.name || sb?.unique_id || "?"}: ${sp.port_b === 0 ? "IN" : "OUT" + sp.port_b}`;
+                  const leftCore = sp.cable_a_id ? sp.core_a : sp.port_a;
+                  const rightCore = sp.cable_b_id ? sp.core_b : sp.port_b;
                   return (
                     <div key={sp.id} className="rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] dark:border-slate-700 dark:bg-slate-900 group">
                       <div className="flex items-center gap-2">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${sp.status === "active" ? "bg-emerald-500" : sp.status === "spare" ? "bg-amber-500" : "bg-red-500"}`} />
-                        {/* Cable A side */}
+                        {/* Left side */}
                         <div className="flex items-center gap-1">
-                          <span className="font-mono font-bold" style={{ color: CORE_COLORS[ca?.core_count || 0] || "#6b7280" }}>{sp.cable_a_code}</span>
-                          <span className="text-[9px] text-slate-400">{ca?.manufacturer || ""} {ca?.manufacturing_year || ""}</span>
-                        </div>
-                        <span className="text-slate-300">:</span>
-                        {/* Core A with color */}
-                        <div className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                          <CoreColorDot coreIndex={sp.core_a} size={8} />
-                          <span className="text-[9px] font-mono font-semibold">{sp.core_a}</span>
+                          {sp.cable_a_id ? <CoreColorDot coreIndex={sp.core_a} size={8} /> : <span className="w-2 h-2 rounded-full bg-amber-400" />}
+                          <span className="font-mono font-bold">{leftLabel}</span>
+                          {ca?.manufacturer && <span className="text-[9px] text-slate-400">{ca.manufacturer}</span>}
                         </div>
                         <span className="text-slate-400">↔</span>
-                        {/* Cable B side */}
+                        {/* Right side */}
                         <div className="flex items-center gap-1">
-                          <span className="font-mono font-bold" style={{ color: CORE_COLORS[cb?.core_count || 0] || "#6b7280" }}>{sp.cable_b_code}</span>
-                          <span className="text-[9px] text-slate-400">{cb?.manufacturer || ""} {cb?.manufacturing_year || ""}</span>
-                        </div>
-                        <span className="text-slate-300">:</span>
-                        {/* Core B with color */}
-                        <div className="flex items-center gap-0.5 rounded border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                          <CoreColorDot coreIndex={sp.core_b} size={8} />
-                          <span className="text-[9px] font-mono font-semibold">{sp.core_b}</span>
+                          {sp.cable_b_id ? <CoreColorDot coreIndex={sp.core_b} size={8} /> : <span className="w-2 h-2 rounded-full bg-amber-400" />}
+                          <span className="font-mono font-bold">{rightLabel}</span>
+                          {cb?.manufacturer && <span className="text-[9px] text-slate-400">{cb.manufacturer}</span>}
                         </div>
                         <span className={`ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
                           sp.status === "active" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
@@ -1607,68 +1644,146 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
       {/* Splice form modal */}
       {showSpliceForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-5 max-h-[80vh] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg p-5 max-h-[80vh] overflow-y-auto">
             <h3 className="text-sm font-bold mb-3">{editSplice ? "Edit Splice" : "New Splice"}</h3>
             <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="label">Link A</label>
-                  <input className="input text-[10px] py-1 mb-1" placeholder="Search link..." value={cableSearchA} onChange={(e) => setCableSearchA(e.target.value)} />
-                  <select className="input text-xs" size={Math.min(filteredCablesA.length, 5)} value={spliceForm.cable_a_id} onChange={(e) => {
-                    const newCableId = Number(e.target.value);
-                    const uc = unusedCores.find((u) => u.cable_id === newCableId);
-                    const firstSpare = uc?.spare_cores?.[0] || 1;
-                    setSpliceForm({ ...spliceForm, cable_a_id: newCableId, core_a: firstSpare });
-                  }}>
-                    {filteredCablesA.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.manufacturer || "?"} · {c.manufacturing_year || "?"} ({c.core_count}C)</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Core A</label>
-                  <CoreSelect
-                    coreCount={connectedCables.find((c) => c.id === spliceForm.cable_a_id)?.core_count || 12}
-                    value={spliceForm.core_a}
-                    onChange={(v) => setSpliceForm({ ...spliceForm, core_a: v })}
-                    occupiedCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_a_id)?.occupied_cores}
-                    spareCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_a_id)?.spare_cores}
-                  />
+              {/* Endpoint A */}
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <div className="text-xs font-semibold text-slate-500 mb-2">Endpoint A</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label text-[10px]">Type</label>
+                    <select className="input text-xs" value={spliceForm.splitter_a_id ? "splitter" : "cable"} onChange={(e) => {
+                      if (e.target.value === "splitter") {
+                        setSpliceForm({ ...spliceForm, cable_a_id: null, splitter_a_id: hostedSplitters[0]?.id || null, port_a: 0 });
+                      } else {
+                        setSpliceForm({ ...spliceForm, splitter_a_id: null, cable_a_id: connectedCables[0]?.id || null, core_a: 1 });
+                      }
+                    }}>
+                      <option value="cable">Cable</option>
+                      <option value="splitter">Splitter</option>
+                    </select>
+                  </div>
+                  {spliceForm.splitter_a_id ? (
+                    <>
+                      <div>
+                        <label className="label text-[10px]">Splitter</label>
+                        <select className="input text-xs" value={spliceForm.splitter_a_id || ""} onChange={(e) => setSpliceForm({ ...spliceForm, splitter_a_id: Number(e.target.value) })}>
+                          {hostedSplitters.map((s) => <option key={s.id} value={s.id}>{s.name || s.unique_id} ({s.split_ratio}way)</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label text-[10px]">Port</label>
+                        <select className="input text-xs" value={spliceForm.port_a} onChange={(e) => setSpliceForm({ ...spliceForm, port_a: Number(e.target.value) })}>
+                          <option value={0}>Input</option>
+                          {Array.from({ length: hostedSplitters.find((s) => s.id === spliceForm.splitter_a_id)?.split_ratio || 2 }, (_, i) => (
+                            <option key={i + 1} value={i + 1}>Output {i + 1}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="label text-[10px]">Link</label>
+                        <input className="input text-[10px] py-1 mb-1" placeholder="Search..." value={cableSearchA} onChange={(e) => setCableSearchA(e.target.value)} />
+                        <select className="input text-xs" size={Math.min(filteredCablesA.length, 4)} value={spliceForm.cable_a_id || ""} onChange={(e) => setSpliceForm({ ...spliceForm, cable_a_id: Number(e.target.value), core_a: 1 })}>
+                          {filteredCablesA.map((c) => <option key={c.id} value={c.id}>{c.code} ({c.core_count}C)</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label text-[10px]">Core</label>
+                        <CoreSelect
+                          coreCount={connectedCables.find((c) => c.id === spliceForm.cable_a_id)?.core_count || 12}
+                          value={spliceForm.core_a}
+                          onChange={(v) => setSpliceForm({ ...spliceForm, core_a: v })}
+                          occupiedCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_a_id)?.occupied_cores}
+                          spareCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_a_id)?.spare_cores}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
+
               <div className="text-center text-xs text-slate-400">↔ Splice ↔</div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+              {/* Endpoint B */}
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <div className="text-xs font-semibold text-slate-500 mb-2">Endpoint B</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label text-[10px]">Type</label>
+                    <select className="input text-xs" value={spliceForm.splitter_b_id ? "splitter" : "cable"} onChange={(e) => {
+                      if (e.target.value === "splitter") {
+                        setSpliceForm({ ...spliceForm, cable_b_id: null, splitter_b_id: hostedSplitters[0]?.id || null, port_b: 0 });
+                      } else {
+                        setSpliceForm({ ...spliceForm, splitter_b_id: null, cable_b_id: connectedCables[0]?.id || null, core_b: 1 });
+                      }
+                    }}>
+                      <option value="cable">Cable</option>
+                      <option value="splitter">Splitter</option>
+                    </select>
+                  </div>
+                  {spliceForm.splitter_b_id ? (
+                    <>
+                      <div>
+                        <label className="label text-[10px]">Splitter</label>
+                        <select className="input text-xs" value={spliceForm.splitter_b_id || ""} onChange={(e) => setSpliceForm({ ...spliceForm, splitter_b_id: Number(e.target.value) })}>
+                          {hostedSplitters.map((s) => <option key={s.id} value={s.id}>{s.name || s.unique_id} ({s.split_ratio}way)</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label text-[10px]">Port</label>
+                        <select className="input text-xs" value={spliceForm.port_b} onChange={(e) => setSpliceForm({ ...spliceForm, port_b: Number(e.target.value) })}>
+                          <option value={0}>Input</option>
+                          {Array.from({ length: hostedSplitters.find((s) => s.id === spliceForm.splitter_b_id)?.split_ratio || 2 }, (_, i) => (
+                            <option key={i + 1} value={i + 1}>Output {i + 1}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="label text-[10px]">Link</label>
+                        <input className="input text-[10px] py-1 mb-1" placeholder="Search..." value={cableSearchB} onChange={(e) => setCableSearchB(e.target.value)} />
+                        <select className="input text-xs" size={Math.min(filteredCablesB.length, 4)} value={spliceForm.cable_b_id || ""} onChange={(e) => setSpliceForm({ ...spliceForm, cable_b_id: Number(e.target.value), core_b: 1 })}>
+                          {filteredCablesB.map((c) => <option key={c.id} value={c.id}>{c.code} ({c.core_count}C)</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label text-[10px]">Core</label>
+                        <CoreSelect
+                          coreCount={connectedCables.find((c) => c.id === spliceForm.cable_b_id)?.core_count || 12}
+                          value={spliceForm.core_b}
+                          onChange={(v) => setSpliceForm({ ...spliceForm, core_b: v })}
+                          occupiedCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_b_id)?.occupied_cores}
+                          spareCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_b_id)?.spare_cores}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Tray & Status */}
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="label">Link B</label>
-                  <input className="input text-[10px] py-1 mb-1" placeholder="Search link..." value={cableSearchB} onChange={(e) => setCableSearchB(e.target.value)} />
-                  <select className="input text-xs" size={Math.min(filteredCablesB.length, 5)} value={spliceForm.cable_b_id} onChange={(e) => {
-                    const newCableId = Number(e.target.value);
-                    const uc = unusedCores.find((u) => u.cable_id === newCableId);
-                    const firstSpare = uc?.spare_cores?.[0] || 1;
-                    setSpliceForm({ ...spliceForm, cable_b_id: newCableId, core_b: firstSpare });
-                  }}>
-                    {filteredCablesB.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.manufacturer || "?"} · {c.manufacturing_year || "?"} ({c.core_count}C)</option>)}
+                  <label className="label text-[10px]">Tray ID</label>
+                  <input type="number" className="input text-xs" min={1} value={spliceForm.tray_id} onChange={(e) => setSpliceForm({ ...spliceForm, tray_id: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label className="label text-[10px]">Status</label>
+                  <select className="input text-xs" value={spliceForm.status} onChange={(e) => setSpliceForm({ ...spliceForm, status: e.target.value })}>
+                    <option value="active">Active</option>
+                    <option value="spare">Spare</option>
+                    <option value="broken">Broken</option>
                   </select>
                 </div>
-                <div>
-                  <label className="label">Core B</label>
-                  <CoreSelect
-                    coreCount={connectedCables.find((c) => c.id === spliceForm.cable_b_id)?.core_count || 12}
-                    value={spliceForm.core_b}
-                    onChange={(v) => setSpliceForm({ ...spliceForm, core_b: v })}
-                    occupiedCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_b_id)?.occupied_cores}
-                    spareCores={unusedCores.find((u) => u.cable_id === spliceForm.cable_b_id)?.spare_cores}
-                  />
-                </div>
               </div>
               <div>
-                <label className="label">Status</label>
-                <select className="input text-xs" value={spliceForm.status} onChange={(e) => setSpliceForm({ ...spliceForm, status: e.target.value })}>
-                  <option value="active">Active</option>
-                  <option value="spare">Spare</option>
-                  <option value="broken">Broken</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Notes</label>
+                <label className="label text-[10px]">Notes</label>
                 <input className="input text-xs" value={spliceForm.notes} onChange={(e) => setSpliceForm({ ...spliceForm, notes: e.target.value })} />
               </div>
               {unusedCores.length > 0 && (
@@ -2111,11 +2226,23 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         menu.style.cssText = "position:absolute;z-index:9999;background:#1e293b;border-radius:8px;padding:4px 0;box-shadow:0 4px 16px rgba(0,0,0,.4);min-width:180px;left:" + pt.x + "px;top:" + pt.y + "px;";
         menu.innerHTML = '<div style="padding:6px 12px;color:#94a3b8;font-size:11px;font-weight:600">' + tj.unique_id + " — " + tj.name + "</div>"
           + '<div class="ctx-i" data-action="draw-cable" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
-          + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M4 12h16M12 4v16"/></svg>Draw Cable</div>';
+          + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M4 12h16M12 4v16"/></svg>Draw Cable</div>'
+          + '<div class="ctx-i" data-action="drag-tj" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
+          + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M12 2l0 20M2 12l20 0"/></svg>Drag / Move</div>'
+          + '<div class="ctx-i" data-action="view-details" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
+          + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>View Details</div>';
         map.getContainer().appendChild(menu);
         L.DomEvent.disableClickPropagation(menu);
         menu.querySelector('[data-action="draw-cable"]')?.addEventListener("click", () => {
           onStartDrawCableRef.current(tj);
+          menu.remove();
+        });
+        menu.querySelector('[data-action="drag-tj"]')?.addEventListener("click", () => {
+          startDragTj(tj, marker);
+          menu.remove();
+        });
+        menu.querySelector('[data-action="view-details"]')?.addEventListener("click", () => {
+          onTjClickRef.current(tj);
           menu.remove();
         });
         map.once("click", () => menu.remove());
@@ -2331,6 +2458,16 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           )}
           <span className="text-[10px] text-slate-400">ESC=undo</span>
           <button className="rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition" onClick={onCancelDrawCable}>Cancel</button>
+        </div>
+      )}
+
+      {/* Drag TJ Toolbar */}
+      {dragTj.active && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 rounded-xl bg-white/95 dark:bg-slate-900/95 px-4 py-2.5 shadow-2xl border border-amber-300 dark:border-amber-700 backdrop-blur-sm">
+          <span className="text-xs font-semibold text-amber-600">Dragging TJ: {dragTj.tj?.unique_id}</span>
+          <span className="text-[10px] text-slate-400">Drag the marker to move, then Save</span>
+          <button className="rounded-md bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 transition" onClick={saveDragTj}>Save</button>
+          <button className="rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition" onClick={cancelDragTj}>Cancel</button>
         </div>
       )}
 

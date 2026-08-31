@@ -869,6 +869,29 @@ export interface FiberLoop {
   created_at: string | null;
 }
 
+export interface Splice {
+  id: number;
+  tj_id: number;
+  cable_a_id: number | null;
+  core_a: number;
+  cable_b_id: number | null;
+  core_b: number;
+  splitter_a_id: number | null;
+  splitter_b_id: number | null;
+  port_a: number;
+  port_b: number;
+  tray_id: number;
+  status: string;
+  notes: string;
+  created_at: string | null;
+  cable_a_code: string;
+  cable_b_code: string;
+  splitter_a_name: string;
+  splitter_b_name: string;
+  splitter_a_ratio: number;
+  splitter_b_ratio: number;
+}
+
 export interface CableCut {
   id: number;
   cable_id: number;
