@@ -2,6 +2,9 @@
 
 Field team members can submit fiber infrastructure changes (create/update/delete)
 that require admin/global_write approval before taking effect.
+
+This router is now part of the centralized approval queue system.
+The new /api/approvals router provides the unified queue for all entity types.
 """
 import json
 from datetime import datetime
@@ -20,8 +23,9 @@ from ..schemas import (
     CableCreate, CableOut, CableUpdate, FiberLoopCreate, FiberLoopOut,
     SpliceCreate, SpliceOut, SplitterCreate, SplitterOut,
     TjBoxCreate, TjBoxOut, TjBoxUpdate, CableCutCreate, CableCutOut,
+    ApprovalReturnRequest, ApprovalResubmitRequest, ApprovalOut,
 )
-from ..security import get_current_user, require_fiber_request, require_write, user_role
+from ..security import get_current_user, require_fiber_request, require_write, require_noc_approval, require_approval_submit, user_role
 from ..utils.time import utcnow
 
 router = APIRouter(prefix="/api/fiber", tags=["fiber-approvals"])
@@ -42,7 +46,7 @@ class ApprovalReview(BaseModel):
     review_note: str = ""
 
 
-class ApprovalOut(BaseModel):
+class ApprovalOutCompat(BaseModel):
     id: int
     requested_by: int
     action: str
@@ -52,6 +56,7 @@ class ApprovalOut(BaseModel):
     status: str
     reviewed_by: int | None = None
     review_note: str = ""
+    correction_note: str = ""
     created_at: datetime
     reviewed_at: datetime | None = None
 
@@ -105,11 +110,28 @@ def _next_link_id(db) -> str:
     return f"LINK-{num:04d}"
 
 
+def _parse_out(req: FiberApprovalRequest) -> ApprovalOutCompat:
+    return ApprovalOutCompat(
+        id=req.id,
+        requested_by=req.requested_by,
+        action=req.action,
+        entity_type=req.entity_type,
+        entity_id=req.entity_id,
+        payload=json.loads(req.payload_json),
+        status=req.status,
+        reviewed_by=req.reviewed_by,
+        review_note=req.review_note,
+        correction_note=req.correction_note,
+        created_at=req.created_at,
+        reviewed_at=req.reviewed_at,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Submit approval request (field_team + admin/global_write)
 # ---------------------------------------------------------------------------
 
-@router.post("/approvals", response_model=ApprovalOut, status_code=201)
+@router.post("/approvals", response_model=ApprovalOutCompat, status_code=201)
 async def submit_approval(
     body: ApprovalSubmit,
     user=Depends(require_fiber_request),
@@ -126,6 +148,7 @@ async def submit_approval(
 
     req = FiberApprovalRequest(
         requested_by=user.id,
+        submitted_by_name=user.username,
         action=body.action,
         entity_type=body.entity_type,
         entity_id=body.entity_id,
@@ -136,26 +159,14 @@ async def submit_approval(
     await db.commit()
     await db.refresh(req)
 
-    return ApprovalOut(
-        id=req.id,
-        requested_by=req.requested_by,
-        action=req.action,
-        entity_type=req.entity_type,
-        entity_id=req.entity_id,
-        payload=json.loads(req.payload_json),
-        status=req.status,
-        reviewed_by=req.reviewed_by,
-        review_note=req.review_note,
-        created_at=req.created_at,
-        reviewed_at=req.reviewed_at,
-    )
+    return _parse_out(req)
 
 
 # ---------------------------------------------------------------------------
 # List approval requests
 # ---------------------------------------------------------------------------
 
-@router.get("/approvals", response_model=list[ApprovalOut])
+@router.get("/approvals", response_model=list[ApprovalOutCompat])
 async def list_approvals(
     status: str | None = None,
     entity_type: str | None = None,
@@ -178,29 +189,14 @@ async def list_approvals(
     result = await db.execute(q)
     rows = result.scalars().all()
 
-    return [
-        ApprovalOut(
-            id=r.id,
-            requested_by=r.requested_by,
-            action=r.action,
-            entity_type=r.entity_type,
-            entity_id=r.entity_id,
-            payload=json.loads(r.payload_json),
-            status=r.status,
-            reviewed_by=r.reviewed_by,
-            review_note=r.review_note,
-            created_at=r.created_at,
-            reviewed_at=r.reviewed_at,
-        )
-        for r in rows
-    ]
+    return [_parse_out(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
 # Get single approval request
 # ---------------------------------------------------------------------------
 
-@router.get("/approvals/{request_id}", response_model=ApprovalOut)
+@router.get("/approvals/{request_id}", response_model=ApprovalOutCompat)
 async def get_approval(
     request_id: int,
     user=Depends(get_current_user),
@@ -217,26 +213,14 @@ async def get_approval(
     if role == "field_team" and req.requested_by != user.id:
         raise HTTPException(403, "You can only view your own approval requests")
 
-    return ApprovalOut(
-        id=req.id,
-        requested_by=req.requested_by,
-        action=req.action,
-        entity_type=req.entity_type,
-        entity_id=req.entity_id,
-        payload=json.loads(req.payload_json),
-        status=req.status,
-        reviewed_by=req.reviewed_by,
-        review_note=req.review_note,
-        created_at=req.created_at,
-        reviewed_at=req.reviewed_at,
-    )
+    return _parse_out(req)
 
 
 # ---------------------------------------------------------------------------
 # Approve a request
 # ---------------------------------------------------------------------------
 
-@router.put("/approvals/{request_id}/approve", response_model=ApprovalOut)
+@router.put("/approvals/{request_id}/approve", response_model=ApprovalOutCompat)
 async def approve_request(
     request_id: int,
     body: ApprovalReview = ApprovalReview(),
@@ -250,7 +234,7 @@ async def approve_request(
     req = result.scalar_one_or_none()
     if not req:
         raise HTTPException(404, "Approval request not found")
-    if req.status != ApprovalStatus.pending.value:
+    if req.status not in (ApprovalStatus.pending.value, ApprovalStatus.resubmitted.value):
         raise HTTPException(400, f"Request is already {req.status}")
 
     payload = json.loads(req.payload_json)
@@ -283,26 +267,14 @@ async def approve_request(
     await db.commit()
     await db.refresh(req)
 
-    return ApprovalOut(
-        id=req.id,
-        requested_by=req.requested_by,
-        action=req.action,
-        entity_type=req.entity_type,
-        entity_id=req.entity_id,
-        payload=json.loads(req.payload_json),
-        status=req.status,
-        reviewed_by=req.reviewed_by,
-        review_note=req.review_note,
-        created_at=req.created_at,
-        reviewed_at=req.reviewed_at,
-    )
+    return _parse_out(req)
 
 
 # ---------------------------------------------------------------------------
 # Reject a request
 # ---------------------------------------------------------------------------
 
-@router.put("/approvals/{request_id}/reject", response_model=ApprovalOut)
+@router.put("/approvals/{request_id}/reject", response_model=ApprovalOutCompat)
 async def reject_request(
     request_id: int,
     body: ApprovalReview = ApprovalReview(),
@@ -315,7 +287,7 @@ async def reject_request(
     req = result.scalar_one_or_none()
     if not req:
         raise HTTPException(404, "Approval request not found")
-    if req.status != ApprovalStatus.pending.value:
+    if req.status not in (ApprovalStatus.pending.value, ApprovalStatus.resubmitted.value):
         raise HTTPException(400, f"Request is already {req.status}")
 
     req.status = ApprovalStatus.rejected.value
@@ -325,19 +297,72 @@ async def reject_request(
     await db.commit()
     await db.refresh(req)
 
-    return ApprovalOut(
-        id=req.id,
-        requested_by=req.requested_by,
-        action=req.action,
-        entity_type=req.entity_type,
-        entity_id=req.entity_id,
-        payload=json.loads(req.payload_json),
-        status=req.status,
-        reviewed_by=req.reviewed_by,
-        review_note=req.review_note,
-        created_at=req.created_at,
-        reviewed_at=req.reviewed_at,
+    return _parse_out(req)
+
+
+# ---------------------------------------------------------------------------
+# Return for correction
+# ---------------------------------------------------------------------------
+
+@router.put("/approvals/{request_id}/return", response_model=ApprovalOutCompat)
+async def return_for_correction(
+    request_id: int,
+    body: ApprovalReturnRequest,
+    user=Depends(require_noc_approval),
+    db: AsyncSession = Depends(get_db),
+):
+    if not body.correction_note.strip():
+        raise HTTPException(400, "correction_note is required")
+
+    result = await db.execute(
+        select(FiberApprovalRequest).where(FiberApprovalRequest.id == request_id)
     )
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(404, "Approval request not found")
+    if req.status not in (ApprovalStatus.pending.value, ApprovalStatus.resubmitted.value):
+        raise HTTPException(400, f"Request is {req.status}, cannot return for correction")
+
+    req.status = ApprovalStatus.returned_for_correction.value
+    req.reviewed_by = user.id
+    req.correction_note = body.correction_note
+    req.reviewed_at = utcnow()
+    await db.commit()
+    await db.refresh(req)
+
+    return _parse_out(req)
+
+
+# ---------------------------------------------------------------------------
+# Resubmit (employee corrects and resubmits)
+# ---------------------------------------------------------------------------
+
+@router.put("/approvals/{request_id}/resubmit", response_model=ApprovalOutCompat)
+async def resubmit(
+    request_id: int,
+    body: ApprovalResubmitRequest,
+    user=Depends(require_approval_submit),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(FiberApprovalRequest).where(FiberApprovalRequest.id == request_id)
+    )
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(404, "Approval request not found")
+    if req.status != ApprovalStatus.returned_for_correction.value:
+        raise HTTPException(400, f"Request is {req.status}, can only resubmit from 'returned_for_correction'")
+    if req.requested_by != user.id:
+        raise HTTPException(403, "You can only resubmit your own approval requests")
+
+    req.payload_json = json.dumps(body.payload)
+    req.correction_note = ""
+    req.status = ApprovalStatus.resubmitted.value
+    req.resubmitted_at = utcnow()
+    await db.commit()
+    await db.refresh(req)
+
+    return _parse_out(req)
 
 
 # ---------------------------------------------------------------------------

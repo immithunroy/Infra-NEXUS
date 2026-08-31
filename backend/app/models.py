@@ -749,21 +749,40 @@ class ApprovalStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+    returned_for_correction = "returned_for_correction"
+    resubmitted = "resubmitted"
+
+
+class ApprovalPriority(str, enum.Enum):
+    low = "low"
+    normal = "normal"
+    high = "high"
+    urgent = "urgent"
 
 
 class FiberApprovalRequest(Base):
-    """A pending fiber infrastructure change submitted by field_team for NOC/admin approval."""
+    """A pending change submitted by field_team / Android app for NOC/admin approval.
+
+    Supports all entity types: fiber infrastructure, subscribers, locations, etc.
+    """
 
     __tablename__ = "fiber_approval_requests"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     requested_by: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    submitted_by_name: Mapped[str] = mapped_column(String(128), default="")  # cached for display
     action: Mapped[str] = mapped_column(String(16))  # create | update | delete
-    entity_type: Mapped[str] = mapped_column(String(32))  # cable | tj_box | splitter | splice | loop | cable_cut
+    entity_type: Mapped[str] = mapped_column(String(32))  # tj | tj_splitter | cable | user | user_location | splitter | splice_box | infrastructure | loop | cable_cut | other
     entity_id: Mapped[int | None] = mapped_column(nullable=True)  # ID of existing entity (for update/delete)
     payload_json: Mapped[str] = mapped_column(Text)  # serialized create/update body as JSON
+    previous_data_json: Mapped[str] = mapped_column(Text, default="")  # snapshot of existing entity before update (for comparison)
     status: Mapped[str] = mapped_column(String(16), default=ApprovalStatus.pending.value)
+    priority: Mapped[str] = mapped_column(String(16), default=ApprovalPriority.normal.value)
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     review_note: Mapped[str] = mapped_column(Text, default="")
+    correction_note: Mapped[str] = mapped_column(Text, default="")  # NOC's note when returning for correction
+    photos_json: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of photo file paths
+    location_json: Mapped[str] = mapped_column(Text, default="")  # GPS coordinates of submission {"lat": ..., "lng": ...}
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resubmitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

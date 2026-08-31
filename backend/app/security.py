@@ -83,6 +83,10 @@ _WRITE_ROLES = {UserRole.admin, UserRole.global_write}
 _ADMIN_ROLES = {UserRole.admin}
 # Roles that may submit fiber infrastructure changes for approval.
 _FIBER_REQUEST_ROLES = {UserRole.admin, UserRole.global_write, UserRole.field_team}
+# Roles that may review/approve/return submissions in the NOC approval queue.
+_NOC_APPROVAL_ROLES = {UserRole.admin, UserRole.global_write, UserRole.noc}
+# Roles that may submit to the approval queue (Android / field submissions).
+_APPROVAL_SUBMIT_ROLES = {UserRole.admin, UserRole.global_write, UserRole.field_team}
 
 
 def user_role(user: User) -> str:
@@ -122,6 +126,18 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 
 def require_fiber_request(user: User = Depends(get_current_user)) -> User:
     if user_role(user) not in _FIBER_REQUEST_ROLES:
+        raise _denied()
+    return user
+
+
+def require_noc_approval(user: User = Depends(get_current_user)) -> User:
+    if user_role(user) not in _NOC_APPROVAL_ROLES:
+        raise _denied()
+    return user
+
+
+def require_approval_submit(user: User = Depends(get_current_user)) -> User:
+    if user_role(user) not in _APPROVAL_SUBMIT_ROLES:
         raise _denied()
     return user
 

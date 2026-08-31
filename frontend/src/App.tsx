@@ -3,6 +3,7 @@ import { getToken } from "./api/client";
 import Layout from "./components/Layout";
 import { ThemeProvider } from "./theme";
 import Acs from "./pages/Acs";
+import ApprovalDetail from "./pages/ApprovalDetail";
 import Bindings from "./pages/Bindings";
 import Dashboard from "./pages/Dashboard";
 import Devices from "./pages/Devices";
@@ -10,6 +11,7 @@ import FiberMap from "./pages/FiberMap";
 import LiveDowns from "./pages/LiveDowns";
 import Login from "./pages/Login";
 import NetworkMap from "./pages/NetworkMap";
+import NocApprovals from "./pages/NocApprovals";
 import Onus from "./pages/Onus";
 import OnuProfile from "./pages/OnuProfile";
 import Reports from "./pages/Reports";
@@ -77,6 +79,8 @@ export default function App() {
             <Route path="/users" element={<Users />} />
             <Route path="/scans" element={<Scans />} />
             <Route path="/schedule-jobs" element={<ScheduleJobs />} />
+            <Route path="/approvals" element={<NocApprovals />} />
+            <Route path="/approvals/:id" element={<ApprovalDetail />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, downloadFile } from "../api/client";
-import { BrandBucket, DashboardSummary, MassDownPort, OpticalAverages, OltUsage, PortUsage, WeakOnu, WeakSignalReport } from "../api/types";
+import { BrandBucket, DashboardSummary, MassDownPort, OpticalAverages, OltUsage, PendingCount, PortUsage, WeakOnu, WeakSignalReport } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
 import { fmtTime } from "../lib/time";
 
@@ -528,6 +528,7 @@ export default function Dashboard() {
   const [liveMassDowns, setLiveMassDowns] = useState<MassDownPort[]>([]);
   const [massDownsUpdated, setMassDownsUpdated] = useState<Date | null>(null);
   const [optAvg, setOptAvg] = useState<OpticalAverages | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingCount | null>(null);
 
   const load = useCallback(() => {
     api.get<DashboardSummary>("/dashboard").then(setData).catch((e) => setError(String(e)));
@@ -543,15 +544,21 @@ export default function Dashboard() {
     api.get<OpticalAverages>("/dashboard/optical-averages").then(setOptAvg).catch(() => undefined);
   }, []);
 
+  const loadPendingApprovals = useCallback(() => {
+    api.get<PendingCount>("/approvals/pending-count").then(setPendingApprovals).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     load();
     loadMassDowns();
     loadOptAvg();
+    loadPendingApprovals();
     const dashId = setInterval(load, 60000);
     const massId = setInterval(loadMassDowns, 300000);
     const optId = setInterval(loadOptAvg, 300000);
-    return () => { clearInterval(dashId); clearInterval(massId); clearInterval(optId); };
-  }, [load, loadMassDowns, loadOptAvg]);
+    const appId = setInterval(loadPendingApprovals, 60000);
+    return () => { clearInterval(dashId); clearInterval(massId); clearInterval(optId); clearInterval(appId); };
+  }, [load, loadMassDowns, loadOptAvg, loadPendingApprovals]);
 
   const stateSegments = useMemo(() => {
     if (!data) return [];
@@ -626,6 +633,19 @@ export default function Dashboard() {
         <Kpi label="OLTs" value={data.olt_count} hint={`${data.olt_reachable} reachable`} accent="from-sky-400 to-cyan-400" />
         <Kpi label="Mikrotik Routers" value={data.mikrotik_count} hint="PPPoE source" accent="from-blue-400 to-indigo-500" />
         <Kpi label="MACs on PON Ports" value={data.olt_mac_count.toLocaleString()} hint={`${data.matched_mac_count} matched to subscribers`} accent="from-teal-400 to-emerald-400" />
+        {pendingApprovals && pendingApprovals.total > 0 && (
+          <button
+            onClick={() => navigate("/approvals")}
+            className="card relative overflow-hidden p-5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          >
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-rose-500 to-orange-500" />
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending Approvals</div>
+            <div className="mt-2 text-3xl font-bold text-rose-600 dark:text-rose-400">{pendingApprovals.total}</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Click to review →
+            </div>
+          </button>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

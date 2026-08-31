@@ -881,3 +881,91 @@ export interface CableCut {
   status: string;
   notes: string;
 }
+
+// ---------------------------------------------------------------- approval queue
+export interface ApprovalItem {
+  id: number;
+  requested_by: number;
+  submitted_by_name: string;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  entity_label: string;
+  status: string;
+  priority: string;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface ApprovalDetail {
+  id: number;
+  requested_by: number;
+  submitted_by_name: string;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  payload: Record<string, unknown>;
+  previous_data: Record<string, unknown> | null;
+  status: string;
+  priority: string;
+  reviewed_by: number | null;
+  review_note: string;
+  correction_note: string;
+  photos: string[];
+  location: { lat: number; lng: number } | null;
+  created_at: string;
+  reviewed_at: string | null;
+  resubmitted_at: string | null;
+}
+
+export interface PendingCount {
+  total: number;
+  by_type: Record<string, number>;
+}
+
+export const APPROVAL_STATUSES = [
+  "pending", "approved", "rejected", "returned_for_correction", "resubmitted",
+];
+
+export const ENTITY_TYPE_LABELS: Record<string, string> = {
+  tj: "TJ",
+  tj_splitter: "TJ + Splitter",
+  cable: "Cable",
+  user: "User",
+  user_location: "User Location",
+  splitter: "Splitter",
+  splice_box: "Splice Box",
+  infrastructure: "Infrastructure",
+  loop: "Fiber Loop",
+  cable_cut: "Cable Cut",
+  other: "Other",
+};
+
+export const ACTION_LABELS: Record<string, string> = {
+  create: "New",
+  update: "Update",
+  delete: "Delete",
+};
+
+export const STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  returned_for_correction: "Returned",
+  resubmitted: "Resubmitted",
+};
+
+export const PRIORITY_LABELS: Record<string, string> = {
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
+};
+
+export function canApprove(role?: string): boolean {
+  return role === "admin" || role === "global_write" || role === "noc";
+}
+
+export function canSubmit(role?: string): boolean {
+  return role === "admin" || role === "global_write" || role === "field_team";
+}

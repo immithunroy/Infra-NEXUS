@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { api, setToken } from "../api/client";
-import { canManageUsers, ROLE_LABELS, UserOut } from "../api/types";
+import { canManageUsers, canApprove, ROLE_LABELS, UserOut, PendingCount } from "../api/types";
 import { useTheme } from "../theme";
 import GlobalSearch from "./GlobalSearch";
 
@@ -28,10 +28,14 @@ export default function Layout() {
   const { theme, toggle } = useTheme();
   const [user, setUser] = useState<UserOut | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const isMapPage = location.pathname === "/fiber-map" || location.pathname === "/network-map";
 
   useEffect(() => {
     api.get<UserOut>("/auth/me").then(setUser).catch(() => undefined);
+    if (canApprove(user?.role)) {
+      api.get<PendingCount>("/approvals/pending-count").then(d => setPendingCount(d.total)).catch(() => {});
+    }
   }, []);
 
   const logout = () => {
@@ -111,6 +115,29 @@ export default function Layout() {
                 <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
               </svg>
               Users & Roles
+            </NavLink>
+          )}
+          {canApprove(user?.role) && (
+            <NavLink
+              to="/approvals"
+              onClick={() => setNavOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                  isActive
+                    ? "bg-brand-600 text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                }`
+              }
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              Approvals
+              {pendingCount > 0 && (
+                <span className="ml-auto rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                  {pendingCount}
+                </span>
+              )}
             </NavLink>
           )}
         </nav>

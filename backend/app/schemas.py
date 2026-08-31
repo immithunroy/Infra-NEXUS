@@ -1273,3 +1273,90 @@ class CableCutOut(CableCutBase):
     splice_tj_id: int | None = None
     status: str = "cut"
     splice_tj_name: str = ""
+
+
+# ---------------------------------------------------------------- approval queue
+class ApprovalSubmitRequest(BaseModel):
+    """Android / field_team submission for NOC approval queue."""
+    entity_type: str  # tj | tj_splitter | cable | user | user_location | splitter | splice_box | infrastructure | loop | cable_cut | other
+    action: str = "create"  # create | update | delete
+    entity_id: int | None = None  # for updates
+    payload: dict  # entity-specific data
+    priority: str = "normal"  # low | normal | high | urgent
+    location: dict | None = None  # {"lat": ..., "lng": ...}
+    photos: list[str] = []  # base64 or filenames (handled by upload endpoint)
+
+
+class ApprovalReviewRequest(BaseModel):
+    review_note: str = ""
+
+
+class ApprovalReturnRequest(BaseModel):
+    correction_note: str
+
+
+class ApprovalResubmitRequest(BaseModel):
+    """Employee resubmits corrected data."""
+    payload: dict
+    photos: list[str] = []
+    correction_note: str = ""
+
+
+class ApprovalPhotoUpload(BaseModel):
+    photo: str  # base64 encoded image data
+
+
+class ApprovalOut(BaseModel):
+    """Full approval request detail for queue display."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    requested_by: int
+    submitted_by_name: str = ""
+    action: str
+    entity_type: str
+    entity_id: int | None = None
+    payload: dict
+    previous_data: dict | None = None
+    status: str
+    priority: str = "normal"
+    reviewed_by: int | None = None
+    review_note: str = ""
+    correction_note: str = ""
+    photos: list[str] = []
+    location: dict | None = None
+    created_at: datetime
+    reviewed_at: datetime | None = None
+    resubmitted_at: datetime | None = None
+
+
+class ApprovalListOut(BaseModel):
+    """Compact approval item for queue list."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    requested_by: int
+    submitted_by_name: str = ""
+    action: str
+    entity_type: str
+    entity_id: int | None = None
+    entity_label: str = ""  # human-readable entity name for display
+    status: str
+    priority: str = "normal"
+    created_at: datetime
+    reviewed_at: datetime | None = None
+
+
+class PendingCountOut(BaseModel):
+    """Pending approval count breakdown."""
+    total: int = 0
+    by_type: dict[str, int] = {}  # {"tj": 3, "cable": 4, ...}
+
+
+class ApprovalHistoryEntry(BaseModel):
+    """Single audit trail entry."""
+    status: str
+    user_id: int
+    user_name: str = ""
+    note: str = ""
+    timestamp: datetime | None = None
