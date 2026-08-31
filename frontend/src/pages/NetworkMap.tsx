@@ -260,26 +260,6 @@ function MapView({
   return (
     <div className="relative h-full">
       <div ref={containerRef} className="w-full h-full" style={{ minHeight: "400px" }} />
-      <div className="absolute top-2 right-2 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-2 sm:top-4 sm:right-4 sm:p-3 w-40 sm:w-52">
-        <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">Base Map</div>
-        <div className="grid grid-cols-2 gap-1">
-          {([["street","Street"],["satellite","Satellite"],["terrain","Terrain"],["hybrid","Hybrid"]] as const).map(([key,label]) => (
-            <button key={key} onClick={() => onSetBaseMap(key)} className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${baseMap === key ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"}`}>{label}</button>
-          ))}
-        </div>
-      </div>
-      <button
-        onClick={onToggleFullscreen}
-        className="absolute bottom-4 right-4 z-[999] flex items-center gap-1.5 rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-700"
-        title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-      >
-        {isFullscreen ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 00-2 2v3m20 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
-        )}
-        {isFullscreen ? "Exit" : "Fullscreen"}
-      </button>
       {selected && (
         <div className="pointer-events-none absolute bottom-16 left-4 z-[500]">
           <InfoPanel p={selected} onClose={() => onSelect(null)} />
@@ -380,7 +360,14 @@ export default function NetworkMap() {
           {/* Floating toolbar */}
           <div className="absolute top-3 left-3 z-[1000] flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
             {!isFullscreen && <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">User Map</h1>}
-            <select className="input w-28 text-xs py-1" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            {/* Base Map selector */}
+            <div className="flex gap-0.5">
+              {([["street","Street"],["satellite","Sat"],["terrain","Terrain"],["hybrid","Hybrid"]] as const).map(([key,label]) => (
+                <button key={key} onClick={() => setBaseMap(key)} className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${baseMap === key ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"}`}>{label}</button>
+              ))}
+            </div>
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+            <select className="input w-28 text-[10px] py-0.5" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
               <option value="all">All Status</option>
               <option value="online">Online</option>
               <option value="offline">Offline</option>
@@ -389,8 +376,12 @@ export default function NetworkMap() {
               <option value="lost">Lost</option>
               <option value="llid_admin_down">LLID Admin Down</option>
             </select>
-            <input className="input w-36 text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
+            <input className="input w-32 text-[10px] py-0.5" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
             <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredPoints.length}/{data?.points?.length || 0}</span>
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+            <button onClick={() => setIsFullscreen(!isFullscreen)} className="text-[10px] py-0.5 px-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+              {isFullscreen ? "Exit" : "Expand"}
+            </button>
           </div>
           <MapView
             points={filteredPoints}
