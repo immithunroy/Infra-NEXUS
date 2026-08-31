@@ -301,6 +301,8 @@ export default function FiberMap() {
     setDrawCable({ active: false, sourceTj: null, routePoints: [], mousePos: null });
   }, []);
 
+  const [dragTj, setDragTj] = useState<{ active: boolean; tj: TjBox | null; marker: L.Marker | null }>({ active: false, tj: null, marker: null });
+
   const startDragTj = useCallback((tj: TjBox, marker: L.Marker) => {
     setDragTj({ active: true, tj, marker });
     marker.dragging?.enable();
@@ -338,7 +340,6 @@ export default function FiberMap() {
   } | null>(null);
   const [selectedWaypoint, setSelectedWaypoint] = useState<number | null>(null);
   const [drawCable, setDrawCable] = useState<{ active: boolean; sourceTj: TjBox | null; routePoints: L.LatLng[]; mousePos: L.LatLng | null }>({ active: false, sourceTj: null, routePoints: [], mousePos: null });
-  const [dragTj, setDragTj] = useState<{ active: boolean; tj: TjBox | null; marker: L.Marker | null }>({ active: false, tj: null, marker: null });
   const fileRef = useRef<HTMLInputElement>(null);
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
