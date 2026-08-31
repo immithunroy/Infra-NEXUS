@@ -303,6 +303,7 @@ export default function NetworkMap() {
   const [editUser, setEditUser] = useState<MapPoint | null>(null);
   const [editForm, setEditForm] = useState({ address: "", gps_lat: 0, gps_lng: 0 });
   const [baseMap, setBaseMap] = useState<"street" | "satellite" | "terrain" | "hybrid">("street");
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
 
   const load = useCallback(() => {
     api
@@ -372,28 +373,25 @@ export default function NetworkMap() {
 
   return (
     <div className={isFullscreen ? "fixed inset-0 z-[9998] bg-white dark:bg-slate-900 flex flex-col" : "flex flex-col relative"} style={{ zIndex: 1, height: isFullscreen ? "100vh" : "calc(100vh - 4rem)" }}>
-      {/* Top bar */}
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0">
-        {!isFullscreen && <h1 className="text-lg font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">User Map</h1>}
-        <select className="input w-28 text-xs py-1" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="all">All Status</option>
-          <option value="online">Online</option>
-          <option value="offline">Offline</option>
-          <option value="wire_down">Wire Down</option>
-          <option value="unknown">Unknown</option>
-          <option value="lost">Lost</option>
-          <option value="llid_admin_down">LLID Admin Down</option>
-        </select>
-        <input className="input flex-1 min-w-[120px] text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
-        <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredPoints.length}/{data?.points?.length || 0}</span>
-      </div>
-
-      {error && <div className="px-3 py-1 text-xs text-red-600 shrink-0">{error}</div>}
-
       {/* Main content: map + sidebar */}
       <div className="flex-1 flex min-h-0">
         {/* Map fills remaining space */}
         <div className="flex-1 relative min-h-0" style={{ zIndex: 2 }}>
+          {/* Floating toolbar */}
+          <div className="absolute top-3 left-3 z-[1000] flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+            {!isFullscreen && <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">User Map</h1>}
+            <select className="input w-28 text-xs py-1" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="all">All Status</option>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+              <option value="wire_down">Wire Down</option>
+              <option value="unknown">Unknown</option>
+              <option value="lost">Lost</option>
+              <option value="llid_admin_down">LLID Admin Down</option>
+            </select>
+            <input className="input w-36 text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
+            <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredPoints.length}/{data?.points?.length || 0}</span>
+          </div>
           <MapView
             points={filteredPoints}
             center={center}
@@ -408,7 +406,8 @@ export default function NetworkMap() {
         </div>
 
         {/* Right sidebar */}
-        <div className="w-[320px] shrink-0 border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-y-auto flex flex-col">
+        {rightPanelOpen && (
+        <div className="w-[320px] shrink-0 border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-col">
           {/* Status summary */}
           <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700">
             <div className="flex flex-wrap gap-2 text-[10px]">
@@ -471,6 +470,18 @@ export default function NetworkMap() {
             </div>
           )}
         </div>
+        )}
+
+        {/* Collapse/expand right panel toggle */}
+        <button
+          onClick={() => setRightPanelOpen(!rightPanelOpen)}
+          className="self-center z-[1001] flex h-10 w-5 -ml-px shrink-0 items-center justify-center rounded-l-md border border-r-0 border-slate-300 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+          title={rightPanelOpen ? "Collapse panel" : "Expand panel"}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${rightPanelOpen ? "" : "rotate-180"}`}>
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
       </div>
 
       {/* GPS form modal */}

@@ -343,10 +343,8 @@ export default function FiberMap() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
-  const [expandCables, setExpandCables] = useState(false);
-  const [expandTj, setExpandTj] = useState(false);
-  const [expandSp, setExpandSp] = useState(false);
-  const [expandCuts, setExpandCuts] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState<"links" | "tj" | "splitters">("links");
   const [searchCables, setSearchCables] = useState("");
   const [searchTj, setSearchTj] = useState("");
   const [searchSp, setSearchSp] = useState("");
@@ -664,56 +662,53 @@ export default function FiberMap() {
 
   return (
     <div className={isFullscreen ? "fixed inset-0 z-[9998] bg-white dark:bg-slate-900 flex flex-col" : "flex flex-col relative"} style={{ zIndex: 1, height: isFullscreen ? "100vh" : "calc(100vh - 4rem)" }}>
-      {/* Top bar: all controls in one row */}
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0">
-        {!isFullscreen && <h1 className="text-lg font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Fiber Map</h1>}
-        <select className="input w-28 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
-          <option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
-        </select>
-        {(filterType === "all" || filterType === "cable") && (
-          <select className="input w-24 text-xs py-1" value={filterCore} onChange={(e) => setFilterCore(e.target.value)}>
-            <option value="all">All cores</option>
-            {Object.keys(CORE_COLORS).map((k) => <option key={k} value={k}>{k} core</option>)}
-          </select>
-        )}
-        {(filterType === "all" || filterType === "tj") && (
-          <select className="input w-24 text-xs py-1" value={filterPort} onChange={(e) => setFilterPort(e.target.value)}>
-            <option value="all">All ports</option>
-            {Object.keys(TJ_CAPACITY_COLORS).map((k) => <option key={k} value={k}>{k} port</option>)}
-          </select>
-        )}
-        {(filterType === "all" || filterType === "splitter") && (
-          <select className="input w-24 text-xs py-1" value={filterRatio} onChange={(e) => setFilterRatio(e.target.value)}>
-            <option value="all">All ratios</option>
-            {Object.keys(SPLITTER_RATIO_COLORS).map((k) => <option key={k} value={k}>1:{k}</option>)}
-          </select>
-        )}
-        <input className="input flex-1 min-w-[120px] text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
-        <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredCables.length}c {filteredTj.length}tj {filteredSplitters.length}sp</span>
-        <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
-        <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleImport(e.target.files[0]); }} />
-        <button className="btn-secondary text-xs py-1 px-2" onClick={handleExport}>Export</button>
-        <button className="btn-secondary text-xs py-1 px-2" onClick={() => fileRef.current?.click()} disabled={importing}>{importing ? "..." : "Import"}</button>
-        {writeOk && (
-          <>
-            <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
-            <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
-              {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
-            </button>
-            <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
-            <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>
-              Feasibility Check
-            </button>
-          </>
-        )}
-      </div>
-
-      {error && <ActionResultBanner ok={false} message={error} onDismiss={() => setError("")} className="shrink-0" />}
-
       {/* Map + Sidebar layout */}
       <div className="flex-1 flex min-h-0" style={{ zIndex: 2 }}>
         {/* Map fills remaining space */}
         <div className="flex-1 relative min-h-0">
+          {/* Floating toolbar */}
+          <div className="absolute top-3 left-3 z-[1000] flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+            {!isFullscreen && <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Fiber Map</h1>}
+            <select className="input w-24 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
+              <option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
+            </select>
+            {(filterType === "all" || filterType === "cable") && (
+              <select className="input w-20 text-xs py-1" value={filterCore} onChange={(e) => setFilterCore(e.target.value)}>
+                <option value="all">All cores</option>
+                {Object.keys(CORE_COLORS).map((k) => <option key={k} value={k}>{k} core</option>)}
+              </select>
+            )}
+            {(filterType === "all" || filterType === "tj") && (
+              <select className="input w-20 text-xs py-1" value={filterPort} onChange={(e) => setFilterPort(e.target.value)}>
+                <option value="all">All ports</option>
+                {Object.keys(TJ_CAPACITY_COLORS).map((k) => <option key={k} value={k}>{k} port</option>)}
+              </select>
+            )}
+            {(filterType === "all" || filterType === "splitter") && (
+              <select className="input w-20 text-xs py-1" value={filterRatio} onChange={(e) => setFilterRatio(e.target.value)}>
+                <option value="all">All ratios</option>
+                {Object.keys(SPLITTER_RATIO_COLORS).map((k) => <option key={k} value={k}>1:{k}</option>)}
+              </select>
+            )}
+            <input className="input w-32 text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
+            <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredCables.length}c {filteredTj.length}tj {filteredSplitters.length}sp</span>
+            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleImport(e.target.files[0]); }} />
+            <button className="btn-secondary text-xs py-1 px-2" onClick={handleExport}>Export</button>
+            <button className="btn-secondary text-xs py-1 px-2" onClick={() => fileRef.current?.click()} disabled={importing}>{importing ? "..." : "Import"}</button>
+            {writeOk && (
+              <>
+                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
+                <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
+                  {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
+                </button>
+                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
+                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>
+                  Feasibility
+                </button>
+              </>
+            )}
+          </div>
           <FiberMapView
             cables={filteredCables}
             tjBoxes={filteredTj}
@@ -798,18 +793,35 @@ export default function FiberMap() {
         </div>
 
         {/* Right sidebar */}
-        <div className="w-[320px] shrink-0 border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-y-auto flex flex-col">
+        {rightPanelOpen && (
+        <div className="w-[320px] shrink-0 border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-col">
+          {/* Tab bar */}
+          <div className="flex border-b border-slate-200 dark:border-slate-700 shrink-0">
+            {([
+              { key: "links" as const, label: "Links", count: filteredCables.length },
+              { key: "tj" as const, label: "TJ Boxes", count: filteredTj.length },
+              { key: "splitters" as const, label: "Splitters", count: filteredSplitters.length },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-1 px-2 py-2 text-[11px] font-medium transition-colors ${
+                  activeTab === tab.key
+                    ? "border-b-2 border-brand-600 text-brand-600 dark:border-brand-400 dark:text-brand-400"
+                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                {tab.label} ({tab.count})
+              </button>
+            ))}
+          </div>
 
-          {/* Cables section */}
-          <div className="border-b border-slate-200 dark:border-slate-700">
-            <button onClick={() => setExpandCables(!expandCables)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left">
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Links ({filteredCables.length})</span>
-              <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandCables ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {expandCables && (
-              <div className="px-3 pb-2">
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto p-3">
+            {activeTab === "links" && (
+              <div>
                 <input className="input text-xs w-full mb-2 py-1" placeholder="Search links..." value={searchCables} onChange={(e) => setSearchCables(e.target.value)} />
-                <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                <div className="space-y-1">
                   {filteredCables.filter((c) => !searchCables || c.code.toLowerCase().includes(searchCables.toLowerCase()) || c.link_name.toLowerCase().includes(searchCables.toLowerCase())).map((c) => {
                     const lenM = cableLengthM(c);
                     return (
@@ -824,20 +836,39 @@ export default function FiberMap() {
                     );
                   })}
                 </div>
+
+                {cuts.filter((c) => c.status === "cut").length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <div className="text-[10px] font-semibold text-red-600 dark:text-red-400 mb-1">Active Cuts ({cuts.filter((c) => c.status === "cut").length})</div>
+                    <input className="input text-xs w-full mb-2 py-1" placeholder="Search cuts..." value={searchCuts} onChange={(e) => setSearchCuts(e.target.value)} />
+                    <div className="space-y-1">
+                      {cuts.filter((c) => c.status === "cut").filter((c) => {
+                        if (!searchCuts) return true;
+                        const cable = cables.find((ca) => ca.id === c.cable_id);
+                        return (cable?.code || "").toLowerCase().includes(searchCuts.toLowerCase()) || (c.notes || "").toLowerCase().includes(searchCuts.toLowerCase());
+                      }).map((c) => {
+                        const cable = cables.find((ca) => ca.id === c.cable_id);
+                        return (
+                          <div key={c.id} className="rounded-md border border-red-200 dark:border-red-800 p-2 hover:bg-red-50 dark:hover:bg-red-900/10 cursor-pointer" onClick={() => { setCutForm(c); setShowForm("cut"); }}>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-xs font-semibold text-red-600">{cable?.code || "?"}</span>
+                              <span className="text-[10px] text-red-400">CUT</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">{c.splice_tj_name ? "Splice: " + c.splice_tj_name : "No splice TJ"} · {c.notes || "—"}</div>
+                            {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0 text-green-600" onClick={(e) => { e.stopPropagation(); markRepaired(c.id); }}>Repair</button></div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-          </div>
 
-          {/* TJ Boxes section */}
-          <div className="border-b border-slate-200 dark:border-slate-700">
-            <button onClick={() => setExpandTj(!expandTj)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left">
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">TJ Boxes ({filteredTj.length})</span>
-              <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandTj ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {expandTj && (
-              <div className="px-3 pb-2">
+            {activeTab === "tj" && (
+              <div>
                 <input className="input text-xs w-full mb-2 py-1" placeholder="Search TJs..." value={searchTj} onChange={(e) => setSearchTj(e.target.value)} />
-                <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                <div className="space-y-1">
                   {filteredTj.filter((t) => !searchTj || t.name.toLowerCase().includes(searchTj.toLowerCase()) || t.unique_id.toLowerCase().includes(searchTj.toLowerCase())).map((t) => (
                     <div key={t.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => setSelectedTj(t)}>
                       <div className="flex items-center justify-between">
@@ -851,18 +882,11 @@ export default function FiberMap() {
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Splitters section */}
-          <div className="border-b border-slate-200 dark:border-slate-700">
-            <button onClick={() => setExpandSp(!expandSp)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left">
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Splitters ({filteredSplitters.length})</span>
-              <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandSp ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {expandSp && (
-              <div className="px-3 pb-2">
+            {activeTab === "splitters" && (
+              <div>
                 <input className="input text-xs w-full mb-2 py-1" placeholder="Search splitters..." value={searchSp} onChange={(e) => setSearchSp(e.target.value)} />
-                <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                <div className="space-y-1">
                   {filteredSplitters.filter((s) => !searchSp || (s.name || "").toLowerCase().includes(searchSp.toLowerCase()) || s.unique_id.toLowerCase().includes(searchSp.toLowerCase())).map((s) => {
                     const loss = splitterLoss(s.split_ratio);
                     return (
@@ -879,43 +903,24 @@ export default function FiberMap() {
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Active Cuts section */}
-          {cuts.filter((c) => c.status === "cut").length > 0 && (
-            <div className="border-b border-slate-200 dark:border-slate-700">
-              <button onClick={() => setExpandCuts(!expandCuts)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/10 text-left">
-                <span className="text-xs font-semibold text-red-600 dark:text-red-400">Active Cuts ({cuts.filter((c) => c.status === "cut").length})</span>
-                <svg className={`w-4 h-4 text-red-400 transition-transform ${expandCuts ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </button>
-              {expandCuts && (
-                <div className="px-3 pb-2">
-                  <input className="input text-xs w-full mb-2 py-1" placeholder="Search cuts..." value={searchCuts} onChange={(e) => setSearchCuts(e.target.value)} />
-                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                    {cuts.filter((c) => c.status === "cut").filter((c) => {
-                      if (!searchCuts) return true;
-                      const cable = cables.find((ca) => ca.id === c.cable_id);
-                      return (cable?.code || "").toLowerCase().includes(searchCuts.toLowerCase()) || (c.notes || "").toLowerCase().includes(searchCuts.toLowerCase());
-                    }).map((c) => {
-                      const cable = cables.find((ca) => ca.id === c.cable_id);
-                      return (
-                        <div key={c.id} className="rounded-md border border-red-200 dark:border-red-800 p-2 hover:bg-red-50 dark:hover:bg-red-900/10 cursor-pointer" onClick={() => { setCutForm(c); setShowForm("cut"); }}>
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono text-xs font-semibold text-red-600">{cable?.code || "?"}</span>
-                            <span className="text-[10px] text-red-400">CUT</span>
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">{c.splice_tj_name ? "Splice: " + c.splice_tj_name : "No splice TJ"} · {c.notes || "—"}</div>
-                          {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0 text-green-600" onClick={(e) => { e.stopPropagation(); markRepaired(c.id); }}>Repair</button></div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          </div>
         </div>
+        )}
+
+        {/* Collapse/expand right panel toggle */}
+        <button
+          onClick={() => setRightPanelOpen(!rightPanelOpen)}
+          className="self-center z-[1001] flex h-10 w-5 -ml-px shrink-0 items-center justify-center rounded-l-md border border-r-0 border-slate-300 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+          title={rightPanelOpen ? "Collapse panel" : "Expand panel"}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${rightPanelOpen ? "" : "rotate-180"}`}>
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
       </div>
+
+      {error && <ActionResultBanner ok={false} message={error} onDismiss={() => setError("")} className="shrink-0" />}
 
       {selectedTj && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedTj(null)}>
