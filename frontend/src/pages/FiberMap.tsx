@@ -1940,7 +1940,9 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
   useEffect(() => {
     if (!mapEl || mapRef.current) return;
-    const map = L.map(mapEl, { zoomControl: true }).setView([center.lat, center.lng], 12);
+    const map = L.map(mapEl, { zoomControl: false }).setView([center.lat, center.lng], 12);
+
+    L.control.zoom({ position: "bottomleft" }).addTo(map);
 
     const tiles: Record<string, L.TileLayer> = {
       street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap", maxZoom: 19 }),
@@ -1953,6 +1955,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     activeTileRef.current = tiles.street;
 
     const drawControl = new L.Control.Draw({
+      position: "bottomleft",
       draw: {
         polyline: { shapeOptions: { color: "#ef4444", weight: 2 } },
         polygon: false, circle: false, rectangle: false, marker: false, circlemarker: false,

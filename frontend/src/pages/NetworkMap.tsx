@@ -160,7 +160,9 @@ function MapView({
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { center: [CITY_LAT, CITY_LNG], zoom: 12 });
+    const map = L.map(containerRef.current, { center: [CITY_LAT, CITY_LNG], zoom: 12, zoomControl: false });
+
+    L.control.zoom({ position: "bottomleft" }).addTo(map);
     const tiles: Record<string, L.TileLayer> = {
       street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap", maxZoom: 19 }),
       satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "&copy; Esri", maxZoom: 18 }),
