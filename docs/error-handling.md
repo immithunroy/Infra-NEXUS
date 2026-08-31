@@ -78,7 +78,27 @@ if (response.status === 403) {
 }
 ```
 
-### 2.3 Validation Errors
+### 2.3 Bad Request Errors
+
+**400 Bad Request:**
+```json
+{
+  "detail": "A cable with code 'XYZ-123' already exists"
+}
+```
+
+**Causes:**
+- Duplicate unique constraint violation (e.g., cable code)
+- Invalid input data that passes Pydantic validation but fails business rules
+
+**Frontend Handling:**
+```typescript
+if (response.status === 400) {
+  showToast(response.data.detail, 'error');
+}
+```
+
+### 2.4 Validation Errors
 
 **422 Unprocessable Entity:**
 ```json

@@ -6,6 +6,13 @@
 
 ## 2026-08-31
 
+### Fixed
+
+- **Cable creation 500 error** — Duplicate cable code now returns 400 Bad Request instead of 500 Internal Server Error
+  - Added `unique=True` to `Cable.code` column in model to match database schema
+  - Added `IntegrityError` handling in `create_cable` and `update_cable` endpoints
+  - Returns descriptive error message: "A cable with code 'XYZ' already exists"
+
 ### Added
 
 - **NOC Approval Queue** — Centralized approval workflow for all Android/field submissions
