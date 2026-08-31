@@ -318,7 +318,7 @@ erDiagram
 | `id` | INTEGER | PK, auto-increment | Cable ID |
 | `link_id` | VARCHAR(32) | UNIQUE, indexed | Auto-generated ID (FC-XXXX) |
 | `link_name` | VARCHAR(128) | DEFAULT '' | Human-readable name (auto-uppercased) |
-| `code` | VARCHAR(64) | UNIQUE, DEFAULT '' | Cable code (auto-uppercased) |
+| `code` | VARCHAR(64) | DEFAULT '' | Cable code — manufacturer drum code (auto-uppercased, not unique) |
 | `core_count` | INTEGER | DEFAULT 12 | Number of fiber cores |
 | `manufacturer` | VARCHAR(128) | DEFAULT '' | Cable manufacturer (auto-uppercased) |
 | `manufacturing_year` | INTEGER | DEFAULT 0 | Year of manufacture |

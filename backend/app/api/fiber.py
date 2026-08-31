@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 import io
 import asyncio
@@ -58,11 +57,7 @@ async def create_cable(body: CableCreate, user: User = Depends(require_write), d
         notes=body.notes,
     )
     db.add(cable)
-    try:
-        await db.flush()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(400, detail=f"A cable with code '{body.code}' already exists")
+    await db.flush()
 
     segments = list(body.segments)
     if segments:
@@ -119,11 +114,7 @@ async def update_cable(cable_id: int, body: CableUpdate, user: User = Depends(re
                 cable_id=cable_id, start_lat=seg.start_lat, start_lng=seg.start_lng,
                 end_lat=seg.end_lat, end_lng=seg.end_lng, order_index=i,
             ))
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(400, detail=f"A cable with code '{body.code}' already exists")
+    await db.commit()
     await db.refresh(cable)
     seg_res = await db.execute(select(CableSegment).where(CableSegment.cable_id == cable.id).order_by(CableSegment.order_index))
     cable.segments = seg_res.scalars().all()

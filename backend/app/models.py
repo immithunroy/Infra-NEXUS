@@ -352,7 +352,7 @@ class Cable(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     link_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     link_name: Mapped[str] = mapped_column(String(128), default="")
-    code: Mapped[str] = mapped_column(String(64), unique=True, default="")
+    code: Mapped[str] = mapped_column(String(64), default="")
     core_count: Mapped[int] = mapped_column(Integer, default=12)
     manufacturer: Mapped[str] = mapped_column(String(128), default="")
     manufacturing_year: Mapped[int] = mapped_column(Integer, default=0)
