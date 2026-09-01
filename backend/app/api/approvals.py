@@ -454,7 +454,8 @@ async def resubmit(
 
 @router.post("/upload-photo")
 async def upload_photo(
-    file: UploadFile = File(...),
+    file: UploadFile = File(None),
+    photo: UploadFile = File(None),
     category: str = Form(""),
     entity_id: str = Form(""),
     user=Depends(require_approval_submit),
@@ -462,19 +463,25 @@ async def upload_photo(
 ):
     """Upload a photo for an approval submission. Returns the filename.
 
+    Accepts the file as either 'file' or 'photo' form field to support
+    both web frontend and Android mobile app.
+
     When category='user' and entity_id (approval ID) is provided, the photo
     is also saved into the field-photos system so the web subscriber profile
     can display it immediately.
     """
-    if not file.content_type or not file.content_type.startswith("image/"):
+    upload = file or photo
+    if not upload:
+        raise HTTPException(400, "No file uploaded")
+    if not upload.content_type or not upload.content_type.startswith("image/"):
         raise HTTPException(400, "File must be an image")
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    ext = file.filename.split(".")[-1] if file.filename else "jpg"
+    ext = upload.filename.split(".")[-1] if upload.filename else "jpg"
     filename = f"{uuid.uuid4().hex}.{ext}"
     filepath = UPLOAD_DIR / filename
 
-    content = await file.read()
+    content = await upload.read()
     if len(content) > 10 * 1024 * 1024:  # 10MB limit
         raise HTTPException(400, "File size must be less than 10MB")
 
