@@ -470,6 +470,11 @@ async def upload_photo(
     is also saved into the field-photos system so the web subscriber profile
     can display it immediately.
     """
+    logger.info("UPLOAD-PHOTO request: category=%s entity_id=%s user=%s file=%s photo=%s content_type=%s",
+                category, entity_id, user.username,
+                f"{file.filename}({file.size})" if file else "None",
+                f"{photo.filename}({photo.size})" if photo else "None",
+                (file or photo).content_type if (file or photo) else "None")
     upload = file or photo
     if not upload:
         raise HTTPException(400, "No file uploaded")
@@ -487,6 +492,8 @@ async def upload_photo(
 
     with open(filepath, "wb") as f:
         f.write(content)
+
+    logger.info("UPLOAD-PHOTO saved: filename=%s size=%d bytes path=%s", filename, len(content), filepath)
 
     # --- Also write to field-photos system for subscriber/TJ photos ---
     if category in ("user", "tj_box") and entity_id:
