@@ -5,7 +5,7 @@ import "leaflet-draw/dist/leaflet.draw.css";
 import "leaflet-draw";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
-import { api, downloadFile } from "../api/client";
+import { api } from "../api/client";
 import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, canWrite } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
 import StatusBadge from "../components/StatusBadge";
@@ -337,7 +337,6 @@ export default function FiberMap() {
     setDragTj({ active: false, tj: null, marker: null });
   }, [dragTj]);
 
-  const [importing, setImporting] = useState(false);
   const [selectedTj, setSelectedTj] = useState<TjBox | null>(null);
   const [selectedCable, setSelectedCable] = useState<Cable | null>(null);
   const [cableEdit, setCableEdit] = useState<{
@@ -348,7 +347,6 @@ export default function FiberMap() {
   } | null>(null);
   const [selectedWaypoint, setSelectedWaypoint] = useState<number | null>(null);
   const [drawCable, setDrawCable] = useState<{ active: boolean; sourceTj: TjBox | null; routePoints: L.LatLng[]; mousePos: L.LatLng | null }>({ active: false, sourceTj: null, routePoints: [], mousePos: null });
-  const fileRef = useRef<HTMLInputElement>(null);
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
@@ -644,32 +642,6 @@ export default function FiberMap() {
 
   const deleteCut = async (id: number) => { if (!confirm("Delete cut record?")) return; try { await api.del(`/fiber/cuts/${id}`); await load(); } catch (e) { setError(String(e)); } };
 
-  const handleExport = async () => {
-    try { await downloadFile("/fiber/export", "fiber_network.xlsx"); }
-    catch (e) { setError(String(e)); }
-  };
-
-  const handleImport = async (file: File) => {
-    setImporting(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/fiber/import", {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-      if (!res.ok) {
-        let msg = "Import failed";
-        try { const j = await res.json(); msg = j.detail || JSON.stringify(j); } catch {}
-        throw new Error(msg);
-      }
-      await load();
-    } catch (e) { setError(String(e)); }
-    finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }
-  };
-
   const handleRightClickAdd = (kind: string, lat: number, lng: number) => {
     if (kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); }
     else if (kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
@@ -754,18 +726,13 @@ export default function FiberMap() {
             <input className="input w-32 text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
             <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredCables.length}c {filteredTj.length}tj {filteredSplitters.length}sp</span>
             <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
-            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleImport(e.target.files[0]); }} />
-            <button className="btn-secondary text-xs py-1 px-2" onClick={handleExport}>Export</button>
-            <button className="btn-secondary text-xs py-1 px-2" onClick={() => fileRef.current?.click()} disabled={importing}>{importing ? "..." : "Import"}</button>
             {writeOk && (
               <>
-                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
+                <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
+                <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
+                <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>Feasibility</button>
                 <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
                   {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
-                </button>
-                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
-                <button className="btn-secondary text-xs py-1 px-2" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>
-                  Feasibility
                 </button>
               </>
             )}

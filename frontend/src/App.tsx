@@ -17,6 +17,7 @@ import Reports from "./pages/Reports";
 import Routing from "./pages/Routing";
 import ScheduleJobs from "./pages/ScheduleJobs";
 import Scans from "./pages/Scans";
+import Settings from "./pages/Settings";
 import SubscriberProfile from "./pages/SubscriberProfile";
 import Subscribers from "./pages/Subscribers";
 import Tickets from "./pages/Tickets";
@@ -77,6 +78,7 @@ export default function App() {
             <Route path="/users" element={<Users />} />
             <Route path="/scans" element={<Scans />} />
             <Route path="/schedule-jobs" element={<ScheduleJobs />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/approvals" element={<NocApprovals />} />
             <Route path="/approvals/:id" element={<ApprovalDetail />} />
           </Route>
