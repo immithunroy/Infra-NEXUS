@@ -485,6 +485,7 @@ async def upload_photo(
     if category == "user" and entity_id:
         try:
             await _migrate_photo_to_field(content, ext, int(entity_id), user, db)
+            await db.commit()
         except Exception as e:
             logger.warning("Failed to write field photo for approval #%s: %s", entity_id, e)
 
