@@ -729,7 +729,7 @@ export default function FiberMap() {
         <div className="flex-1 relative min-h-0">
           {/* Floating toolbar */}
           <div className="absolute top-3 left-3 z-[1000] flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
-            {!isFullscreen && <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Fiber Map</h1>}
+            {!isFullscreen && <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Network Map</h1>}
             <select className="input w-24 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
               <option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
             </select>
@@ -864,7 +864,7 @@ export default function FiberMap() {
             userPoints={filteredUsers}
             selectedUser={selectedUser}
             onUserSelect={setSelectedUser}
-            showUserLayer={activeTab === "users"}
+            showUserLayer={netLayers.customer}
           />
         </div>
 
