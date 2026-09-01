@@ -32,6 +32,8 @@ services:
       BIND_INTERVAL: "300"
       TELEMETRY_INTERVAL: "300"
       MAC_VENDOR_SYNC_INTERVAL: "86400"
+    volumes:
+      - nexus_uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -52,6 +54,7 @@ services:
 
 volumes:
   nexus_pgdata:
+  nexus_uploads:
 
 networks:
   nexus_internal:

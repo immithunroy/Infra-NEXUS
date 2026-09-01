@@ -481,10 +481,10 @@ async def upload_photo(
     with open(filepath, "wb") as f:
         f.write(content)
 
-    # --- Also write to field-photos system for subscriber photos ---
-    if category == "user" and entity_id:
+    # --- Also write to field-photos system for subscriber/TJ photos ---
+    if category in ("user", "tj_box") and entity_id:
         try:
-            await _migrate_photo_to_field(content, ext, int(entity_id), user, db)
+            await _migrate_photo_to_field(content, ext, category, int(entity_id), user, db)
             await db.commit()
         except Exception as e:
             logger.warning("Failed to write field photo for approval #%s: %s", entity_id, e)
@@ -514,70 +514,145 @@ async def serve_photo(
 # ---------------------------------------------------------------------------
 
 _SUBSCRIBER_PHOTO_TYPES = ["overall", "equipment", "identification"]
+_TJ_PHOTO_TYPES = ["overall", "internal", "identification"]
 
 _FIELD_PHOTOS_DIR = Path(os.environ.get("PHOTO_UPLOAD_DIR", "/app/uploads/field-photos"))
+_PENDING_PHOTOS_DIR = Path(os.environ.get("PENDING_PHOTO_DIR", "/app/uploads/pending-photos"))
 
 
 async def _migrate_photo_to_field(
-    img_bytes: bytes, ext: str, approval_id: int, uploaded_by_user: User, db: AsyncSession,
+    img_bytes: bytes, ext: str, category: str, approval_id: int,
+    uploaded_by_user: User, db: AsyncSession,
 ):
-    """Copy an approval-uploaded photo into the field-photos system for a subscriber."""
+    """Copy an approval-uploaded photo into the field-photos system."""
     result = await db.execute(
         select(FiberApprovalRequest).where(FiberApprovalRequest.id == approval_id)
     )
     req = result.scalar_one_or_none()
-    if not req or req.entity_type != "user":
+    if not req:
         return
 
     payload = json.loads(req.payload_json) if req.payload_json else {}
-    subscriber_id = payload.get("subscriber_id")
-    if not subscriber_id:
-        return
 
-    onu = await db.get(Onu, int(subscriber_id))
-    if not onu or not onu.subscriber:
+    if category == "user":
+        entity_type = "subscriber"
+        subscriber_id = payload.get("subscriber_id")
+        if not subscriber_id:
+            return
+        onu = await db.get(Onu, int(subscriber_id))
+        if not onu or not onu.subscriber:
+            return
+        entity_id = onu.subscriber  # PPPoE username
+        photo_types = _SUBSCRIBER_PHOTO_TYPES
+        target_dir = _FIELD_PHOTOS_DIR / entity_type / entity_id
+    elif category == "tj_box":
+        entity_type = "tj"
+        photo_types = _TJ_PHOTO_TYPES
+        # TJ unique_id not yet known — store in pending dir until approved
+        target_dir = _PENDING_PHOTOS_DIR / str(approval_id)
+    else:
         return
-
-    sub_key = onu.subscriber  # PPPoE username used as entity_id
-    sub_dir = _FIELD_PHOTOS_DIR / "subscriber" / sub_key
 
     # Determine next available photo slot
-    existing = (
-        await db.execute(
-            select(FieldPhoto.photo_type).where(
-                and_(
-                    FieldPhoto.entity_type == "subscriber",
-                    FieldPhoto.entity_id == sub_key,
+    if category == "user":
+        existing = (
+            await db.execute(
+                select(FieldPhoto.photo_type).where(
+                    and_(
+                        FieldPhoto.entity_type == entity_type,
+                        FieldPhoto.entity_id == entity_id,
+                    )
                 )
             )
-        )
-    ).scalars().all()
-    remaining = [t for t in _SUBSCRIBER_PHOTO_TYPES if t not in existing]
-    if not remaining:
-        return  # all 3 slots filled
-    photo_type = remaining[0]
+        ).scalars().all()
+        remaining = [t for t in photo_types if t not in existing]
+        if not remaining:
+            return
+        photo_type = remaining[0]
+    else:
+        # For pending TJs, count files already in the pending dir
+        existing_files = [f.name for f in target_dir.glob("*.jpg")] if target_dir.exists() else []
+        remaining = [t for t in photo_types if f"{t}.jpg" not in existing_files]
+        if not remaining:
+            return
+        photo_type = remaining[0]
 
     filename = f"{photo_type}.jpg"
-    storage_key = sub_dir / filename
+    storage_key = target_dir / filename
     storage_key.parent.mkdir(parents=True, exist_ok=True)
-
-    # Simple save (no watermark — approval photos are raw field captures)
     storage_key.write_bytes(img_bytes)
 
-    rel_key = f"subscriber/{sub_key}/{filename}"
-    db.add(FieldPhoto(
-        entity_type="subscriber",
-        entity_id=sub_key,
-        photo_type=photo_type,
-        storage_key=rel_key,
-        original_filename=f"{photo_type}.jpg",
-        mime_type="image/jpeg",
-        file_size=len(img_bytes),
-        uploaded_by=uploaded_by_user.id,
-        captured_by=req.submitted_by_name or "",
-    ))
+    # For subscribers, create FieldPhoto record immediately
+    if category == "user":
+        rel_key = f"{entity_type}/{entity_id}/{filename}"
+        db.add(FieldPhoto(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            photo_type=photo_type,
+            storage_key=rel_key,
+            original_filename=f"{photo_type}.jpg",
+            mime_type="image/jpeg",
+            file_size=len(img_bytes),
+            uploaded_by=uploaded_by_user.id,
+            captured_by=req.submitted_by_name or "",
+        ))
+        await db.flush()
+        logger.info("Migrated approval photo -> field photo: %s (type=%s)", rel_key, photo_type)
+    else:
+        logger.info("Saved pending TJ photo: %s (type=%s, approval=%d)", storage_key, photo_type, approval_id)
+
+
+async def _finalize_pending_tj_photos(unique_id: str, db: AsyncSession):
+    """Move pending TJ photos (stored by approval_id) into field-photos system."""
+    if not _PENDING_PHOTOS_DIR.exists():
+        return
+    for pending_dir in _PENDING_PHOTOS_DIR.iterdir():
+        if not pending_dir.is_dir():
+            continue
+        approval_id = pending_dir.name
+        # Check if this pending dir belongs to a TJ approval
+        try:
+            result = await db.execute(
+                select(FiberApprovalRequest).where(
+                    FiberApprovalRequest.id == int(approval_id),
+                    FiberApprovalRequest.entity_type == "tj",
+                )
+            )
+            req = result.scalar_one_or_none()
+            if not req:
+                continue
+        except (ValueError, Exception):
+            continue
+
+        dest_dir = _FIELD_PHOTOS_DIR / "tj" / unique_id
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        photo_types = _TJ_PHOTO_TYPES
+        for photo_type in photo_types:
+            src = pending_dir / f"{photo_type}.jpg"
+            if not src.exists():
+                continue
+            dst = dest_dir / f"{photo_type}.jpg"
+            dst.write_bytes(src.read_bytes())
+            rel_key = f"tj/{unique_id}/{photo_type}.jpg"
+            db.add(FieldPhoto(
+                entity_type="tj",
+                entity_id=unique_id,
+                photo_type=photo_type,
+                storage_key=rel_key,
+                original_filename=f"{photo_type}.jpg",
+                mime_type="image/jpeg",
+                file_size=src.stat().st_size,
+                captured_by=req.submitted_by_name or "",
+            ))
+
+        # Clean up pending dir
+        import shutil
+        shutil.rmtree(pending_dir, ignore_errors=True)
+        logger.info("Finalized pending TJ photos: approval #%s -> tj/%s", approval_id, unique_id)
+        break  # only one pending dir per TJ approval
+
     await db.flush()
-    logger.info("Migrated approval photo -> field photo: %s (type=%s)", rel_key, photo_type)
 
 
 # ---------------------------------------------------------------------------
@@ -701,6 +776,9 @@ async def _execute_tj(action: str, entity_id: int | None, payload: dict, db: Asy
                 notes="",
             )
             db.add(splitter)
+
+        # Move pending photos from approval upload into field-photos system
+        await _finalize_pending_tj_photos(unique_id, db)
     elif action == "update" and entity_id:
         result = await db.execute(select(TjBox).where(TjBox.id == entity_id))
         box = result.scalar_one_or_none()
