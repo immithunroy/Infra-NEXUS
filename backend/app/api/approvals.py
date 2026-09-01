@@ -11,14 +11,14 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..models import (
-    Cable, CableSegment, FiberApprovalRequest, FiberLoop, Splice, Splitter, TjBox,
+    Cable, CableSegment, FieldPhoto, FiberApprovalRequest, FiberLoop, Splice, Splitter, TjBox,
     ApprovalStatus, ApprovalPriority, CableCut, User, Onu,
 )
 from ..schemas import (
@@ -455,9 +455,17 @@ async def resubmit(
 @router.post("/upload-photo")
 async def upload_photo(
     file: UploadFile = File(...),
+    category: str = Form(""),
+    entity_id: str = Form(""),
     user=Depends(require_approval_submit),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Upload a photo for an approval submission. Returns the filename."""
+    """Upload a photo for an approval submission. Returns the filename.
+
+    When category='user' and entity_id (approval ID) is provided, the photo
+    is also saved into the field-photos system so the web subscriber profile
+    can display it immediately.
+    """
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(400, "File must be an image")
 
@@ -472,6 +480,13 @@ async def upload_photo(
 
     with open(filepath, "wb") as f:
         f.write(content)
+
+    # --- Also write to field-photos system for subscriber photos ---
+    if category == "user" and entity_id:
+        try:
+            await _migrate_photo_to_field(content, ext, int(entity_id), user, db)
+        except Exception as e:
+            logger.warning("Failed to write field photo for approval #%s: %s", entity_id, e)
 
     return {"filename": filename, "url": f"/api/approvals/photos/{filename}"}
 
@@ -491,6 +506,77 @@ async def serve_photo(
 
     from fastapi.responses import FileResponse
     return FileResponse(filepath, media_type=media_type)
+
+
+# ---------------------------------------------------------------------------
+# Photo migration: approval photos -> field-photos system
+# ---------------------------------------------------------------------------
+
+_SUBSCRIBER_PHOTO_TYPES = ["overall", "equipment", "identification"]
+
+_FIELD_PHOTOS_DIR = Path(os.environ.get("PHOTO_UPLOAD_DIR", "/app/uploads/field-photos"))
+
+
+async def _migrate_photo_to_field(
+    img_bytes: bytes, ext: str, approval_id: int, uploaded_by_user: User, db: AsyncSession,
+):
+    """Copy an approval-uploaded photo into the field-photos system for a subscriber."""
+    result = await db.execute(
+        select(FiberApprovalRequest).where(FiberApprovalRequest.id == approval_id)
+    )
+    req = result.scalar_one_or_none()
+    if not req or req.entity_type != "user":
+        return
+
+    payload = json.loads(req.payload_json) if req.payload_json else {}
+    subscriber_id = payload.get("subscriber_id")
+    if not subscriber_id:
+        return
+
+    onu = await db.get(Onu, int(subscriber_id))
+    if not onu or not onu.subscriber:
+        return
+
+    sub_key = onu.subscriber  # PPPoE username used as entity_id
+    sub_dir = _FIELD_PHOTOS_DIR / "subscriber" / sub_key
+
+    # Determine next available photo slot
+    existing = (
+        await db.execute(
+            select(FieldPhoto.photo_type).where(
+                and_(
+                    FieldPhoto.entity_type == "subscriber",
+                    FieldPhoto.entity_id == sub_key,
+                )
+            )
+        )
+    ).scalars().all()
+    remaining = [t for t in _SUBSCRIBER_PHOTO_TYPES if t not in existing]
+    if not remaining:
+        return  # all 3 slots filled
+    photo_type = remaining[0]
+
+    filename = f"{photo_type}.jpg"
+    storage_key = sub_dir / filename
+    storage_key.parent.mkdir(parents=True, exist_ok=True)
+
+    # Simple save (no watermark — approval photos are raw field captures)
+    storage_key.write_bytes(img_bytes)
+
+    rel_key = f"subscriber/{sub_key}/{filename}"
+    db.add(FieldPhoto(
+        entity_type="subscriber",
+        entity_id=sub_key,
+        photo_type=photo_type,
+        storage_key=rel_key,
+        original_filename=f"{photo_type}.jpg",
+        mime_type="image/jpeg",
+        file_size=len(img_bytes),
+        uploaded_by=uploaded_by_user.id,
+        captured_by=req.submitted_by_name or "",
+    ))
+    await db.flush()
+    logger.info("Migrated approval photo -> field photo: %s (type=%s)", rel_key, photo_type)
 
 
 # ---------------------------------------------------------------------------
