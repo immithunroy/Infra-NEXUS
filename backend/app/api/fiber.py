@@ -765,17 +765,34 @@ async def create_splice(body: SpliceCreate, db: AsyncSession = Depends(get_db)):
         raise HTTPException(400, "Cannot splice a splitter port to itself")
     
     # Validate: both endpoints must belong to the same TJ
+    async def _cable_connected_to_tj(cable: Cable, tj_id: int) -> bool:
+        """Check if cable is connected to TJ via foreign keys OR segment proximity."""
+        if cable.src_tj_id == tj_id or cable.dst_tj_id == tj_id:
+            return True
+        # Also accept cables with segments near the TJ (matches frontend proximity logic)
+        tj = await db.get(TjBox, tj_id)
+        if not tj:
+            return False
+        segs = (await db.execute(
+            select(CableSegment).where(CableSegment.cable_id == cable.id)
+        )).scalars().all()
+        for seg in segs:
+            if (abs(seg.start_lat - tj.lat) < 0.001 and abs(seg.start_lng - tj.lng) < 0.001) or \
+               (abs(seg.end_lat - tj.lat) < 0.001 and abs(seg.end_lng - tj.lng) < 0.001):
+                return True
+        return False
+
     if body.cable_a_id:
         cable_a = await db.get(Cable, body.cable_a_id)
         if not cable_a:
             raise HTTPException(400, "Cable A not found")
-        if cable_a.src_tj_id != body.tj_id and cable_a.dst_tj_id != body.tj_id:
+        if not await _cable_connected_to_tj(cable_a, body.tj_id):
             raise HTTPException(400, "Cable A is not connected to this TJ")
     if body.cable_b_id:
         cable_b = await db.get(Cable, body.cable_b_id)
         if not cable_b:
             raise HTTPException(400, "Cable B not found")
-        if cable_b.src_tj_id != body.tj_id and cable_b.dst_tj_id != body.tj_id:
+        if not await _cable_connected_to_tj(cable_b, body.tj_id):
             raise HTTPException(400, "Cable B is not connected to this TJ")
     if body.splitter_a_id:
         splitter_a = await db.get(Splitter, body.splitter_a_id)
