@@ -15,6 +15,7 @@ from ..schemas import (
     FiberLoopCreate, FiberLoopOut, FiberLoopUpdate,
     CableCutCreate, CableCutOut, CableCutUpdate,
     SpliceCreate, SpliceOut, SpliceUpdate,
+    CutRecoveryResult, CutRecoverySplice,
 )
 from ..security import get_current_user, require_write
 
@@ -398,6 +399,145 @@ async def delete_cut(cut_id: int, user: User = Depends(require_write), db: Async
         raise HTTPException(status_code=404, detail="Cable cut not found")
     await db.delete(cut)
     await db.commit()
+
+
+# Fiber core color sequence (standard 12-color)
+CORE_COLOR_NAMES = [
+    "Blue", "Orange", "Green", "Brown", "Slate", "White",
+    "Red", "Black", "Yellow", "Violet", "Rose", "Aqua",
+]
+
+SUPPORTED_TJ_CAPACITIES = [4, 8, 10]
+
+
+def _select_tj_capacity(core_count: int) -> int:
+    """Select the smallest TJ capacity that can accommodate the required connections."""
+    for cap in SUPPORTED_TJ_CAPACITIES:
+        if cap >= core_count:
+            return cap
+    raise HTTPException(400, f"Core count {core_count} exceeds maximum supported TJ capacity ({max(SUPPORTED_TJ_CAPACITIES)}). Manual recovery required.")
+
+
+@router.post("/cuts/{cut_id}/recover", response_model=CutRecoveryResult)
+async def recover_cut(cut_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
+    """Automatically recover a cable cut: create TJ, connect cables, splice same-color cores."""
+    from datetime import datetime, timezone
+
+    # 1. Look up the cut
+    cut = await db.get(CableCut, cut_id)
+    if cut is None:
+        raise HTTPException(404, "Cable cut not found")
+    if cut.status == "repaired":
+        raise HTTPException(400, "This cut is already repaired")
+
+    # 2. Look up the cable
+    cable = await db.get(Cable, cut.cable_id)
+    if cable is None:
+        raise HTTPException(400, "Associated cable not found")
+
+    core_count = cable.core_count
+    if core_count <= 0:
+        raise HTTPException(400, "Cable has no cores to splice")
+
+    # 3. Determine TJ capacity
+    tj_capacity = _select_tj_capacity(core_count)
+
+    # 4. Generate unique TJ ID
+    res = await db.execute(select(TjBox.unique_id).where(TjBox.unique_id.like("TJ-%")).order_by(TjBox.id.desc()).limit(1))
+    last = res.scalar()
+    next_num = 5001
+    if last:
+        try:
+            next_num = int(last.split("-")[1]) + 1
+        except (IndexError, ValueError):
+            pass
+    tj_unique_id = f"TJ-{next_num:04d}"
+
+    # 5. Create new TJ at cut location
+    new_tj = TjBox(
+        unique_id=tj_unique_id,
+        name=f"Recovery {tj_unique_id}",
+        box_type="regular_tj",
+        tj_port=tj_capacity,
+        capacity=tj_capacity,
+        tray_count=1,
+        splice_per_tray=tj_capacity,
+        lat=cut.lat,
+        lng=cut.lng,
+        address="",
+        notes=f"Auto-created for cut recovery on {cable.code}",
+    )
+    db.add(new_tj)
+    await db.flush()  # Get the new TJ's ID
+
+    # 6. Create splices for each core (same-color matching)
+    splices_created = 0
+    splice_details = []
+    unmatched_cores = []
+
+    for core_idx in range(1, core_count + 1):
+        color_name = CORE_COLOR_NAMES[(core_idx - 1) % len(CORE_COLOR_NAMES)]
+
+        # Check for duplicate splice (idempotency)
+        existing = (await db.execute(
+            select(Splice).where(
+                Splice.tj_id == new_tj.id,
+                Splice.status.in_(["active", "spare"]),
+                Splice.cable_a_id == cable.id,
+                Splice.core_a == core_idx,
+                Splice.cable_b_id == cable.id,
+                Splice.core_b == core_idx,
+            )
+        )).scalars().first()
+
+        if existing:
+            # Already spliced (idempotent)
+            splices_created += 1
+            splice_details.append(CutRecoverySplice(
+                core_index=core_idx, color=color_name,
+                cable_a_id=cable.id, cable_b_id=cable.id,
+            ))
+            continue
+
+        # Create splice: same cable, same core (pass-through at recovery TJ)
+        splice = Splice(
+            tj_id=new_tj.id,
+            cable_a_id=cable.id,
+            core_a=core_idx,
+            cable_b_id=cable.id,
+            core_b=core_idx,
+            tray_id=1,
+            status="active",
+            notes=f"Auto-spliced: {color_name} core {core_idx}",
+        )
+        db.add(splice)
+        splices_created += 1
+        splice_details.append(CutRecoverySplice(
+            core_index=core_idx, color=color_name,
+            cable_a_id=cable.id, cable_b_id=cable.id,
+        ))
+
+    # 7. Update cut status
+    cut.status = "repaired"
+    cut.repair_date = datetime.now(timezone.utc)
+    cut.splice_tj_id = new_tj.id
+    cut.notes = (cut.notes + "\n" if cut.notes else "") + f"Auto-recovered: {tj_unique_id} with {splices_created} splices"
+
+    await db.commit()
+    await db.refresh(new_tj)
+
+    return CutRecoveryResult(
+        tj_id=new_tj.id,
+        tj_unique_id=new_tj.unique_id,
+        tj_name=new_tj.name,
+        tj_capacity=tj_capacity,
+        cable_id=cable.id,
+        cable_code=cable.code,
+        core_count=core_count,
+        splices_created=splices_created,
+        splices=splice_details,
+        unmatched_cores=unmatched_cores,
+    )
 
 
 # ------------------------------------------------------------ Export / Import

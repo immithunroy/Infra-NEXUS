@@ -1289,6 +1289,26 @@ class CableCutOut(CableCutBase):
     splice_tj_name: str = ""
 
 
+class CutRecoverySplice(BaseModel):
+    core_index: int
+    color: str
+    cable_a_id: int
+    cable_b_id: int
+
+
+class CutRecoveryResult(BaseModel):
+    tj_id: int
+    tj_unique_id: str
+    tj_name: str
+    tj_capacity: int
+    cable_id: int
+    cable_code: str
+    core_count: int
+    splices_created: int
+    splices: list[CutRecoverySplice]
+    unmatched_cores: list[int]
+
+
 # ---------------------------------------------------------------- approval queue
 class ApprovalSubmitRequest(BaseModel):
     """Android / field_team submission for NOC approval queue."""

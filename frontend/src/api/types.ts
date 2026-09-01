@@ -905,6 +905,26 @@ export interface CableCut {
   notes: string;
 }
 
+export interface CutRecoverySplice {
+  core_index: number;
+  color: string;
+  cable_a_id: number;
+  cable_b_id: number;
+}
+
+export interface CutRecoveryResult {
+  tj_id: number;
+  tj_unique_id: string;
+  tj_name: string;
+  tj_capacity: number;
+  cable_id: number;
+  cable_code: string;
+  core_count: number;
+  splices_created: number;
+  splices: CutRecoverySplice[];
+  unmatched_cores: number[];
+}
+
 // ---------------------------------------------------------------- approval queue
 export interface ApprovalItem {
   id: number;

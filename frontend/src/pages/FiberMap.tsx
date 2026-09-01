@@ -6,7 +6,7 @@ import "leaflet-draw";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
 import { api } from "../api/client";
-import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, canWrite } from "../api/types";
+import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, CutRecoveryResult, canWrite } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
 import StatusBadge from "../components/StatusBadge";
 import { fmtTimeShort } from "../lib/time";
@@ -364,6 +364,11 @@ export default function FiberMap() {
   const [userSidebarSearch, setUserSidebarSearch] = useState("");
   const [gpsForm, setGpsForm] = useState<{ lat: number; lng: number } | null>(null);
 
+  // Cut Recovery state
+  const [recoveryCut, setRecoveryCut] = useState<CableCut | null>(null);
+  const [recoveryResult, setRecoveryResult] = useState<CutRecoveryResult | null>(null);
+  const [recovering, setRecovering] = useState(false);
+
   const [feasCheckOpen, setFeasCheckOpen] = useState(false);
   const [feasLat, setFeasLat] = useState("");
   const [feasLng, setFeasLng] = useState("");
@@ -635,9 +640,27 @@ export default function FiberMap() {
 
   const markRepaired = async (cutId: number) => {
     try {
-      await api.put(`/fiber/cuts/${cutId}`, { status: "repaired", repair_date: new Date().toISOString() });
+      const result = await api.post<CutRecoveryResult>(`/fiber/cuts/${cutId}/recover`, {});
+      setRecoveryResult(result);
       await load();
     } catch (e) { setError(String(e)); }
+  };
+
+  const startRecovery = (cut: CableCut) => {
+    setRecoveryCut(cut);
+    setRecoveryResult(null);
+  };
+
+  const confirmRecovery = async () => {
+    if (!recoveryCut) return;
+    setRecovering(true);
+    try {
+      const result = await api.post<CutRecoveryResult>(`/fiber/cuts/${recoveryCut.id}/recover`, {});
+      setRecoveryResult(result);
+      setRecoveryCut(null);
+      await load();
+    } catch (e) { setError(String(e)); }
+    finally { setRecovering(false); }
   };
 
   const deleteCut = async (id: number) => { if (!confirm("Delete cut record?")) return; try { await api.del(`/fiber/cuts/${id}`); await load(); } catch (e) { setError(String(e)); } };
@@ -899,7 +922,7 @@ export default function FiberMap() {
                               <span className="text-[10px] text-red-400">CUT</span>
                             </div>
                             <div className="text-[10px] text-slate-400 mt-0.5">{c.splice_tj_name ? "Splice: " + c.splice_tj_name : "No splice TJ"} · {c.notes || "—"}</div>
-                            {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0 text-green-600" onClick={(e) => { e.stopPropagation(); markRepaired(c.id); }}>Repair</button></div>}
+                            {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0 text-green-600" onClick={(e) => { e.stopPropagation(); startRecovery(c); }}>Recover</button></div>}
                           </div>
                         );
                       })}
@@ -1274,10 +1297,134 @@ export default function FiberMap() {
               )}
               <div><label className="label">Notes</label><textarea className="input" rows={2} value={cutForm.notes || ""} onChange={(e) => setCutForm({ ...cutForm, notes: e.target.value })} /></div>
               <div className="flex justify-end gap-2 pt-2">
-                {cutForm.id && cutForm.status !== "repaired" && <button className="btn-primary bg-green-600 hover:bg-green-700" onClick={() => { markRepaired(cutForm.id!); setShowForm(null); }}>Mark Repaired</button>}
+                {cutForm.id && cutForm.status !== "repaired" && <button className="btn-primary bg-green-600 hover:bg-green-700" onClick={() => { setShowForm(null); startRecovery(cutForm as CableCut); }}>Recover Cut</button>}
                 {cutForm.id && <button className="btn-danger" onClick={() => { deleteCut(cutForm.id!); setShowForm(null); }}>Delete</button>}
                 <button className="btn-secondary" onClick={() => setShowForm(null)}>Cancel</button>
                 <button className="btn-primary" onClick={saveCut}>Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cut Recovery Confirmation Modal */}
+      {recoveryCut && !recoveryResult && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setRecoveryCut(null)}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Cut Recovery</h2>
+              <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={() => setRecoveryCut(null)}>
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            {(() => {
+              const cable = cables.find((c) => c.id === recoveryCut.cable_id);
+              const coreCount = cable?.core_count || 0;
+              const tjCapacity = coreCount <= 4 ? 4 : coreCount <= 8 ? 8 : coreCount <= 10 ? 10 : 0;
+              const CORE_COLOR_NAMES = ["Blue", "Orange", "Green", "Brown", "Slate", "White", "Red", "Black", "Yellow", "Violet", "Rose", "Aqua"];
+              return (
+                <div className="space-y-4">
+                  <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-3">
+                    <div className="text-sm font-medium text-green-800 dark:text-green-300">Auto-Recovery Plan</div>
+                    <div className="text-xs text-green-700 dark:text-green-400 mt-1">System will create a new TJ and automatically splice all cores by color.</div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">New TJ Box</div>
+                    <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs space-y-1">
+                      <div><span className="font-medium">Capacity:</span> {tjCapacity || "Exceeds max"} Port {tjCapacity ? `(${tjCapacity <= 4 ? "4-port" : tjCapacity <= 8 ? "8-port" : "10-port"})` : ""}</div>
+                      <div><span className="font-medium">Location:</span> {recoveryCut.lat.toFixed(6)}, {recoveryCut.lng.toFixed(6)}</div>
+                      {tjCapacity === 0 && <div className="text-red-600 dark:text-red-400 font-medium">Core count {coreCount} exceeds maximum supported TJ capacity (10). Manual recovery required.</div>}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">Connected Cable</div>
+                    <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs">
+                      <div className="font-mono font-semibold">{cable?.code || "?"}</div>
+                      <div className="text-slate-500">{coreCount} cores · {cable?.cable_type || "—"}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">Automatic Splicing ({coreCount} cores)</div>
+                    <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 max-h-32 overflow-y-auto space-y-0.5">
+                      {Array.from({ length: coreCount }, (_, i) => {
+                        const color = CORE_COLOR_NAMES[i % CORE_COLOR_NAMES.length];
+                        return (
+                          <div key={i} className="flex items-center gap-2 text-xs">
+                            <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: `var(--core-${color.toLowerCase()})`, border: color === "White" ? "1px solid #ccc" : undefined }} />
+                            <span className="text-green-600 dark:text-green-400">Core {i + 1}: {color} → {color}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button className="btn-secondary" onClick={() => setRecoveryCut(null)}>Cancel</button>
+                    <button className="btn-primary bg-green-600 hover:bg-green-700" disabled={recovering || tjCapacity === 0} onClick={confirmRecovery}>
+                      {recovering ? "Recovering..." : "Confirm Recovery"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Cut Recovery Result Modal */}
+      {recoveryResult && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setRecoveryResult(null)}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Recovery Completed</h2>
+              <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={() => setRecoveryResult(null)}>
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-3">
+                <div className="text-sm font-medium text-green-800 dark:text-green-300">Cut Recovery Successful</div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">New TJ Created</div>
+                <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs space-y-1">
+                  <div><span className="font-medium">ID:</span> <span className="font-mono">{recoveryResult.tj_unique_id}</span></div>
+                  <div><span className="font-medium">Name:</span> {recoveryResult.tj_name}</div>
+                  <div><span className="font-medium">Capacity:</span> {recoveryResult.tj_capacity} Port</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">Connected</div>
+                <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs">
+                  <div className="font-mono font-semibold">{recoveryResult.cable_code}</div>
+                  <div className="text-slate-500">{recoveryResult.core_count} cores → {recoveryResult.tj_unique_id}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">Splices Created: {recoveryResult.splices_created}</div>
+                <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 max-h-32 overflow-y-auto space-y-0.5">
+                  {recoveryResult.splices.map((s) => (
+                    <div key={s.core_index} className="flex items-center gap-2 text-xs">
+                      <span className="text-green-600 dark:text-green-400">Core {s.core_index}: {s.color} → {s.color}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {recoveryResult.unmatched_cores.length > 0 && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3">
+                  <div className="text-xs font-medium text-amber-800 dark:text-amber-300">Unmatched Cores: {recoveryResult.unmatched_cores.join(", ")}</div>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <button className="btn-primary" onClick={() => setRecoveryResult(null)}>Done</button>
               </div>
             </div>
           </div>
