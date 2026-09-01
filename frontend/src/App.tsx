@@ -10,7 +10,6 @@ import Devices from "./pages/Devices";
 import FiberMap from "./pages/FiberMap";
 import LiveDowns from "./pages/LiveDowns";
 import Login from "./pages/Login";
-import NetworkMap from "./pages/NetworkMap";
 import NocApprovals from "./pages/NocApprovals";
 import Onus from "./pages/Onus";
 import OnuProfile from "./pages/OnuProfile";
@@ -72,7 +71,6 @@ export default function App() {
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/acs" element={<Acs />} />
             <Route path="/live-downs" element={<LiveDowns />} />
-            <Route path="/network-map" element={<NetworkMap />} />
             <Route path="/fiber-map" element={<FiberMap />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/routing" element={<Routing />} />

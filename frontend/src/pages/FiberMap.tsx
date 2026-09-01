@@ -6,13 +6,21 @@ import "leaflet-draw";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
 import { api, downloadFile } from "../api/client";
-import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS } from "../api/types";
+import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, canWrite } from "../api/types";
+import SubscriberLink from "../components/SubscriberLink";
+import StatusBadge from "../components/StatusBadge";
+import { fmtTimeShort } from "../lib/time";
 
 interface TempSegment {
   start_lat: number; start_lng: number; end_lat: number; end_lng: number; order_index: number;
 }
-import { canWrite } from "../api/types";
 import { useUserRole } from "../lib/role";
+
+const STATUS_COLOR: Record<string, string> = {
+  pppoe: "#22c55e", up: "#22c55e", power_off: "#f97316", wire_down: "#ef4444",
+  inactive: "#f97316", offline: "#f97316", unknown: "#6b7280", lost: "#a855f7",
+  llid_admin_down: "#3b82f6",
+};
 
 const CORE_COLORS: Record<number, string> = {
   1: "#3b82f6", 2: "#f97316", 4: "#22c55e", 6: "#92400e",
@@ -344,11 +352,19 @@ export default function FiberMap() {
   const [loopForm, setLoopForm] = useState<Partial<FiberLoop>>({});
   const [cutForm, setCutForm] = useState<Partial<CableCut>>({});
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<"links" | "tj" | "splitters">("links");
+  const [activeTab, setActiveTab] = useState<"links" | "tj" | "splitters" | "users">("links");
   const [searchCables, setSearchCables] = useState("");
   const [searchTj, setSearchTj] = useState("");
   const [searchSp, setSearchSp] = useState("");
   const [searchCuts, setSearchCuts] = useState("");
+
+  // User Map state
+  const [mapPoints, setMapPoints] = useState<MapPoint[]>([]);
+  const [filterUserStatus, setFilterUserStatus] = useState("all");
+  const [filterUserText, setFilterUserText] = useState("");
+  const [selectedUser, setSelectedUser] = useState<MapPoint | null>(null);
+  const [userSidebarSearch, setUserSidebarSearch] = useState("");
+  const [gpsForm, setGpsForm] = useState<{ lat: number; lng: number } | null>(null);
 
   const [feasCheckOpen, setFeasCheckOpen] = useState(false);
   const [feasLat, setFeasLat] = useState("");
@@ -360,7 +376,7 @@ export default function FiberMap() {
 
   const load = useCallback(async () => {
     try {
-      const [c, t, s, l, ct, sp, np] = await Promise.all([
+      const [c, t, s, l, ct, sp, np, mp] = await Promise.all([
         api.get<Cable[]>("/fiber/cables"),
         api.get<TjBox[]>("/fiber/tj-boxes"),
         api.get<Splitter[]>("/fiber/splitters"),
@@ -368,6 +384,7 @@ export default function FiberMap() {
         api.get<CableCut[]>("/fiber/cuts"),
         api.get<any[]>("/fiber/splices"),
         api.get<{ nocs: any[]; pops: any[] }>("/fiber/noc-pop-map"),
+        api.get<MapPointResponse>("/map/points"),
       ]);
       setCables(c);
       setTjBoxes(t);
@@ -376,6 +393,7 @@ export default function FiberMap() {
       setCuts(ct);
       setSplices(sp);
       setNocPopData(np);
+      setMapPoints(mp.points || []);
     } catch (e) {
       setError(String(e));
     }
@@ -409,6 +427,49 @@ export default function FiberMap() {
       return true;
     });
   }, [splitters, filterType, filterText, filterRatio]);
+
+  // User Map computed values
+  const filteredUsers = useMemo(() => {
+    let pts = mapPoints;
+    if (filterUserStatus !== "all") {
+      pts = pts.filter((p) => {
+        if (filterUserStatus === "online") return p.status === "pppoe" || p.status === "up";
+        if (filterUserStatus === "offline") return p.status === "power_off" || p.status === "inactive" || p.status === "offline";
+        if (filterUserStatus === "wire_down") return p.status === "wire_down";
+        if (filterUserStatus === "unknown") return p.status === "unknown";
+        if (filterUserStatus === "lost") return p.status === "lost";
+        if (filterUserStatus === "llid_admin_down") return p.status === "llid_admin_down";
+        return true;
+      });
+    }
+    if (filterUserText) {
+      const q = filterUserText.toLowerCase();
+      pts = pts.filter((p) =>
+        (p.name || "").toLowerCase().includes(q)
+        || (p.subscriber || "").toLowerCase().includes(q)
+        || (p.serial || "").toLowerCase().includes(q)
+      );
+    }
+    return pts;
+  }, [mapPoints, filterUserStatus, filterUserText]);
+
+  const sidebarUsers = useMemo(() => {
+    if (!userSidebarSearch) return filteredUsers;
+    const q = userSidebarSearch.toLowerCase();
+    return filteredUsers.filter((p) =>
+      (p.name || "").toLowerCase().includes(q)
+      || (p.subscriber || "").toLowerCase().includes(q)
+      || (p.serial || "").toLowerCase().includes(q)
+      || (p.pon_port || "").toLowerCase().includes(q)
+      || (p.address || "").toLowerCase().includes(q)
+    );
+  }, [filteredUsers, userSidebarSearch]);
+
+  const userStatusSummary = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const p of mapPoints) c[p.status] = (c[p.status] || 0) + 1;
+    return c;
+  }, [mapPoints]);
 
   const saveCable = async () => {
     if (!cableForm.code?.trim()) { setError("Cable Code is required"); return; }
@@ -708,6 +769,17 @@ export default function FiberMap() {
                 </button>
               </>
             )}
+            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
+            <select className="input w-24 text-xs py-1" value={filterUserStatus} onChange={(e) => setFilterUserStatus(e.target.value)}>
+              <option value="all">All Users</option>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+              <option value="wire_down">Wire Down</option>
+              <option value="unknown">Unknown</option>
+              <option value="lost">Lost</option>
+              <option value="llid_admin_down">LLID Admin Down</option>
+            </select>
+            <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredUsers.length} users</span>
           </div>
           <FiberMapView
             cables={filteredCables}
@@ -789,6 +861,10 @@ export default function FiberMap() {
             dragTj={dragTj}
             onSaveDragTj={saveDragTj}
             onCancelDragTj={cancelDragTj}
+            userPoints={filteredUsers}
+            selectedUser={selectedUser}
+            onUserSelect={setSelectedUser}
+            showUserLayer={activeTab === "users"}
           />
         </div>
 
@@ -801,6 +877,7 @@ export default function FiberMap() {
               { key: "links" as const, label: "Links", count: filteredCables.length },
               { key: "tj" as const, label: "TJ Boxes", count: filteredTj.length },
               { key: "splitters" as const, label: "Splitters", count: filteredSplitters.length },
+              { key: "users" as const, label: "Users", count: filteredUsers.length },
             ]).map((tab) => (
               <button
                 key={tab.key}
@@ -901,6 +978,71 @@ export default function FiberMap() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {activeTab === "users" && (
+              <div className="flex flex-col h-full">
+                {/* Status summary */}
+                <div className="flex gap-2 px-1 py-1.5 text-[10px] font-medium border-b border-slate-200 dark:border-slate-700 shrink-0">
+                  <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("all")}>
+                    <span className="inline-block w-2 h-2 rounded-full bg-slate-400" />All {mapPoints.length}
+                  </span>
+                  <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("online")}>
+                    <span className="inline-block w-2 h-2 rounded-full bg-green-500" />{userStatusSummary["pppoe"] || 0}
+                  </span>
+                  <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("offline")}>
+                    <span className="inline-block w-2 h-2 rounded-full bg-orange-500" />{userStatusSummary["power_off"] || 0}
+                  </span>
+                  <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("wire_down")}>
+                    <span className="inline-block w-2 h-2 rounded-full bg-red-500" />{userStatusSummary["wire_down"] || 0}
+                  </span>
+                  <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("unknown")}>
+                    <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />{userStatusSummary["unknown"] || 0}
+                  </span>
+                  <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("lost")}>
+                    <span className="inline-block w-2 h-2 rounded-full bg-purple-500" />{userStatusSummary["lost"] || 0}
+                  </span>
+                </div>
+                {/* Search */}
+                <div className="px-2 pt-2 shrink-0">
+                  <input className="input text-xs w-full py-1" placeholder="Search users..." value={userSidebarSearch} onChange={(e) => setUserSidebarSearch(e.target.value)} />
+                </div>
+                {/* User list */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                  {sidebarUsers.map((p) => (
+                    <div key={`${p.olt_id}-${p.onu_id}`} className={`rounded-md border p-2 cursor-pointer transition ${selectedUser?.onu_id === p.onu_id && selectedUser?.olt_id === p.olt_id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => setSelectedUser(p)}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium truncate max-w-[140px]">{p.name || "—"}</span>
+                        <StatusBadge status={p.status} />
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 truncate">{p.subscriber || "—"} · {p.serial || "—"}</div>
+                      <div className="text-[10px] text-slate-400 truncate">{p.pon_port || "—"}</div>
+                    </div>
+                  ))}
+                  {sidebarUsers.length === 0 && <div className="text-xs text-slate-400 text-center py-4">No users found</div>}
+                </div>
+                {/* Selected user detail */}
+                {selectedUser && (
+                  <div className="border-t border-slate-200 dark:border-slate-700 p-2 space-y-2 shrink-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">{selectedUser.name || "—"}</h4>
+                      <StatusBadge status={selectedUser.status} />
+                    </div>
+                    <SubscriberLink subscriber={selectedUser.subscriber || ""} />
+                    <div className="text-[10px] text-slate-500 space-y-0.5">
+                      <div><span className="font-medium">Serial:</span> {selectedUser.serial || "—"}</div>
+                      <div><span className="font-medium">PON:</span> {selectedUser.pon_port || "—"}</div>
+                      <div><span className="font-medium">Address:</span> {selectedUser.address || "—"}</div>
+                      <div><span className="font-medium">RX Power:</span> {selectedUser.rx_power != null ? `${selectedUser.rx_power} dBm` : "—"}</div>
+                      <div><span className="font-medium">Last Seen:</span> {fmtTimeShort(selectedUser.last_seen)}</div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button className="btn-secondary text-[10px] py-0.5 px-1.5 flex-1" onClick={() => setGpsForm({ lat: selectedUser.gps_lat, lng: selectedUser.gps_lng })}>Edit GPS</button>
+                      <button className="btn-secondary text-[10px] py-0.5 px-1.5 flex-1" onClick={() => { /* TODO: edit address */ }}>Edit Address</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1169,6 +1311,42 @@ export default function FiberMap() {
                 {cutForm.id && <button className="btn-danger" onClick={() => { deleteCut(cutForm.id!); setShowForm(null); }}>Delete</button>}
                 <button className="btn-secondary" onClick={() => setShowForm(null)}>Cancel</button>
                 <button className="btn-primary" onClick={saveCut}>Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GPS Edit Modal */}
+      {gpsForm && selectedUser && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setGpsForm(null)}>
+          <div className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Edit GPS — {selectedUser.name}</h2>
+              <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={() => setGpsForm(null)}>
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Latitude</label>
+                <input type="number" step="any" className="input w-full text-sm" value={gpsForm.lat} onChange={(e) => setGpsForm({ ...gpsForm, lat: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Longitude</label>
+                <input type="number" step="any" className="input w-full text-sm" value={gpsForm.lng} onChange={(e) => setGpsForm({ ...gpsForm, lng: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-secondary flex-1" onClick={() => setGpsForm(null)}>Cancel</button>
+                <button className="btn-primary flex-1" onClick={async () => {
+                  if (!selectedUser || !gpsForm) return;
+                  try {
+                    await api.put(`/onus/${selectedUser.onu_id}`, { gps_lat: gpsForm.lat, gps_lng: gpsForm.lng });
+                    setSelectedUser({ ...selectedUser, gps_lat: gpsForm.lat, gps_lng: gpsForm.lng });
+                    setGpsForm(null);
+                    load();
+                  } catch (err) { setError(String(err)); }
+                }}>Save</button>
               </div>
             </div>
           </div>
@@ -1846,7 +2024,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm, drawCable, onStartDrawCable, onSetDrawMousePos, onConfirmDrawWaypoint, onUndoDrawWaypoint, onCancelDrawCable, onStartDragTj, dragTj, onSaveDragTj, onCancelDragTj }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm, drawCable, onStartDrawCable, onSetDrawMousePos, onConfirmDrawWaypoint, onUndoDrawWaypoint, onCancelDrawCable, onStartDragTj, dragTj, onSaveDragTj, onCancelDragTj, userPoints, selectedUser, onUserSelect, showUserLayer }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -1903,6 +2081,10 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   dragTj: { active: boolean; tj: TjBox | null; marker: L.Marker | null };
   onSaveDragTj: () => void;
   onCancelDragTj: () => void;
+  userPoints: MapPoint[];
+  selectedUser: MapPoint | null;
+  onUserSelect: (p: MapPoint | null) => void;
+  showUserLayer: boolean;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
   const drawControlRef = useRef<L.Control.Draw | null>(null);
@@ -1910,6 +2092,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   const routeMarkersRef = useRef<L.Marker[]>([]);
   const nocPopLayerRef = useRef<L.LayerGroup | null>(null);
   const cableLayersRef = useRef<Map<number, L.Polyline>>(new Map());
+  const userLayerRef = useRef<L.LayerGroup | null>(null);
   const onRightClickRef = useRef(onRightClickAdd);
   onRightClickRef.current = onRightClickAdd;
   const onMapClickRef = useRef(onMapClick);
@@ -2437,6 +2620,51 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     if (netLayers.pop) { if (!map.hasLayer(layer)) layer.addTo(map); }
     else { if (map.hasLayer(layer)) map.removeLayer(layer); }
   }, [netLayers.pop]);
+
+  // User markers layer
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (userLayerRef.current) {
+      map.removeLayer(userLayerRef.current);
+    }
+
+    if (!showUserLayer || userPoints.length === 0) return;
+
+    const layer = L.layerGroup();
+
+    for (const p of userPoints) {
+      const color = STATUS_COLOR[p.status] || "#6b7280";
+      const isBlinking = p.status === "wire_down" || p.status === "lost" || p.status === "llid_admin_down";
+      const blinkStyle = isBlinking ? "animation:blink 1.2s ease-in-out infinite;" : "";
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="width:14px;height:14px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.3);${blinkStyle}"></div><style>@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}</style>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+
+      const parts = [
+        `<b>${p.subscriber || "—"}</b>`,
+        `ONU: ${p.name || "—"}`,
+        `Serial: ${p.serial || "—"}`,
+        `Status: ${p.status}`,
+        `PON: ${p.pon_port || "—"}`,
+        `RX: ${p.rx_power != null ? p.rx_power + " dBm" : "—"}`,
+        `Address: ${p.address || "—"}`,
+      ];
+      if (p.last_seen) parts.push(`Last: ${fmtTimeShort(p.last_seen)}`);
+      if (!p.bound) parts.push(`<span style="color:#f97316">⚠ Unbound</span>`);
+
+      L.marker([p.gps_lat, p.gps_lng], { icon })
+        .bindTooltip(parts.join("<br>"), { sticky: true })
+        .addTo(layer);
+    }
+
+    userLayerRef.current = layer;
+    layer.addTo(map);
+  }, [userPoints, showUserLayer, mapRef]);
 
   return (
     <div className="relative h-full">
