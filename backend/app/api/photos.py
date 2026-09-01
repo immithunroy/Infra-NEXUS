@@ -277,15 +277,17 @@ async def list_photos(
     valid_types = ENTITY_PHOTO_TYPES[entity_type]
     photo_map = {p.photo_type: p for p in photos}
 
+    PHOTO_UPLOAD_DIR = Path(os.environ.get("PHOTO_UPLOAD_DIR", "/app/uploads/field-photos"))
+
     return {
         "entity_type": entity_type,
         "entity_id": entity_id,
         "total_required": len(valid_types),
-        "totalUploaded": len(photos),
+        "totalUploaded": len([p for p in photos if (PHOTO_UPLOAD_DIR / p.storage_key).exists()]),
         "photos": [
             {
                 "photo_type": pt,
-                "uploaded": pt in photo_map,
+                "uploaded": pt in photo_map and (PHOTO_UPLOAD_DIR / photo_map[pt].storage_key).exists(),
                 **(
                     {
                         "id": photo_map[pt].id,
@@ -299,7 +301,7 @@ async def list_photos(
                         "captured_by": photo_map[pt].captured_by,
                         "created_at": photo_map[pt].created_at.isoformat() if photo_map[pt].created_at else None,
                     }
-                    if pt in photo_map
+                    if pt in photo_map and (PHOTO_UPLOAD_DIR / photo_map[pt].storage_key).exists()
                     else {}
                 ),
             }
