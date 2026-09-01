@@ -37,7 +37,7 @@ router = APIRouter(prefix="/api/approvals", tags=["approvals"])
 UPLOAD_DIR = Path("/app/uploads/approval-photos")
 
 VALID_ENTITY_TYPES = {
-    "tj", "tj_splitter", "cable", "user", "user_location",
+    "tj", "tj_box", "tj_splitter", "cable", "user", "user_location",
     "splitter", "splice_box", "infrastructure", "loop", "cable_cut", "other",
 }
 VALID_ACTIONS = {"create", "update", "delete"}
@@ -538,7 +538,7 @@ async def _next_link_id(db) -> str:
 
 async def _execute_action(action: str, entity_type: str, entity_id: int | None, payload: dict, db: AsyncSession):
     """Execute an approved action against the actual database."""
-    if entity_type == "tj":
+    if entity_type in ("tj", "tj_box"):
         await _execute_tj(action, entity_id, payload, db)
     elif entity_type == "tj_splitter":
         await _execute_tj_splitter(action, entity_id, payload, db)
@@ -564,19 +564,56 @@ async def _execute_action(action: str, entity_type: str, entity_id: int | None, 
 async def _execute_tj(action: str, entity_id: int | None, payload: dict, db: AsyncSession):
     if action == "create":
         unique_id = await _next_tj_id(db)
+
+        # Map Android box_type values to backend values
+        _BOX_TYPE_MAP = {
+            "home": "home_tj", "regular": "regular_tj",
+            "enclosure": "enclosure", "dome": "dome",
+            "home_tj": "home_tj", "regular_tj": "regular_tj",
+        }
+        box_type_raw = payload.get("box_type", "regular_tj")
+        box_type = _BOX_TYPE_MAP.get(box_type_raw, box_type_raw)
+
+        # Calculate capacity from tray_count if not explicitly provided
+        tray_count = payload.get("tray_count", 1)
+        splice_per_tray = payload.get("splice_per_tray", 12)
+        capacity = payload.get("capacity") or (tray_count * splice_per_tray)
+
         box = TjBox(
             unique_id=unique_id,
             name=payload.get("name", ""),
-            box_type=payload.get("box_type", "regular_tj"),
+            box_type=box_type,
             tj_port=payload.get("tj_port", 8),
-            capacity=payload.get("capacity", 12),
-            tray_count=payload.get("tray_count", 1),
+            capacity=capacity,
+            tray_count=tray_count,
             lat=payload.get("lat", 0),
             lng=payload.get("lng", 0),
             address=payload.get("address", ""),
             notes=payload.get("notes", ""),
         )
         db.add(box)
+        await db.flush()  # get the ID for splitter linking
+
+        # If the Android submission included splitter info, create a Splitter too
+        if payload.get("has_splitter"):
+            ratio_str = str(payload.get("splitter_ratio", "1:4"))
+            try:
+                split_ratio = int(ratio_str.split(":")[-1]) if ":" in ratio_str else int(ratio_str)
+            except (ValueError, IndexError):
+                split_ratio = 4
+            sp_id = await _next_sp_id(db)
+            splitter = Splitter(
+                unique_id=sp_id,
+                name=f"{unique_id} Splitter",
+                split_ratio=split_ratio,
+                tj_box_id=box.id,
+                input_core=0,
+                output_cores="",
+                lat=payload.get("lat", 0),
+                lng=payload.get("lng", 0),
+                notes="",
+            )
+            db.add(splitter)
     elif action == "update" and entity_id:
         result = await db.execute(select(TjBox).where(TjBox.id == entity_id))
         box = result.scalar_one_or_none()
@@ -710,11 +747,23 @@ async def _execute_splitter(action: str, entity_id: int | None, payload: dict, d
 
 
 async def _execute_user(action: str, entity_id: int | None, payload: dict, db: AsyncSession):
-    """Approve a new subscriber/user — link to existing ONU or create placeholder."""
+    """Approve a subscriber/user submission — update existing ONU with customer data."""
     if action == "create":
-        # For user submissions, we just record the data — actual ONU linking
-        # is handled by the operator after approval
-        logger.info("User submission approved: %s — manual linking required", payload.get("name", ""))
+        subscriber_id = payload.get("subscriber_id")
+        if not subscriber_id:
+            logger.warning("User create approval missing subscriber_id — skipping")
+            return
+
+        onu = await db.get(Onu, int(subscriber_id))
+        if not onu:
+            logger.warning("User create approval: ONU #%s not found — skipping", subscriber_id)
+            return
+
+        for k in ("name", "phone", "address", "landmark", "gps_lat", "gps_lng", "gps_accuracy"):
+            if k in payload and payload[k] is not None:
+                setattr(onu, k, payload[k])
+
+        logger.info("User submission approved: ONU #%d (%s) updated", onu.id, onu.subscriber)
     elif action == "update" and entity_id:
         result = await db.execute(select(Onu).where(Onu.id == entity_id))
         onu = result.scalar_one_or_none()
