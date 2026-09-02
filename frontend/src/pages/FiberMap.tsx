@@ -175,6 +175,10 @@ export default function FiberMap() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editKind, setEditKind] = useState<string>("");
 
+  type HighlightedType = "cable" | "tj" | "splitter" | "user";
+  type HighlightedObject = { type: HighlightedType; id: number | string } | null;
+  const [highlightedObject, setHighlightedObject] = useState<HighlightedObject>(null);
+
   type PlanPhase = "idle" | "select-src" | "select-dst" | "fetching" | "select-route" | "draw" | "confirm" | "custom-draw";
   const [planner, setPlanner] = useState<{ phase: PlanPhase; srcTj: TjBox | null; dstTj: TjBox | null; waypoints: L.LatLng[] }>({ phase: "idle", srcTj: null, dstTj: null, waypoints: [] });
   const [routeAlts, setRouteAlts] = useState<{ coords: [number, number][]; distance: number; duration: number }[]>([]);
@@ -456,6 +460,26 @@ export default function FiberMap() {
     return pts;
   }, [mapPoints, filterUserStatus, filterUserText]);
 
+  const highlightObject = useCallback((type: HighlightedType, id: number | string) => {
+    setHighlightedObject({ type, id });
+    if (type === "cable") {
+      const c = cables.find((x) => x.id === id);
+      if (c && c.segments.length > 0) {
+        const mid = c.segments[Math.floor(c.segments.length / 2)];
+        mapRef.current?.setView([mid.start_lat, mid.start_lng], 16, { animate: true });
+      }
+    } else if (type === "tj") {
+      const t = tjBoxes.find((x) => x.id === id);
+      if (t) mapRef.current?.setView([t.lat, t.lng], 16, { animate: true });
+    } else if (type === "splitter") {
+      const s = splitters.find((x) => x.id === id);
+      if (s) mapRef.current?.setView([s.lat, s.lng], 17, { animate: true });
+    } else if (type === "user") {
+      const p = filteredUsers.find((x) => `${x.olt_id}-${x.onu_id}` === id);
+      if (p && p.gps_lat && p.gps_lng) mapRef.current?.setView([p.gps_lat, p.gps_lng], 17, { animate: true });
+    }
+  }, [cables, tjBoxes, splitters, filteredUsers, mapRef]);
+
   const sidebarUsers = useMemo(() => {
     if (!userSidebarSearch) return filteredUsers;
     const q = userSidebarSearch.toLowerCase();
@@ -718,59 +742,59 @@ export default function FiberMap() {
 
   return (
     <div className={isFullscreen ? "fixed inset-0 z-[9998] bg-white dark:bg-slate-900 flex flex-col" : "flex flex-col relative"} style={{ zIndex: 1, height: isFullscreen ? "100vh" : "calc(100vh - 4rem)" }}>
+      {/* Network Map Ribbon — above the map */}
+      {!isFullscreen && (
+        <div className="shrink-0 flex flex-wrap items-center gap-1.5 rounded-b-xl border border-slate-200 border-t-0 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 z-[1000]">
+          <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Network Map</h1>
+          <select className="input w-24 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
+            <option value="customer">Customer</option><option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
+          </select>
+          <select className="input w-24 text-xs py-1" value={filterUserStatus} onChange={(e) => setFilterUserStatus(e.target.value)}>
+            <option value="all">All User Status</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+            <option value="wire_down">Wire Down</option>
+            <option value="unknown">Unknown</option>
+            <option value="lost">Lost</option>
+            <option value="llid_admin_down">LLID Admin Down</option>
+          </select>
+          {(filterType === "all" || filterType === "cable") && (
+            <select className="input w-20 text-xs py-1" value={filterCore} onChange={(e) => setFilterCore(e.target.value)}>
+              <option value="all">All cores</option>
+              {Object.keys(CORE_COLORS).map((k) => <option key={k} value={k}>{k} core</option>)}
+            </select>
+          )}
+          {(filterType === "all" || filterType === "tj") && (
+            <select className="input w-20 text-xs py-1" value={filterPort} onChange={(e) => setFilterPort(e.target.value)}>
+              <option value="all">All ports</option>
+              {Object.keys(TJ_CAPACITY_COLORS).map((k) => <option key={k} value={k}>{k} port</option>)}
+            </select>
+          )}
+          {(filterType === "all" || filterType === "splitter") && (
+            <select className="input w-20 text-xs py-1" value={filterRatio} onChange={(e) => setFilterRatio(e.target.value)}>
+              <option value="all">All ratios</option>
+              {Object.keys(SPLITTER_RATIO_COLORS).map((k) => <option key={k} value={k}>1:{k}</option>)}
+            </select>
+          )}
+          <input className="input w-32 text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
+          <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
+          {writeOk && (
+            <>
+              <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
+              <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
+              <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>Feasibility</button>
+              <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
+                {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Map + Sidebar layout */}
       <div className="flex-1 flex min-h-0" style={{ zIndex: 2 }}>
         {/* Map fills remaining space */}
         <div className="flex-1 relative min-h-0">
-          {/* Floating toolbar */}
-          <div className="absolute top-3 left-3 z-[1000] flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
-            {!isFullscreen && <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Network Map</h1>}
-            <select className="input w-24 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
-              <option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
-            </select>
-            {(filterType === "all" || filterType === "cable") && (
-              <select className="input w-20 text-xs py-1" value={filterCore} onChange={(e) => setFilterCore(e.target.value)}>
-                <option value="all">All cores</option>
-                {Object.keys(CORE_COLORS).map((k) => <option key={k} value={k}>{k} core</option>)}
-              </select>
-            )}
-            {(filterType === "all" || filterType === "tj") && (
-              <select className="input w-20 text-xs py-1" value={filterPort} onChange={(e) => setFilterPort(e.target.value)}>
-                <option value="all">All ports</option>
-                {Object.keys(TJ_CAPACITY_COLORS).map((k) => <option key={k} value={k}>{k} port</option>)}
-              </select>
-            )}
-            {(filterType === "all" || filterType === "splitter") && (
-              <select className="input w-20 text-xs py-1" value={filterRatio} onChange={(e) => setFilterRatio(e.target.value)}>
-                <option value="all">All ratios</option>
-                {Object.keys(SPLITTER_RATIO_COLORS).map((k) => <option key={k} value={k}>1:{k}</option>)}
-              </select>
-            )}
-            <input className="input w-32 text-xs py-1" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
-            <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredCables.length}c {filteredTj.length}tj {filteredSplitters.length}sp</span>
-            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
-            {writeOk && (
-              <>
-                <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
-                <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
-                <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>Feasibility</button>
-                <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
-                  {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
-                </button>
-              </>
-            )}
-            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
-            <select className="input w-24 text-xs py-1" value={filterUserStatus} onChange={(e) => setFilterUserStatus(e.target.value)}>
-              <option value="all">All Users</option>
-              <option value="online">Online</option>
-              <option value="offline">Offline</option>
-              <option value="wire_down">Wire Down</option>
-              <option value="unknown">Unknown</option>
-              <option value="lost">Lost</option>
-              <option value="llid_admin_down">LLID Admin Down</option>
-            </select>
-            <span className="text-[10px] text-slate-400 whitespace-nowrap">{filteredUsers.length} users</span>
-          </div>
           <FiberMapView
             cables={filteredCables}
             tjBoxes={filteredTj}
@@ -800,12 +824,13 @@ export default function FiberMap() {
                 fetchOsrmAlts(planner.srcTj!, tj);
               } else if (planner.phase !== "draw" && planner.phase !== "fetching") {
                 setSelectedTj(tj);
+                highlightObject("tj", tj.id);
               }
             }}
             onDrawCreated={handleDrawCreated}
             onRightClickAdd={handleRightClickAdd}
             onCableSegmentUpdate={handleCableSegmentUpdate}
-            onCableClick={(cable) => setSelectedCable(cable)}
+            onCableClick={(cable) => { setSelectedCable(cable); highlightObject("cable", cable.id); }}
             onLoopClick={(loop) => { setLoopForm(loop); setShowForm("loop"); }}
             onCutClick={(cut) => { setCutForm(cut); setShowForm("cut"); }}
             editingCableId={cableEdit?.cableId ?? null}
@@ -820,6 +845,7 @@ export default function FiberMap() {
             onSelectEditWaypoint={selectEditWaypoint}
             onMapClick={(lat, lng) => {
               setSelectedWaypoint(null);
+              setHighlightedObject(null);
               if (drawCable.active) {
                 confirmDrawWaypoint();
               } else if (cableEdit) addEditWaypoint(lat, lng);
@@ -853,8 +879,9 @@ export default function FiberMap() {
             onCancelDragTj={cancelDragTj}
             userPoints={filteredUsers}
             selectedUser={selectedUser}
-            onUserSelect={setSelectedUser}
+            onUserSelect={(p) => { setSelectedUser(p); if (p) highlightObject("user", `${p.olt_id}-${p.onu_id}`); }}
             showUserLayer={netLayers.customer}
+            highlightedObject={highlightedObject}
           />
         </div>
 
@@ -892,7 +919,7 @@ export default function FiberMap() {
                   {filteredCables.filter((c) => !searchCables || c.code.toLowerCase().includes(searchCables.toLowerCase()) || c.link_name.toLowerCase().includes(searchCables.toLowerCase())).map((c) => {
                     const lenM = cableLengthM(c);
                     return (
-                      <div key={c.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => setSelectedCable(c)}>
+                      <div key={c.id} className={`rounded-md border p-2 cursor-pointer transition ${highlightedObject?.type === "cable" && highlightedObject?.id === c.id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => { setSelectedCable(c); highlightObject("cable", c.id); }}>
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">{c.link_id || "?"} | {c.link_name || c.code}</span>
                           <span className="badge text-[10px] ml-1 shrink-0" style={{ background: CORE_COLORS[c.core_count] || "#6b7280", color: "white" }}>{c.core_count}C</span>
@@ -937,7 +964,7 @@ export default function FiberMap() {
                 <input className="input text-xs w-full mb-2 py-1" placeholder="Search TJs..." value={searchTj} onChange={(e) => setSearchTj(e.target.value)} />
                 <div className="space-y-1">
                   {filteredTj.filter((t) => !searchTj || t.name.toLowerCase().includes(searchTj.toLowerCase()) || t.unique_id.toLowerCase().includes(searchTj.toLowerCase())).map((t) => (
-                    <div key={t.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => setSelectedTj(t)}>
+                    <div key={t.id} className={`rounded-md border p-2 cursor-pointer transition ${highlightedObject?.type === "tj" && highlightedObject?.id === t.id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => { setSelectedTj(t); highlightObject("tj", t.id); }}>
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-xs">{t.unique_id}</span>
                         <span className="badge text-[10px]" style={{ background: TJ_ICONS[t.box_type] || "#6b7280", color: "white" }}>{t.box_type}</span>
@@ -957,7 +984,7 @@ export default function FiberMap() {
                   {filteredSplitters.filter((s) => !searchSp || (s.name || "").toLowerCase().includes(searchSp.toLowerCase()) || s.unique_id.toLowerCase().includes(searchSp.toLowerCase())).map((s) => {
                     const loss = splitterLoss(s.split_ratio);
                     return (
-                      <div key={s.id} className="rounded-md border border-slate-200 dark:border-slate-700 p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" onClick={() => startEdit("splitter", s)}>
+                      <div key={s.id} className={`rounded-md border p-2 cursor-pointer transition ${highlightedObject?.type === "splitter" && highlightedObject?.id === s.id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => { startEdit("splitter", s); highlightObject("splitter", s.id); }}>
                         <div className="flex items-center justify-between">
                           <span className="font-mono text-xs font-semibold">{s.unique_id}</span>
                           <span className="badge text-[10px]" style={{ background: SPLITTER_RATIO_COLORS[s.split_ratio] || "#f59e0b", color: "white" }}>1:{s.split_ratio}</span>
@@ -1001,7 +1028,7 @@ export default function FiberMap() {
                 {/* User list */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
                   {sidebarUsers.map((p) => (
-                    <div key={`${p.olt_id}-${p.onu_id}`} className={`rounded-md border p-2 cursor-pointer transition ${selectedUser?.onu_id === p.onu_id && selectedUser?.olt_id === p.olt_id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => setSelectedUser(p)}>
+                    <div key={`${p.olt_id}-${p.onu_id}`} className={`rounded-md border p-2 cursor-pointer transition ${highlightedObject?.type === "user" && highlightedObject?.id === `${p.olt_id}-${p.onu_id}` ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : selectedUser?.onu_id === p.onu_id && selectedUser?.olt_id === p.olt_id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => { setSelectedUser(p); highlightObject("user", `${p.olt_id}-${p.onu_id}`); }}>
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-medium truncate max-w-[140px]">{p.name || "—"}</span>
                         <StatusBadge status={p.status} />
@@ -2138,7 +2165,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm, drawCable, onStartDrawCable, onSetDrawMousePos, onConfirmDrawWaypoint, onUndoDrawWaypoint, onCancelDrawCable, onStartDragTj, dragTj, onSaveDragTj, onCancelDragTj, userPoints, selectedUser, onUserSelect, showUserLayer }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm, drawCable, onStartDrawCable, onSetDrawMousePos, onConfirmDrawWaypoint, onUndoDrawWaypoint, onCancelDrawCable, onStartDragTj, dragTj, onSaveDragTj, onCancelDragTj, userPoints, selectedUser, onUserSelect, showUserLayer, highlightedObject }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -2199,6 +2226,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   selectedUser: MapPoint | null;
   onUserSelect: (p: MapPoint | null) => void;
   showUserLayer: boolean;
+  highlightedObject: { type: "cable" | "tj" | "splitter" | "user"; id: number | string } | null;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
   const drawControlRef = useRef<L.Control.Draw | null>(null);
@@ -2207,6 +2235,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   const nocPopLayerRef = useRef<L.LayerGroup | null>(null);
   const cableLayersRef = useRef<Map<number, L.Polyline>>(new Map());
   const userLayerRef = useRef<L.LayerGroup | null>(null);
+  const highlightLayerRef = useRef<L.Layer | null>(null);
   const onRightClickRef = useRef(onRightClickAdd);
   onRightClickRef.current = onRightClickAdd;
   const onMapClickRef = useRef(onMapClick);
@@ -2779,6 +2808,48 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
     userLayerRef.current = layer;
     layer.addTo(map);
   }, [userPoints, showUserLayer, mapRef]);
+
+  // Highlight effect: pulsing ring around the selected object
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (highlightLayerRef.current) {
+      map.removeLayer(highlightLayerRef.current);
+      highlightLayerRef.current = null;
+    }
+    if (!highlightedObject) return;
+
+    let layer: L.Layer | null = null;
+    const pulseColor = "#2563eb";
+    const pulseWeight = 4;
+
+    if (highlightedObject.type === "cable") {
+      const c = cables.find((x) => x.id === highlightedObject.id);
+      if (c && c.segments?.length >= 1) {
+        const pts: [number, number][] = [];
+        for (const s of c.segments) pts.push([s.start_lat, s.start_lng]);
+        const last = c.segments[c.segments.length - 1];
+        pts.push([last.end_lat, last.end_lng]);
+        if (pts.length >= 2) {
+          layer = L.polyline(pts, { color: pulseColor, weight: pulseWeight, opacity: 0.7, dashArray: "8,8", className: "highlight-pulse" });
+        }
+      }
+    } else if (highlightedObject.type === "tj") {
+      const t = tjBoxes.find((x) => x.id === highlightedObject.id);
+      if (t) layer = L.circleMarker([t.lat, t.lng], { radius: 22, color: pulseColor, weight: 3, fillColor: pulseColor, fillOpacity: 0.15, dashArray: "6,6", className: "highlight-pulse" });
+    } else if (highlightedObject.type === "splitter") {
+      const s = splitters.find((x) => x.id === highlightedObject.id);
+      if (s) layer = L.circleMarker([s.lat, s.lng], { radius: 18, color: pulseColor, weight: 3, fillColor: pulseColor, fillOpacity: 0.15, dashArray: "6,6", className: "highlight-pulse" });
+    } else if (highlightedObject.type === "user") {
+      const p = userPoints.find((x) => `${x.olt_id}-${x.onu_id}` === highlightedObject.id);
+      if (p && p.gps_lat && p.gps_lng) layer = L.circleMarker([p.gps_lat, p.gps_lng], { radius: 18, color: pulseColor, weight: 3, fillColor: pulseColor, fillOpacity: 0.15, dashArray: "6,6", className: "highlight-pulse" });
+    }
+
+    if (layer) {
+      layer.addTo(map);
+      highlightLayerRef.current = layer;
+    }
+  }, [highlightedObject, cables, tjBoxes, splitters, userPoints, mapRef]);
 
   return (
     <div className="relative h-full">
