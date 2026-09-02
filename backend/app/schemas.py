@@ -474,6 +474,24 @@ class DashboardSummary(BaseModel):
     last_scan: datetime | None
 
 
+class NetworkSummary(BaseModel):
+    """Summary stats for fiber cable, TJ boxes, users on map, and splitters."""
+    # Cable stats
+    cable_total_km: float = 0.0
+    cable_by_core: dict[int, float] = {}  # core_count -> total km
+    cable_count: int = 0
+    # TJ box stats
+    tj_total: int = 0
+    tj_by_port: dict[int, int] = {}  # tj_port -> count
+    # User / map stats
+    user_total: int = 0
+    user_with_gps: int = 0
+    user_without_gps: int = 0
+    gps_coverage_pct: float = 0.0
+    # Splitter stats
+    splitter_total: int = 0
+
+
 class SearchOnu(BaseModel):
     id: int
     olt_id: int

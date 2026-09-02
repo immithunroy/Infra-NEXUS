@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends
 import asyncio
+import math
 import re
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import Binding, MacEntry, MikrotikDevice, OLTDevice, Onu, OnuOutage, OnuTelemetry, PppActiveEntry, PortArea, ScanLog, User
-from ..schemas import BrandBucket, DashboardSummary, MassDownPort, OltUsage, OltWriteLogOut, PortUsage, ScanLogOut, SignalBucket, WeakOnu
+from ..models import Binding, Cable, CableSegment, MacEntry, MikrotikDevice, OLTDevice, Onu, OnuOutage, OnuTelemetry, PppActiveEntry, PortArea, ScanLog, Splitter, TjBox, User
+from ..schemas import BrandBucket, DashboardSummary, MassDownPort, NetworkSummary, OltUsage, OltWriteLogOut, PortUsage, ScanLogOut, SignalBucket, WeakOnu
 from ..security import get_current_user
 from ..services.mac_vendor import vendor_map
 from ..utils.time import utcnow
@@ -317,3 +318,69 @@ async def list_olt_write_logs(limit: int = 200, db: AsyncSession = Depends(get_d
     from ..models import OltWriteLog
     q = select(OltWriteLog).order_by(OltWriteLog.started_at.desc()).limit(min(limit, 500))
     return (await db.execute(q)).scalars().all()
+
+
+def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Distance in meters between two GPS points (Haversine formula)."""
+    R = 6371000  # Earth radius in meters
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+@router.get("/dashboard/network-summary", response_model=NetworkSummary)
+async def network_summary(db: AsyncSession = Depends(get_db)):
+    """Aggregated stats for fiber cable length, TJ box counts, user GPS
+    coverage, and splitter counts — used by the dashboard summary cards."""
+
+    # --- Cables ---
+    cables = (await db.execute(select(Cable))).scalars().all()
+    segments = (await db.execute(select(CableSegment))).scalars().all()
+    seg_by_cable: dict[int, list[CableSegment]] = {}
+    for s in segments:
+        seg_by_cable.setdefault(s.cable_id, []).append(s)
+
+    cable_total_m = 0.0
+    cable_by_core: dict[int, float] = {}
+    for c in cables:
+        segs = seg_by_cable.get(c.id, [])
+        if not segs:
+            continue
+        segs_sorted = sorted(segs, key=lambda s: s.order_index)
+        length_m = 0.0
+        for seg in segs_sorted:
+            length_m += _haversine(seg.start_lat, seg.start_lng, seg.end_lat, seg.end_lng)
+        cable_total_m += length_m
+        km = length_m / 1000
+        cable_by_core[c.core_count] = cable_by_core.get(c.core_count, 0.0) + km
+
+    # --- TJ Boxes ---
+    tj_boxes = (await db.execute(select(TjBox))).scalars().all()
+    tj_by_port: dict[int, int] = {}
+    for t in tj_boxes:
+        tj_by_port[t.tj_port] = tj_by_port.get(t.tj_port, 0) + 1
+
+    # --- Users / Map ---
+    onus = (await db.execute(select(Onu))).scalars().all()
+    user_total = len(onus)
+    user_with_gps = sum(1 for o in onus if o.gps_lat is not None and o.gps_lng is not None)
+    user_without_gps = user_total - user_with_gps
+    gps_coverage_pct = round(user_with_gps / user_total * 100, 1) if user_total else 0.0
+
+    # --- Splitters ---
+    splitter_total = (await db.execute(select(func.count(Splitter.id)))).scalar() or 0
+
+    return NetworkSummary(
+        cable_total_km=round(cable_total_m / 1000, 2),
+        cable_by_core={k: round(v, 2) for k, v in sorted(cable_by_core.items())},
+        cable_count=len(cables),
+        tj_total=len(tj_boxes),
+        tj_by_port=dict(sorted(tj_by_port.items())),
+        user_total=user_total,
+        user_with_gps=user_with_gps,
+        user_without_gps=user_without_gps,
+        gps_coverage_pct=gps_coverage_pct,
+        splitter_total=splitter_total,
+    )

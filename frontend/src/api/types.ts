@@ -291,6 +291,19 @@ export interface DashboardSummary {
   last_scan: string | null;
 }
 
+export interface NetworkSummary {
+  cable_total_km: number;
+  cable_by_core: Record<string, number>;
+  cable_count: number;
+  tj_total: number;
+  tj_by_port: Record<string, number>;
+  user_total: number;
+  user_with_gps: number;
+  user_without_gps: number;
+  gps_coverage_pct: number;
+  splitter_total: number;
+}
+
 export interface ScanLog {
   id: number;
   scan_type: string;
