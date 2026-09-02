@@ -640,6 +640,13 @@ export default function Dashboard() {
         <Kpi label="OLTs" value={data.olt_count} hint={`${data.olt_reachable} reachable`} accent="from-sky-400 to-cyan-400" />
         <Kpi label="Mikrotik Routers" value={data.mikrotik_count} hint="PPPoE source" accent="from-blue-400 to-indigo-500" />
         <Kpi label="MACs on PON Ports" value={data.olt_mac_count.toLocaleString()} hint={`${data.matched_mac_count} matched to subscribers`} accent="from-teal-400 to-emerald-400" />
+        {netSummary && (
+          <>
+            <Kpi label="Total Cable" value={`${netSummary.cable_total_km} km`} hint={`${netSummary.cable_count} cable${netSummary.cable_count !== 1 ? "s" : ""} · ${Object.entries(netSummary.cable_by_core).map(([c, k]) => `${c}C:${k}km`).join(" · ")}`} accent="from-amber-400 to-orange-500" />
+            <Kpi label="TJ Boxes" value={netSummary.tj_total} hint={Object.entries(netSummary.tj_by_port).map(([p, c]) => `${p}P:${c}`).join(" · ") || "No TJ data"} accent="from-violet-400 to-indigo-500" />
+            <Kpi label="Users on Map" value={netSummary.user_total} hint={`${netSummary.user_with_gps} GPS · ${netSummary.gps_coverage_pct}% coverage`} accent="from-emerald-400 to-cyan-400" />
+          </>
+        )}
         {pendingApprovals && pendingApprovals.total > 0 && (
           <button
             onClick={() => navigate("/approvals")}
@@ -654,74 +661,6 @@ export default function Dashboard() {
           </button>
         )}
       </div>
-
-      {netSummary && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {/* Total Cable Card */}
-          <div className="card relative overflow-hidden p-5">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Cable</div>
-            <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{netSummary.cable_total_km} km</div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{netSummary.cable_count} cable{netSummary.cable_count !== 1 ? "s" : ""} total</div>
-            <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-700">
-              {Object.entries(netSummary.cable_by_core).map(([core, km]) => (
-                <div key={core} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600 dark:text-slate-300">{core} Core</span>
-                  <span className="font-semibold text-slate-900 dark:text-white">{km} km</span>
-                </div>
-              ))}
-              {Object.keys(netSummary.cable_by_core).length === 0 && (
-                <div className="text-xs text-slate-400 dark:text-slate-500">No cable data</div>
-              )}
-            </div>
-          </div>
-
-          {/* TJ Boxes Card */}
-          <div className="card relative overflow-hidden p-5">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-400 to-indigo-500" />
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">TJ Boxes</div>
-            <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{netSummary.tj_total}</div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Total — {netSummary.tj_total} TJ</div>
-            <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-700">
-              {Object.entries(netSummary.tj_by_port).map(([port, count]) => (
-                <div key={port} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600 dark:text-slate-300">{port} Port</span>
-                  <span className="font-semibold text-slate-900 dark:text-white">{count}</span>
-                </div>
-              ))}
-              {Object.keys(netSummary.tj_by_port).length === 0 && (
-                <div className="text-xs text-slate-400 dark:text-slate-500">No TJ data</div>
-              )}
-            </div>
-          </div>
-
-          {/* Users on Map Card */}
-          <div className="card relative overflow-hidden p-5">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 to-cyan-400" />
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Users on Map</div>
-            <div className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{netSummary.user_total}</div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Total Users on Map — {netSummary.user_total}</div>
-            <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-700">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-300">GPS Coordinates Available</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">{netSummary.user_with_gps}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-300">GPS Coordinates Missing</span>
-                <span className="font-semibold text-amber-600 dark:text-amber-400">{netSummary.user_without_gps}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-300">Splitters on Map</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{netSummary.splitter_total}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-300">GPS Coverage</span>
-                <span className={`font-semibold ${netSummary.gps_coverage_pct >= 80 ? "text-emerald-600 dark:text-emerald-400" : netSummary.gps_coverage_pct >= 50 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}`}>{netSummary.gps_coverage_pct}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card flex h-full flex-col p-5">
