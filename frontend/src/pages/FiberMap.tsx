@@ -1152,6 +1152,46 @@ export default function FiberMap() {
         </div>
       )}
 
+      {selectedUser && !showForm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedUser(null)}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 mb-4">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white truncate">{selectedUser.name || "—"}</h2>
+                <p className="text-sm text-slate-500">{selectedUser.subscriber || "—"}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <StatusBadge status={selectedUser.status} />
+                <button onClick={() => setSelectedUser(null)} className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+            </div>
+            <div className="space-y-3 text-sm">
+              <SubscriberLink subscriber={selectedUser.subscriber || ""} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Serial</div><div className="font-mono font-semibold">{selectedUser.serial || "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">PON Port</div><div className="font-mono font-semibold">{selectedUser.pon_port || "—"}</div></div>
+              </div>
+              <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3">
+                <div className="text-xs text-slate-400">Address</div>
+                <div className="font-semibold">{selectedUser.address || "—"}</div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">RX Power</div><div className="font-semibold">{selectedUser.rx_power != null ? `${selectedUser.rx_power} dBm` : "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Last Seen</div><div className="font-semibold">{fmtTimeShort(selectedUser.last_seen)}</div></div>
+              </div>
+              {selectedUser.down_reason && (
+                <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-3"><div className="text-xs text-red-600">Down Reason</div><div className="font-semibold text-red-700">{selectedUser.down_reason}</div></div>
+              )}
+              <div className="text-xs text-slate-400">
+                GPS: {selectedUser.gps_lat?.toFixed(6) || "—"}, {selectedUser.gps_lng?.toFixed(6) || "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showForm === "cable" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setShowForm(null)}>
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
@@ -2263,6 +2303,8 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onUndoDrawWaypointRef.current = onUndoDrawWaypoint;
   const drawCableRef = useRef(drawCable);
   drawCableRef.current = drawCable;
+  const onUserSelectRef = useRef(onUserSelect);
+  onUserSelectRef.current = onUserSelect;
 
   useEffect(() => {
     if (!mapEl || mapRef.current) return;
@@ -2800,9 +2842,17 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       if (p.last_seen) parts.push(`Last: ${fmtTimeShort(p.last_seen)}`);
       if (!p.bound) parts.push(`<span style="color:#f97316">⚠ Unbound</span>`);
 
-      L.marker([p.gps_lat, p.gps_lng], { icon })
-        .bindTooltip(parts.join("<br>"), { sticky: true })
-        .addTo(layer);
+      if (parts.length > 0) parts.push("<br><i>click for details</i>");
+
+      if (p.gps_lat && p.gps_lng) {
+        const marker = L.marker([p.gps_lat, p.gps_lng], { icon })
+          .bindTooltip(parts.join("<br>"), { sticky: true });
+        marker.on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          onUserSelectRef.current(p);
+        });
+        marker.addTo(layer);
+      }
     }
 
     userLayerRef.current = layer;
