@@ -437,6 +437,7 @@ export default function FiberMap() {
 
   // User Map computed values
   const filteredUsers = useMemo(() => {
+    if (filterType !== "all" && filterType !== "customers") return [];
     let pts = mapPoints;
     if (filterUserStatus !== "all") {
       pts = pts.filter((p) => {
@@ -458,7 +459,7 @@ export default function FiberMap() {
       );
     }
     return pts;
-  }, [mapPoints, filterUserStatus, filterUserText]);
+  }, [mapPoints, filterUserStatus, filterUserText, filterType]);
 
   const highlightObject = useCallback((type: HighlightedType, id: number | string) => {
     setHighlightedObject({ type, id });
@@ -747,7 +748,7 @@ export default function FiberMap() {
         <div className="shrink-0 flex flex-wrap items-center gap-1.5 rounded-b-xl border border-slate-200 border-t-0 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 z-[1000]">
           <h1 className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap mr-1">Network Map</h1>
           <select className="input w-24 text-xs py-1" value={filterType} onChange={(e) => { setFilterType(e.target.value); setFilterCore("all"); setFilterPort("all"); setFilterRatio("all"); }}>
-            <option value="customer">Customer</option><option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option>
+            <option value="all">All</option><option value="cable">Links</option><option value="tj">TJ Boxes</option><option value="splitter">Splitters</option><option value="customers">Customers</option>
           </select>
           <select className="input w-24 text-xs py-1" value={filterUserStatus} onChange={(e) => setFilterUserStatus(e.target.value)}>
             <option value="all">All User Status</option>
@@ -882,6 +883,7 @@ export default function FiberMap() {
             onUserSelect={(p) => { setSelectedUser(p); if (p) highlightObject("user", `${p.olt_id}-${p.onu_id}`); }}
             showUserLayer={netLayers.customer}
             highlightedObject={highlightedObject}
+            filterType={filterType}
           />
         </div>
 
@@ -2205,7 +2207,7 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
   );
 }
 
-function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm, drawCable, onStartDrawCable, onSetDrawMousePos, onConfirmDrawWaypoint, onUndoDrawWaypoint, onCancelDrawCable, onStartDragTj, dragTj, onSaveDragTj, onCancelDragTj, userPoints, selectedUser, onUserSelect, showUserLayer, highlightedObject }: {
+function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, center, mapRef, planner, routeAlts, routing, isFullscreen, baseMap, netLayers, onSetBaseMap, onSetNetLayers, onToggleFullscreen, onTjClick, onDrawCreated, onRightClickAdd, onCableSegmentUpdate, onCableClick, onLoopClick, onCutClick, editingCableId, cableEditWaypoints, onStartCableEdit, onSaveCableEdit, onCancelCableEdit, onAddEditWaypoint, onRemoveEditWaypoint, onUpdateEditWaypoint, selectedWaypoint, onSelectEditWaypoint, onMapClick, onSelectRoute, onAddWaypoint, onRemoveWaypoint, onUpdateWaypoint, onStartPlan, onConfirmRoute, onCancelPlan, customWaypoints, onStartCustomDraw, onRemoveCustomWaypoint, onUpdateCustomWaypoint, onUndoCustomWaypoint, onClearCustomWaypoints, onConfirmCustomRoute, calcDistKm, drawCable, onStartDrawCable, onSetDrawMousePos, onConfirmDrawWaypoint, onUndoDrawWaypoint, onCancelDrawCable, onStartDragTj, dragTj, onSaveDragTj, onCancelDragTj, userPoints, selectedUser, onUserSelect, showUserLayer, highlightedObject, filterType }: {
   cables: Cable[]; tjBoxes: TjBox[]; splitters: Splitter[]; loops: FiberLoop[]; cuts: CableCut[];
   nocPopData: { nocs: any[]; pops: any[] };
   center: { lat: number; lng: number };
@@ -2267,6 +2269,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   onUserSelect: (p: MapPoint | null) => void;
   showUserLayer: boolean;
   highlightedObject: { type: "cable" | "tj" | "splitter" | "user"; id: number | string } | null;
+  filterType: string;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
   const drawControlRef = useRef<L.Control.Draw | null>(null);
@@ -2857,7 +2860,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
     userLayerRef.current = layer;
     layer.addTo(map);
-  }, [userPoints, showUserLayer, mapRef]);
+  }, [userPoints, showUserLayer, mapRef, filterType]);
 
   // Highlight effect: pulsing ring around the selected object
   useEffect(() => {

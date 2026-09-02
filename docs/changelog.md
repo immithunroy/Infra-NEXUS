@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-09-02
+
+### Fixed
+
+- **Network Map dropdown filter order and customer visibility bug**
+  - Corrected dropdown option sequence: All → Links → TJ Boxes → Splitters → Customers
+  - Fixed dropdown value from `customer` (singular) to `customers` (plural)
+  - Fixed critical bug: selecting "Customers" now correctly shows customer markers instead of hiding all layers
+  - Root cause: main map layer effect removes all non-tile layers on re-render, but user layer useEffect didn't re-run because `filterType` wasn't in its dependency array
+  - Added `filterType` to user layer useEffect dependencies so it re-adds the user layer after the main effect clears it
+  - Added `filterType` check to `filteredUsers` useMemo — returns empty array when dropdown is set to Links/TJ Boxes/Splitters, returns users when set to All or Customers
+  - NOC/POP layer remains visible in all dropdown selections (unchanged)
+  - Existing checkbox filters continue working on top of dropdown filter (unchanged)
+  - `filterType` prop now passed to FiberMapView component for user layer dependency tracking
+
 ## 2026-08-31
 
 ### Fixed
