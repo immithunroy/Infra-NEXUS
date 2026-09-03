@@ -33,6 +33,7 @@ jobs:
 
             echo ">>> Cleaning up old images..."
             docker image prune -f
+            docker builder prune -af --filter 'until=24h'
 
             echo ">>> Waiting for backend health..."
             sleep 10
