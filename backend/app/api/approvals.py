@@ -850,7 +850,7 @@ async def _migrate_photo_to_field(
         logger.info("MIGRATE-PHOTO: User category — subscriber_id=%s entity_id=%s target=%s", subscriber_id, entity_id, target_dir)
     elif category == "tj_box":
         entity_type = "tj"
-        stamp_entity_id = payload.get("tj_id", "")
+        stamp_entity_id = payload.get("tj_id") or payload.get("name") or ""
         photo_types = _TJ_PHOTO_TYPES
         # TJ unique_id not yet known — store in pending dir until approved
         target_dir = _PENDING_PHOTOS_DIR / str(approval_id)
