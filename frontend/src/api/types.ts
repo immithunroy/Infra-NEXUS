@@ -968,6 +968,8 @@ export interface ApprovalDetail {
   review_note: string;
   correction_note: string;
   photos: string[];
+  photo_processing_status: string;
+  photo_processing_error: string;
   location: { lat: number; lng: number } | null;
   created_at: string;
   reviewed_at: string | null;

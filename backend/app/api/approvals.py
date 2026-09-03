@@ -147,6 +147,8 @@ def _parse_out(req: FiberApprovalRequest) -> ApprovalOut:
         review_note=req.review_note,
         correction_note=req.correction_note,
         photos=json.loads(req.photos_json) if req.photos_json else [],
+        photo_processing_status=req.photo_processing_status or "",
+        photo_processing_error=req.photo_processing_error or "",
         location=json.loads(req.location_json) if req.location_json else None,
         created_at=req.created_at,
         reviewed_at=req.reviewed_at,
@@ -414,6 +416,66 @@ async def return_for_correction(
 
 
 # ---------------------------------------------------------------------------
+# Delete approval request
+# ---------------------------------------------------------------------------
+
+@router.delete("/{request_id}", response_model=ApprovalOut)
+async def delete_approval(
+    request_id: int,
+    user=Depends(require_noc_approval),
+    db: AsyncSession = Depends(get_db),
+):
+    """NOC/admin deletes an approval request.
+    
+    Only pending, resubmitted, or returned_for_correction requests can be deleted.
+    Approved/rejected requests are kept for audit trail.
+    """
+    result = await db.execute(
+        select(FiberApprovalRequest).where(FiberApprovalRequest.id == request_id)
+    )
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(404, "Approval request not found")
+    
+    # Only allow deleting non-finalized requests
+    if req.status not in (
+        ApprovalStatus.pending.value,
+        ApprovalStatus.resubmitted.value,
+        ApprovalStatus.returned_for_correction.value,
+    ):
+        raise HTTPException(400, f"Cannot delete request with status '{req.status}'")
+    
+    # Clean up associated photos
+    photos = json.loads(req.photos_json) if req.photos_json else []
+    for photo_filename in photos:
+        try:
+            photo_path = UPLOAD_DIR / photo_filename
+            if photo_path.exists():
+                photo_path.unlink()
+                logger.info("Deleted approval photo: %s", photo_path)
+        except Exception as e:
+            logger.warning("Failed to delete photo %s: %s", photo_filename, e)
+    
+    # Also clean up pending photos directory if this is a TJ request
+    if req.entity_type in ("tj", "tj_box"):
+        try:
+            import shutil
+            pending_dir = _PENDING_PHOTOS_DIR / str(req.id)
+            if pending_dir.exists():
+                shutil.rmtree(pending_dir, ignore_errors=True)
+                logger.info("Deleted pending photos dir: %s", pending_dir)
+        except Exception as e:
+            logger.warning("Failed to delete pending photos for approval #%d: %s", req.id, e)
+    
+    # Delete the approval request
+    await db.delete(req)
+    await db.commit()
+    
+    logger.info("Approval request #%d deleted by %s (status was %s)", req.id, user.username, req.status)
+    return _parse_out(req)
+
+
+# ---------------------------------------------------------------------------
 # Resubmit (employee corrects and resubmits)
 # ---------------------------------------------------------------------------
 
@@ -458,6 +520,11 @@ async def upload_photo(
     photo: UploadFile = File(None),
     category: str = Form(""),
     entity_id: str = Form(""),
+    pppoe_username: str = Form(""),
+    tj_id: str = Form(""),
+    latitude: float = Form(None),
+    longitude: float = Form(None),
+    captured_at: str = Form(""),
     user=Depends(require_approval_submit),
     db: AsyncSession = Depends(get_db),
 ):
@@ -466,9 +533,8 @@ async def upload_photo(
     Accepts the file as either 'file' or 'photo' form field to support
     both web frontend and Android mobile app.
 
-    When category='user' and entity_id (approval ID) is provided, the photo
-    is also saved into the field-photos system so the web subscriber profile
-    can display it immediately.
+    Metadata fields (pppoe_username, tj_id, latitude, longitude, captured_at)
+    are used for server-side photo stamping.
     """
     logger.info("UPLOAD-PHOTO request: category=%s entity_id=%s user=%s file=%s photo=%s content_type=%s",
                 category, entity_id, user.username,
@@ -495,6 +561,39 @@ async def upload_photo(
 
     logger.info("UPLOAD-PHOTO saved: filename=%s size=%d bytes path=%s", filename, len(content), filepath)
 
+    # --- Queue for background photo processing ---
+    # Determine entity type and ID for stamping
+    stamp_entity_type = "user" if category == "user" else "tj"
+    stamp_entity_id = pppoe_username or tj_id or entity_id
+    
+    # Parse captured_at timestamp
+    captured_dt = None
+    if captured_at:
+        try:
+            captured_dt = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            pass
+    
+    # Queue background processing if we have metadata
+    if stamp_entity_id and (latitude is not None or longitude is not None):
+        try:
+            from ..services.photo_worker import queue_photo_processing
+            await queue_photo_processing(
+                db=db,
+                filename=filename,
+                filepath=str(filepath),
+                entity_type=stamp_entity_type,
+                entity_id=stamp_entity_id,
+                latitude=latitude,
+                longitude=longitude,
+                captured_at=captured_dt,
+                category=category,
+                approval_id=int(entity_id) if entity_id else None,
+            )
+            logger.info("UPLOAD-PHOTO: Queued for processing: %s", filename)
+        except Exception as e:
+            logger.warning("UPLOAD-PHOTO: Failed to queue processing for %s: %s", filename, e)
+
     # --- Also write to field-photos system for subscriber/TJ photos ---
     if category in ("user", "tj_box") and entity_id:
         try:
@@ -514,7 +613,20 @@ async def serve_photo(
     filename: str,
     user=Depends(get_current_user),
 ):
-    """Serve an uploaded approval photo."""
+    """Serve an uploaded approval photo.
+    
+    Serves the processed (stamped) photo if available, otherwise the original.
+    """
+    # Try to serve processed photo first
+    from ..services.photo_worker import serve_processed_photo
+    processed_path = serve_processed_photo(filename)
+    if processed_path:
+        import mimetypes
+        media_type = mimetypes.guess_type(str(processed_path))[0] or "image/jpeg"
+        from fastapi.responses import FileResponse
+        return FileResponse(processed_path, media_type=media_type)
+    
+    # Fall back to original
     filepath = UPLOAD_DIR / filename
     if not filepath.exists():
         raise HTTPException(404, "Photo not found")

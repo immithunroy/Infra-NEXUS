@@ -790,6 +790,8 @@ class FiberApprovalRequest(Base):
     review_note: Mapped[str] = mapped_column(Text, default="")
     correction_note: Mapped[str] = mapped_column(Text, default="")  # NOC's note when returning for correction
     photos_json: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of photo file paths
+    photo_processing_status: Mapped[str] = mapped_column(String(16), default="")  # UPLOADED | PROCESSING | COMPLETED | FAILED
+    photo_processing_error: Mapped[str] = mapped_column(Text, default="")  # error message if processing failed
     location_json: Mapped[str] = mapped_column(Text, default="")  # GPS coordinates of submission {"lat": ..., "lng": ...}
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

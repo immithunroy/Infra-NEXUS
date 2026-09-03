@@ -197,6 +197,9 @@ export default function ApprovalDetail() {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showResubmitModal, setShowResubmitModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [viewerPhoto, setViewerPhoto] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const flash = (text: string, ok = true) => {
     setNotice({ text, ok });
@@ -263,6 +266,21 @@ export default function ApprovalDetail() {
       load();
     } catch (e) {
       flash(e instanceof Error ? e.message : "Resubmit failed", false);
+    }
+  };
+
+  const deleteRequest = async () => {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      await api.del(`/approvals/${id}`);
+      flash("Approval request deleted");
+      setShowDeleteModal(false);
+      navigate("/approvals");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Delete failed", false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -376,16 +394,32 @@ export default function ApprovalDetail() {
       {/* Photos */}
       {item.photos && item.photos.length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Photos</h3>
+          <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Submitted Photos</h3>
+          {item.photo_processing_status === "PROCESSING" && (
+            <div className="mb-2 text-xs text-amber-600 dark:text-amber-400">
+              Photo processing...
+            </div>
+          )}
+          {item.photo_processing_status === "FAILED" && (
+            <div className="mb-2 text-xs text-rose-600 dark:text-rose-400">
+              Photo processing failed: {item.photo_processing_error || "Unknown error"}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             {item.photos.map((photo, i) => (
-              <a key={i} href={`/api/approvals/photos/${photo}`} target="_blank" rel="noopener noreferrer">
+              <button
+                key={i}
+                type="button"
+                onClick={() => setViewerPhoto(photo)}
+                className="block cursor-zoom-in"
+              >
                 <img
                   src={`/api/approvals/photos/${photo}`}
                   alt={`Photo ${i + 1}`}
                   className="h-24 w-24 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
+                  loading="lazy"
                 />
-              </a>
+              </button>
             ))}
           </div>
         </div>
@@ -401,7 +435,7 @@ export default function ApprovalDetail() {
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4 dark:border-slate-700">
-        {/* NOC actions (approve/reject/return) */}
+        {/* NOC actions (approve/reject/return/delete) */}
         {approveOk && isPending && (
           <>
             <button
@@ -421,6 +455,12 @@ export default function ApprovalDetail() {
               className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
             >
               Return for Correction
+            </button>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Delete
             </button>
           </>
         )}
@@ -499,6 +539,56 @@ export default function ApprovalDetail() {
               <button onClick={() => setShowResubmitModal(false)} className="rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
               <button onClick={resubmit} className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">Resubmit</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete Approval Request?</h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              This will permanently remove this pending approval request. This action cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteRequest}
+                disabled={deleting}
+                className="rounded-lg bg-rose-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo viewer modal */}
+      {viewerPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setViewerPhoto(null)}
+        >
+          <div className="relative max-h-[90vh] max-w-[90vw]" onClick={e => e.stopPropagation()}>
+            {/* Close button */}
+            <button
+              onClick={() => setViewerPhoto(null)}
+              className="absolute -top-3 -right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-lg font-bold text-slate-700 shadow-md hover:bg-slate-100"
+            >
+              ✕
+            </button>
+            <img
+              src={`/api/approvals/photos/${viewerPhoto}`}
+              alt="Photo preview"
+              className="max-h-[85vh] max-w-[85vw] rounded-lg object-contain"
+            />
           </div>
         </div>
       )}

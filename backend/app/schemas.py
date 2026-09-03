@@ -1376,6 +1376,8 @@ class ApprovalOut(BaseModel):
     review_note: str = ""
     correction_note: str = ""
     photos: list[str] = []
+    photo_processing_status: str = ""
+    photo_processing_error: str = ""
     location: dict | None = None
     created_at: datetime
     reviewed_at: datetime | None = None

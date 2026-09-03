@@ -27,6 +27,9 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(text("ALTER TABLE tj_boxes ADD COLUMN IF NOT EXISTS splice_per_tray INTEGER NOT NULL DEFAULT 12"))
+        # Photo processing status columns for approval requests
+        await conn.execute(text("ALTER TABLE fiber_approval_requests ADD COLUMN IF NOT EXISTS photo_processing_status VARCHAR(16) DEFAULT ''"))
+        await conn.execute(text("ALTER TABLE fiber_approval_requests ADD COLUMN IF NOT EXISTS photo_processing_error TEXT DEFAULT ''"))
         # Ensure field_photos table exists (for upgrades from older versions)
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS field_photos (
