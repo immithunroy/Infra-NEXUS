@@ -37,11 +37,10 @@ async def _next_tj_id(db) -> str:
     )
     last_box = result.scalar_one_or_none()
 
-    # Get all active (non-expired, non-consumed) reservation numbers
+    # Get all reserved numbers (any status that still occupies the unique key)
     res_result = await db.execute(
         select(TjIdReservation.unique_id)
-        .where(TjIdReservation.status == "active")
-        .where(TjIdReservation.expires_at > now)
+        .where(TjIdReservation.status.in_(["active", "consumed"]))
     )
     reserved_numbers = set()
     for uid in res_result.scalars().all():

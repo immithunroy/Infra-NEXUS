@@ -312,8 +312,8 @@ async def _write_all_olts_retry() -> None:
 
 
 async def _cleanup_tj_reservations():
-    """Expire old TJ ID reservations (older than 1 hour)."""
-    from sqlalchemy import update
+    """Expire old TJ ID reservations and delete stale records."""
+    from sqlalchemy import update, delete
     from ..models import TjIdReservation
     now = utcnow()
     try:
@@ -326,6 +326,18 @@ async def _cleanup_tj_reservations():
             )
             if result.rowcount > 0:
                 logger.info("Expired %d TJ ID reservations", result.rowcount)
+
+            # Delete old consumed/expired reservations older than 2 hours
+            from datetime import timedelta
+            cutoff = now - timedelta(hours=2)
+            del_result = await db.execute(
+                delete(TjIdReservation)
+                .where(TjIdReservation.status.in_(["consumed", "expired"]))
+                .where(TjIdReservation.reserved_at < cutoff)
+            )
+            if del_result.rowcount > 0:
+                logger.info("Deleted %d old TJ ID reservations", del_result.rowcount)
+
             await db.commit()
     except Exception as e:
         logger.error("TJ reservation cleanup failed: %s", e)
