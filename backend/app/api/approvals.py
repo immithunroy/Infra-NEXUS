@@ -591,7 +591,7 @@ async def upload_photo(
     needs_fallback = (
         entity_id
         and entity_id.isdigit()
-        and (latitude is None or longitude is None or not captured_at or not pppoe_username)
+        and (latitude is None or longitude is None or not captured_at or not pppoe_username or not tj_id)
     )
     if needs_fallback:
         try:
@@ -638,8 +638,8 @@ async def upload_photo(
 
                 if not pppoe_username and fp.get("pppoe_username"):
                     pppoe_username = fp["pppoe_username"]
-                if not tj_id and fp.get("tj_id"):
-                    tj_id = fp["tj_id"]
+                if not tj_id:
+                    tj_id = fp.get("tj_id") or fp.get("name")
 
                 logger.info(
                     "UPLOAD-PHOTO fallback resolved: lat=%s lng=%s accuracy=%s captured_at=%s "
