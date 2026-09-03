@@ -20,6 +20,15 @@ export default function Settings() {
     }
   };
 
+  const handleExportUsers = async (format: "xlsx" | "json") => {
+    try {
+      await downloadFile(`/subscribers/export?format=${format}`, `subscribers_export.${format}`);
+      setMsg({ ok: true, text: "Export started. Check your downloads." });
+    } catch (e) {
+      setMsg({ ok: false, text: String(e) });
+    }
+  };
+
   const handleImport = async (file: File) => {
     setImporting(true);
     setMsg(null);
@@ -92,13 +101,27 @@ export default function Settings() {
       <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Data Management</h2>
         <div className="space-y-4">
-          {/* Export */}
+          {/* Export Fiber Network */}
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm text-slate-700 dark:text-slate-300">Export Fiber Network</div>
               <div className="text-xs text-slate-500 dark:text-slate-400">Download all cables, TJ boxes, splitters, and splices as Excel</div>
             </div>
             <button className="btn-primary text-xs py-1.5 px-3" onClick={handleExport}>Export</button>
+          </div>
+
+          {/* Export Subscribers */}
+          <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-slate-700 dark:text-slate-300">Export Subscribers</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Download all subscribers with address, PPPoE, MAC history, and router brand</div>
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-primary text-xs py-1.5 px-3" onClick={() => handleExportUsers("xlsx")}>Excel</button>
+                <button className="btn-primary text-xs py-1.5 px-3" onClick={() => handleExportUsers("json")}>JSON</button>
+              </div>
+            </div>
           </div>
 
           {/* Import */}

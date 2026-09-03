@@ -1,6 +1,9 @@
 from datetime import timedelta, timezone
+import io
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -406,4 +409,132 @@ async def subscriber_profile(
             for m in mac_rows
         ],
         last_seen=onu.last_seen,
+    )
+
+
+@router.get("/export")
+async def export_users(format: str = Query("xlsx", regex="^(xlsx|json)$"), db: AsyncSession = Depends(get_db)):
+    """Export all subscribers with address fields, PPPoE username, MAC history, and router brand."""
+    from ..models import OLTDevice
+
+    # Fetch all ONUs with OLT info
+    result = await db.execute(
+        select(Onu).options(selectinload(Onu.olt)).order_by(Onu.subscriber, Onu.id)
+    )
+    onus = result.scalars().all()
+
+    # Collect all MACs for vendor lookup
+    all_macs = set()
+    for onu in onus:
+        if onu.last_mac:
+            all_macs.add(onu.last_mac.lower())
+    # Also collect historical MACs
+    mac_history_result = await db.execute(select(OnuMacHistory))
+    mac_history_rows = mac_history_result.scalars().all()
+    for mh in mac_history_rows:
+        if mh.mac:
+            all_macs.add(mh.mac.lower())
+
+    # Resolve vendors
+    vendors = await vendor_map(db, all_macs)
+
+    # Build export data
+    rows = []
+    for onu in onus:
+        # Get MAC history for this ONU
+        history_result = await db.execute(
+            select(OnuMacHistory).where(OnuMacHistory.onu_id == onu.id).order_by(OnuMacHistory.changed_at.desc())
+        )
+        history = history_result.scalars().all()
+
+        # Current MAC info
+        current_mac = onu.last_mac or onu.mac
+        current_brand = vendors.get(current_mac.lower(), "") if current_mac else ""
+
+        # Historical MACs with brands
+        mac_history = []
+        for mh in history:
+            mac_history.append({
+                "mac": mh.mac,
+                "brand": vendors.get(mh.mac.lower(), ""),
+                "changed_at": mh.changed_at.isoformat() if mh.changed_at else "",
+            })
+
+        rows.append({
+            "subscriber": onu.subscriber,
+            "name": onu.name,
+            "olt_name": onu.olt.name if onu.olt else "",
+            "pon_port": onu.pon_port,
+            "serial": onu.serial,
+            "current_mac": current_mac,
+            "router_brand": current_brand,
+            "address": onu.address,
+            "gps_lat": onu.gps_lat,
+            "gps_lng": onu.gps_lng,
+            "phone": onu.phone,
+            "email": onu.email,
+            "landmark": onu.landmark,
+            "state": onu.state.value if onu.state else "",
+            "bound": onu.bound,
+            "last_seen": onu.last_seen.isoformat() if onu.last_seen else "",
+            "mac_history": mac_history,
+        })
+
+    if format == "json":
+        return StreamingResponse(
+            io.BytesIO(json.dumps(rows, indent=2, default=str).encode()),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=subscribers_export.json"},
+        )
+
+    # Excel export
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Subscribers"
+
+    # Headers
+    headers = [
+        "PPPoE Username", "Name", "OLT", "PON Port", "Serial",
+        "Current MAC", "Router Brand",
+        "Address", "GPS Lat", "GPS Lng", "Phone", "Email", "Landmark",
+        "State", "Bound", "Last Seen",
+        "MAC History (MAC | Brand | Changed At)",
+    ]
+    ws.append(headers)
+
+    # Data rows
+    for row in rows:
+        # Format MAC history as pipe-separated string
+        mac_history_str = " | ".join(
+            [f"{m['mac']} ({m['brand']}) {m['changed_at']}" for m in row["mac_history"]]
+        ) if row["mac_history"] else ""
+
+        ws.append([
+            row["subscriber"],
+            row["name"],
+            row["olt_name"],
+            row["pon_port"],
+            row["serial"],
+            row["current_mac"],
+            row["router_brand"],
+            row["address"],
+            row["gps_lat"],
+            row["gps_lng"],
+            row["phone"],
+            row["email"],
+            row["landmark"],
+            row["state"],
+            row["bound"],
+            row["last_seen"],
+            mac_history_str,
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=subscribers_export.xlsx"},
     )
