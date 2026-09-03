@@ -29,17 +29,18 @@ async def queue_photo_processing(
     entity_id: str,
     latitude: float | None,
     longitude: float | None,
+    gps_accuracy: float | None,
     captured_at: datetime | None,
     category: str,
     approval_id: int | None = None,
 ):
     """Queue a photo for background processing.
-    
+
     This function is called from the upload endpoint to start background processing.
     """
     # Import here to avoid circular imports
     from .scheduler import _scheduler
-    
+
     if _scheduler is None:
         logger.warning("Scheduler not available, processing photo synchronously")
         await _process_photo_job(
@@ -49,12 +50,13 @@ async def queue_photo_processing(
             entity_id=entity_id,
             latitude=latitude,
             longitude=longitude,
+            gps_accuracy=gps_accuracy,
             captured_at=captured_at,
             category=category,
             approval_id=approval_id,
         )
         return
-    
+
     # Add job to scheduler
     _scheduler.add_job(
         _process_photo_job,
@@ -67,6 +69,7 @@ async def queue_photo_processing(
             "entity_id": entity_id,
             "latitude": latitude,
             "longitude": longitude,
+            "gps_accuracy": gps_accuracy,
             "captured_at": captured_at,
             "category": category,
             "approval_id": approval_id,
@@ -85,24 +88,25 @@ async def _process_photo_job(
     entity_id: str,
     latitude: float | None,
     longitude: float | None,
+    gps_accuracy: float | None,
     captured_at: datetime | None,
     category: str,
     approval_id: int | None = None,
 ):
     """Process a photo in the background.
-    
+
     This runs as an APScheduler job.
     """
     logger.info("Starting photo processing for %s", filename)
-    
+
     try:
         # Import processing function
         from .photo_processing import process_photo
-        
+
         # Read original image
         with open(filepath, "rb") as f:
             image_bytes = f.read()
-        
+
         # Process image
         processed_bytes, width, height = process_photo(
             image_bytes=image_bytes,
@@ -110,21 +114,22 @@ async def _process_photo_job(
             entity_id=entity_id,
             latitude=latitude,
             longitude=longitude,
+            gps_accuracy=gps_accuracy,
             captured_at=captured_at,
         )
-        
+
         # Save processed image
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         processed_path = PROCESSED_DIR / f"processed_{filename}"
-        
+
         with open(processed_path, "wb") as f:
             f.write(processed_bytes)
-        
+
         logger.info(
             "Photo processed successfully: %s -> %s (%dx%d, %d bytes)",
             filename, processed_path, width, height, len(processed_bytes)
         )
-        
+
         # Update approval request status if approval_id provided
         if approval_id:
             async with SessionLocal() as db:
@@ -137,10 +142,10 @@ async def _process_photo_job(
                     req.photo_processing_error = ""
                     await db.commit()
                     logger.info("Updated approval #%d photo status to COMPLETED", approval_id)
-        
+
     except Exception as e:
         logger.error("Photo processing failed for %s: %s", filename, e, exc_info=True)
-        
+
         # Update approval request status on failure
         if approval_id:
             try:

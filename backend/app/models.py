@@ -819,6 +819,7 @@ class FieldPhoto(Base):
     height: Mapped[int] = mapped_column(Integer, default=0)
     latitude: Mapped[float | None] = mapped_column(nullable=True)
     longitude: Mapped[float | None] = mapped_column(nullable=True)
+    gps_accuracy: Mapped[float | None] = mapped_column(nullable=True)
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     captured_by: Mapped[str] = mapped_column(String(128), default="")
     pppoe_username: Mapped[str] = mapped_column(String(128), default="")

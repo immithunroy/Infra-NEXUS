@@ -96,12 +96,14 @@ export async function uploadPhoto(
   latitude?: number | null,
   longitude?: number | null,
   capturedAt?: string,
-  pppoeUsername?: string
+  pppoeUsername?: string,
+  gpsAccuracy?: number | null
 ): Promise<{ id: number; photo_type: string; storage_key: string; file_size: number; width: number; height: number; url: string }> {
   const token = getToken();
   const params = new URLSearchParams({ photo_type: photoType });
   if (latitude != null) params.set("latitude", String(latitude));
   if (longitude != null) params.set("longitude", String(longitude));
+  if (gpsAccuracy != null) params.set("gps_accuracy", String(gpsAccuracy));
   if (capturedAt) params.set("captured_at", capturedAt);
   if (pppoeUsername) params.set("pppoe_username", pppoeUsername);
 

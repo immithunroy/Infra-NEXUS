@@ -1040,6 +1040,7 @@ export interface FieldPhotoItem {
   height?: number;
   latitude?: number | null;
   longitude?: number | null;
+  gps_accuracy?: number | null;
   captured_at?: string | null;
   captured_by?: string;
   pppoe_username?: string;

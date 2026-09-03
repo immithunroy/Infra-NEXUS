@@ -524,6 +524,7 @@ async def upload_photo(
     tj_id: str = Form(""),
     latitude: float = Form(None),
     longitude: float = Form(None),
+    gps_accuracy: float = Form(None),
     captured_at: str = Form(""),
     user=Depends(require_approval_submit),
     db: AsyncSession = Depends(get_db),
@@ -533,8 +534,8 @@ async def upload_photo(
     Accepts the file as either 'file' or 'photo' form field to support
     both web frontend and Android mobile app.
 
-    Metadata fields (pppoe_username, tj_id, latitude, longitude, captured_at)
-    are used for server-side photo stamping.
+    Photo is processed synchronously: EXIF correction → crop → resize → stamp → compress.
+    Processing happens BEFORE the response is returned — guaranteed.
     """
     logger.info("UPLOAD-PHOTO request: category=%s entity_id=%s user=%s file=%s photo=%s content_type=%s",
                 category, entity_id, user.username,
@@ -556,54 +557,108 @@ async def upload_photo(
     if len(content) > 10 * 1024 * 1024:  # 10MB limit
         raise HTTPException(400, "File size must be less than 10MB")
 
+    # Save original (kept as backup / for retry)
     with open(filepath, "wb") as f:
         f.write(content)
 
-    logger.info("UPLOAD-PHOTO saved: filename=%s size=%d bytes path=%s", filename, len(content), filepath)
+    logger.info("UPLOAD-PHOTO saved original: filename=%s size=%d bytes path=%s", filename, len(content), filepath)
 
-    # --- Validate required metadata for stamping ---
-    stamp_entity_type = "user" if category == "user" else "tj"
-    stamp_entity_id = pppoe_username or tj_id or entity_id
-
-    # Validate GPS coordinates
+    # --- Validate GPS coordinates ---
     if latitude is not None and not (-90 <= latitude <= 90):
         raise HTTPException(400, f"Latitude must be between -90 and 90, got {latitude}")
     if longitude is not None and not (-180 <= longitude <= 180):
         raise HTTPException(400, f"Longitude must be between -180 and 180, got {longitude}")
+    if gps_accuracy is not None and gps_accuracy < 0:
+        raise HTTPException(400, f"GPS accuracy must be >= 0, got {gps_accuracy}")
 
-    # --- Queue for background photo processing ---
-    # Parse captured_at timestamp
+    # --- Parse capture timestamp ---
     captured_dt = None
     if captured_at:
         try:
             captured_dt = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
         except (ValueError, TypeError):
             pass
-    
-    # Queue background processing if we have metadata
-    if stamp_entity_id and (latitude is not None or longitude is not None):
+
+    # --- Process photo SYNCHRONOUSLY ---
+    stamp_entity_type = "user" if category == "user" else "tj"
+    stamp_entity_id = pppoe_username or tj_id or entity_id
+
+    processed_url = None
+    processed_filename = None
+
+    if stamp_entity_id:
         try:
-            from ..services.photo_worker import queue_photo_processing
-            await queue_photo_processing(
-                db=db,
-                filename=filename,
-                filepath=str(filepath),
+            from ..services.photo_processing import process_photo
+
+            processed_bytes, width, height = process_photo(
+                image_bytes=content,
                 entity_type=stamp_entity_type,
                 entity_id=stamp_entity_id,
                 latitude=latitude,
                 longitude=longitude,
+                gps_accuracy=gps_accuracy,
                 captured_at=captured_dt,
-                category=category,
-                approval_id=int(entity_id) if entity_id else None,
             )
-            logger.info("UPLOAD-PHOTO: Queued for processing: %s", filename)
+
+            # Save processed version as the primary file (overwrite original)
+            PROCESSED_DIR = UPLOAD_DIR  # Save processed in same directory
+            processed_path = PROCESSED_DIR / f"processed_{filename}"
+            with open(processed_path, "wb") as f:
+                f.write(processed_bytes)
+
+            processed_filename = f"processed_{filename}"
+            processed_url = f"/api/approvals/photos/{processed_filename}"
+
+            logger.info(
+                "UPLOAD-PHOTO processed synchronously: %s -> processed_%s (%dx%d, %d bytes, quality-adapted)",
+                filename, filename, width, height, len(processed_bytes)
+            )
+
+            # Update approval status if approval_id provided
+            if entity_id and entity_id.isdigit():
+                try:
+                    from sqlalchemy import update
+                    await db.execute(
+                        update(FiberApprovalRequest)
+                        .where(FiberApprovalRequest.id == int(entity_id))
+                        .values(
+                            photo_processing_status="COMPLETED",
+                            photo_processing_error="",
+                        )
+                    )
+                except Exception as e:
+                    logger.warning("Failed to update approval status: %s", e)
+
         except Exception as e:
-            logger.warning("UPLOAD-PHOTO: Failed to queue processing for %s: %s", filename, e)
+            logger.error("UPLOAD-PHOTO processing FAILED for %s: %s", filename, e, exc_info=True)
+            # Still save original — don't lose the photo
+            processed_url = f"/api/approvals/photos/{filename}"
+
+            if entity_id and entity_id.isdigit():
+                try:
+                    from sqlalchemy import update
+                    await db.execute(
+                        update(FiberApprovalRequest)
+                        .where(FiberApprovalRequest.id == int(entity_id))
+                        .values(
+                            photo_processing_status="FAILED",
+                            photo_processing_error=str(e)[:500],
+                        )
+                    )
+                except Exception as db_err:
+                    logger.warning("Failed to update approval status: %s", db_err)
+    else:
+        processed_url = f"/api/approvals/photos/{filename}"
 
     # --- Also write to field-photos system for subscriber/TJ photos ---
     if category in ("user", "tj_box") and entity_id:
         try:
-            await _migrate_photo_to_field(content, ext, category, int(entity_id), user, db)
+            # Use processed bytes if available, otherwise original
+            await _migrate_photo_to_field(content, ext, category, int(entity_id), user, db,
+                                          pppoe_username=pppoe_username,
+                                          latitude=latitude, longitude=longitude,
+                                          gps_accuracy=gps_accuracy,
+                                          captured_at=captured_dt)
             await db.commit()
             logger.info("UPLOAD-PHOTO: Migration completed for approval #%s category=%s", entity_id, category)
         except Exception as e:
@@ -611,7 +666,7 @@ async def upload_photo(
     elif category in ("user", "tj_box") and not entity_id:
         logger.warning("UPLOAD-PHOTO: category=%s but no entity_id — photo saved to approval-photos only, will NOT appear in field photos", category)
 
-    return {"filename": filename, "url": f"/api/approvals/photos/{filename}"}
+    return {"filename": processed_filename or filename, "url": processed_url}
 
 
 @router.get("/photos/{filename}")
@@ -620,27 +675,31 @@ async def serve_photo(
     user=Depends(get_current_user),
 ):
     """Serve an uploaded approval photo.
-    
+
     Serves the processed (stamped) photo if available, otherwise the original.
     """
-    # Try to serve processed photo first
-    from ..services.photo_worker import serve_processed_photo
-    processed_path = serve_processed_photo(filename)
-    if processed_path:
-        import mimetypes
+    import mimetypes
+    from fastapi.responses import FileResponse
+
+    # Try processed_ prefix first (synchronous processing saves here)
+    processed_path = UPLOAD_DIR / f"processed_{filename}"
+    if processed_path.exists():
         media_type = mimetypes.guess_type(str(processed_path))[0] or "image/jpeg"
-        from fastapi.responses import FileResponse
         return FileResponse(processed_path, media_type=media_type)
-    
+
+    # Try background worker processed path
+    from ..services.photo_worker import serve_processed_photo
+    bg_processed = serve_processed_photo(filename)
+    if bg_processed:
+        media_type = mimetypes.guess_type(str(bg_processed))[0] or "image/jpeg"
+        return FileResponse(bg_processed, media_type=media_type)
+
     # Fall back to original
     filepath = UPLOAD_DIR / filename
     if not filepath.exists():
         raise HTTPException(404, "Photo not found")
 
-    import mimetypes
     media_type = mimetypes.guess_type(str(filepath))[0] or "image/jpeg"
-
-    from fastapi.responses import FileResponse
     return FileResponse(filepath, media_type=media_type)
 
 
@@ -658,8 +717,16 @@ _PENDING_PHOTOS_DIR = Path(os.environ.get("PENDING_PHOTO_DIR", "/app/uploads/pen
 async def _migrate_photo_to_field(
     img_bytes: bytes, ext: str, category: str, approval_id: int,
     uploaded_by_user: User, db: AsyncSession,
+    pppoe_username: str = "",
+    latitude: float | None = None,
+    longitude: float | None = None,
+    gps_accuracy: float | None = None,
+    captured_at=None,
 ):
-    """Copy an approval-uploaded photo into the field-photos system."""
+    """Copy an approval-uploaded photo into the field-photos system.
+
+    Processes the image: EXIF → crop → resize → stamp → compress before saving.
+    """
     result = await db.execute(
         select(FiberApprovalRequest).where(FiberApprovalRequest.id == approval_id)
     )
@@ -673,7 +740,7 @@ async def _migrate_photo_to_field(
     if category == "user":
         entity_type = "subscriber"
         subscriber_id = payload.get("subscriber_id")
-        pppoe_username = payload.get("pppoe_username")
+        pppoe_from_payload = payload.get("pppoe_username")
 
         # Try to resolve PPPoE username from ONU record
         entity_id = None
@@ -692,20 +759,23 @@ async def _migrate_photo_to_field(
             entity_id = pppoe_username
             logger.info("MIGRATE-PHOTO: Using pppoe_username from payload as fallback: %s (approval #%d)", entity_id, approval_id)
 
-        # Last resort: use subscriber_id as entity_id (photos will be keyed by numeric ID)
+        # Last resort: use subscriber_id as entity_id
         if not entity_id and subscriber_id:
             entity_id = str(subscriber_id)
-            logger.warning("MIGRATE-PHOTO: Using subscriber_id '%s' as entity_id fallback (approval #%d) — photos may not display on web", subscriber_id, approval_id)
+            logger.warning("MIGRATE-PHOTO: Using subscriber_id '%s' as entity_id fallback (approval #%d)", subscriber_id, approval_id)
 
         if not entity_id:
-            logger.error("MIGRATE-PHOTO: Cannot determine entity_id for user photo — approval #%d has no subscriber_id or pppoe_username", approval_id)
+            logger.error("MIGRATE-PHOTO: Cannot determine entity_id for user photo — approval #%d", approval_id)
             return
 
+        # Use PPPoE username for stamping
+        stamp_entity_id = pppoe_username or pppoe_from_payload or entity_id
         photo_types = _SUBSCRIBER_PHOTO_TYPES
         target_dir = _FIELD_PHOTOS_DIR / entity_type / entity_id
         logger.info("MIGRATE-PHOTO: User category — subscriber_id=%s entity_id=%s target=%s", subscriber_id, entity_id, target_dir)
     elif category == "tj_box":
         entity_type = "tj"
+        stamp_entity_id = payload.get("tj_id", "")
         photo_types = _TJ_PHOTO_TYPES
         # TJ unique_id not yet known — store in pending dir until approved
         target_dir = _PENDING_PHOTOS_DIR / str(approval_id)
@@ -738,10 +808,36 @@ async def _migrate_photo_to_field(
             return
         photo_type = remaining[0]
 
+    # --- Process the image before writing ---
+    stamp_type = "user" if category == "user" else "tj"
+    processed_bytes = img_bytes
+    file_size = len(img_bytes)
+    width = 0
+    height = 0
+
+    if stamp_entity_id:
+        try:
+            from ..services.photo_processing import process_photo
+            processed_bytes, width, height = process_photo(
+                image_bytes=img_bytes,
+                entity_type=stamp_type,
+                entity_id=stamp_entity_id,
+                latitude=latitude,
+                longitude=longitude,
+                gps_accuracy=gps_accuracy,
+                captured_at=captured_at,
+            )
+            file_size = len(processed_bytes)
+            logger.info("MIGRATE-PHOTO: Processed image %dx%d %d bytes for %s/%s",
+                        width, height, file_size, entity_type, photo_type)
+        except Exception as e:
+            logger.error("MIGRATE-PHOTO: Processing failed, using original: %s", e)
+            # Fall back to original bytes
+
     filename = f"{photo_type}.jpg"
     storage_key = target_dir / filename
     storage_key.parent.mkdir(parents=True, exist_ok=True)
-    storage_key.write_bytes(img_bytes)
+    storage_key.write_bytes(processed_bytes)
 
     # For subscribers, create FieldPhoto record immediately
     if category == "user":
@@ -753,12 +849,19 @@ async def _migrate_photo_to_field(
             storage_key=rel_key,
             original_filename=f"{photo_type}.jpg",
             mime_type="image/jpeg",
-            file_size=len(img_bytes),
+            file_size=file_size,
+            width=width,
+            height=height,
+            latitude=latitude,
+            longitude=longitude,
+            gps_accuracy=gps_accuracy,
+            captured_at=captured_at,
+            pppoe_username=pppoe_username,
             uploaded_by=uploaded_by_user.id,
             captured_by=req.submitted_by_name or "",
         ))
         await db.flush()
-        logger.info("Migrated approval photo -> field photo: %s (type=%s)", rel_key, photo_type)
+        logger.info("Migrated approval photo -> field photo: %s (type=%s, %dx%d, %d bytes)", rel_key, photo_type, width, height, file_size)
     else:
         logger.info("Saved pending TJ photo: %s (type=%s, approval=%d)", storage_key, photo_type, approval_id)
 

@@ -68,6 +68,7 @@ async def upload_photo(
     pppoe_username: str = "",
     latitude: float | None = None,
     longitude: float | None = None,
+    gps_accuracy: float | None = None,
     captured_at: str = "",
     file: UploadFile = File(...),
     user: User = Depends(require_write),
@@ -102,6 +103,8 @@ async def upload_photo(
 
     # --- Validate GPS ---
     _validate_gps(latitude, longitude)
+    if gps_accuracy is not None and gps_accuracy < 0:
+        raise HTTPException(400, f"GPS accuracy must be >= 0, got {gps_accuracy}")
 
     # --- Parse capture timestamp ---
     captured_dt = _parse_captured_at(captured_at)
@@ -122,6 +125,7 @@ async def upload_photo(
             entity_id=stamp_entity_id,
             latitude=latitude,
             longitude=longitude,
+            gps_accuracy=gps_accuracy,
             captured_at=captured_dt,
         )
     except ValueError as e:
@@ -160,6 +164,7 @@ async def upload_photo(
         existing.height = height
         existing.latitude = latitude
         existing.longitude = longitude
+        existing.gps_accuracy = gps_accuracy
         existing.captured_at = captured_dt
         existing.captured_by = user.username
         existing.uploaded_by = user.id
@@ -178,6 +183,7 @@ async def upload_photo(
             height=height,
             latitude=latitude,
             longitude=longitude,
+            gps_accuracy=gps_accuracy,
             captured_at=captured_dt,
             captured_by=user.username,
             uploaded_by=user.id,

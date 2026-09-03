@@ -55,3 +55,4 @@ async def init_db() -> None:
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_field_photos_entity ON field_photos (entity_type, entity_id)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_field_photos_entity_type ON field_photos (entity_type, entity_id, photo_type)"))
         await conn.execute(text("ALTER TABLE field_photos ADD COLUMN IF NOT EXISTS pppoe_username VARCHAR(128) DEFAULT ''"))
+        await conn.execute(text("ALTER TABLE field_photos ADD COLUMN IF NOT EXISTS gps_accuracy DOUBLE PRECISION"))
