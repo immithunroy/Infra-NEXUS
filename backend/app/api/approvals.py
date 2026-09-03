@@ -500,8 +500,11 @@ async def upload_photo(
         try:
             await _migrate_photo_to_field(content, ext, category, int(entity_id), user, db)
             await db.commit()
+            logger.info("UPLOAD-PHOTO: Migration completed for approval #%s category=%s", entity_id, category)
         except Exception as e:
-            logger.warning("Failed to write field photo for approval #%s: %s", entity_id, e)
+            logger.warning("UPLOAD-PHOTO: Failed to migrate field photo for approval #%s: %s", entity_id, e, exc_info=True)
+    elif category in ("user", "tj_box") and not entity_id:
+        logger.warning("UPLOAD-PHOTO: category=%s but no entity_id — photo saved to approval-photos only, will NOT appear in field photos", category)
 
     return {"filename": filename, "url": f"/api/approvals/photos/{filename}"}
 
@@ -544,6 +547,7 @@ async def _migrate_photo_to_field(
     )
     req = result.scalar_one_or_none()
     if not req:
+        logger.warning("MIGRATE-PHOTO: Approval request #%d not found — photo saved to approval-photos only", approval_id)
         return
 
     payload = json.loads(req.payload_json) if req.payload_json else {}
@@ -551,20 +555,45 @@ async def _migrate_photo_to_field(
     if category == "user":
         entity_type = "subscriber"
         subscriber_id = payload.get("subscriber_id")
-        if not subscriber_id:
+        pppoe_username = payload.get("pppoe_username")
+
+        # Try to resolve PPPoE username from ONU record
+        entity_id = None
+        if subscriber_id:
+            try:
+                onu = await db.get(Onu, int(subscriber_id))
+                if onu and onu.subscriber:
+                    entity_id = onu.subscriber
+                else:
+                    logger.warning("MIGRATE-PHOTO: ONU #%s not found or has empty PPPoE (approval #%d)", subscriber_id, approval_id)
+            except (ValueError, TypeError) as e:
+                logger.warning("MIGRATE-PHOTO: Invalid subscriber_id '%s' (approval #%d): %s", subscriber_id, approval_id, e)
+
+        # Fallback: use pppoe_username from payload if ONU lookup failed
+        if not entity_id and pppoe_username:
+            entity_id = pppoe_username
+            logger.info("MIGRATE-PHOTO: Using pppoe_username from payload as fallback: %s (approval #%d)", entity_id, approval_id)
+
+        # Last resort: use subscriber_id as entity_id (photos will be keyed by numeric ID)
+        if not entity_id and subscriber_id:
+            entity_id = str(subscriber_id)
+            logger.warning("MIGRATE-PHOTO: Using subscriber_id '%s' as entity_id fallback (approval #%d) — photos may not display on web", subscriber_id, approval_id)
+
+        if not entity_id:
+            logger.error("MIGRATE-PHOTO: Cannot determine entity_id for user photo — approval #%d has no subscriber_id or pppoe_username", approval_id)
             return
-        onu = await db.get(Onu, int(subscriber_id))
-        if not onu or not onu.subscriber:
-            return
-        entity_id = onu.subscriber  # PPPoE username
+
         photo_types = _SUBSCRIBER_PHOTO_TYPES
         target_dir = _FIELD_PHOTOS_DIR / entity_type / entity_id
+        logger.info("MIGRATE-PHOTO: User category — subscriber_id=%s entity_id=%s target=%s", subscriber_id, entity_id, target_dir)
     elif category == "tj_box":
         entity_type = "tj"
         photo_types = _TJ_PHOTO_TYPES
         # TJ unique_id not yet known — store in pending dir until approved
         target_dir = _PENDING_PHOTOS_DIR / str(approval_id)
+        logger.info("MIGRATE-PHOTO: TJ category — approval=%d target=%s", approval_id, target_dir)
     else:
+        logger.warning("MIGRATE-PHOTO: Unknown category '%s' for approval #%d", category, approval_id)
         return
 
     # Determine next available photo slot
