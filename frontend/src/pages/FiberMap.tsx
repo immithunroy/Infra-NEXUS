@@ -408,6 +408,14 @@ export default function FiberMap() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (showForm === "tj" && !editingId) {
+      api.get<{ unique_id: string }>("/fiber/tj-boxes/next-id")
+        .then((data) => setTjForm((prev) => ({ ...prev, unique_id: data.unique_id })))
+        .catch(() => {});
+    }
+  }, [showForm, editingId]);
+
   const filteredCables = useMemo(() => {
     if (filterType !== "all" && filterType !== "cable") return [];
     return cables.filter((c) => {
@@ -1242,7 +1250,7 @@ export default function FiberMap() {
             <h2 className="mb-4 text-lg font-bold">{editingId ? "Edit" : "Add"} TJ / Enclosure</h2>
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div><label className="label">TJ ID</label><input className="input bg-slate-100 dark:bg-slate-800" value={tjForm.unique_id || ""} readOnly placeholder="Auto-generated" /></div>
+                <div><label className="label">TJ ID</label><input className="input bg-slate-100 dark:bg-slate-800" value={tjForm.unique_id || ""} readOnly placeholder={editingId ? "Keep current" : "Reserving..."} /></div>
                 <div><label className="label">TJ Name</label><input className="input" value={tjForm.name || ""} onChange={(e) => setTjForm({ ...tjForm, name: e.target.value })} required /></div>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
