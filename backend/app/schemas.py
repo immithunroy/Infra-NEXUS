@@ -13,6 +13,12 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
+    confirmPassword: str
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

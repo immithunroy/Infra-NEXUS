@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTheme } from "../theme";
-import { downloadFile } from "../api/client";
+import { api, downloadFile } from "../api/client";
 import { useUserRole } from "../lib/role";
 import ActionResultBanner from "../components/ActionResultBanner";
 
@@ -10,6 +10,49 @@ export default function Settings() {
   const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Change Password state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleChangePassword = async () => {
+    setPwMsg(null);
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPwMsg({ ok: false, text: "All fields are required." });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPwMsg({ ok: false, text: "New password must be at least 6 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwMsg({ ok: false, text: "New passwords do not match." });
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPwMsg({ ok: false, text: "New password must be different from current password." });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await api.post("/auth/change-password", { currentPassword, newPassword, confirmPassword });
+      setPwMsg({ ok: true, text: "Password changed successfully." });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "Failed to change password";
+      setPwMsg({ ok: false, text: detail });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   const handleExport = async () => {
     try {
@@ -150,6 +193,43 @@ export default function Settings() {
             <div className="text-sm text-slate-700 dark:text-slate-300">Role</div>
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400 capitalize">{role || "—"}</span>
           </div>
+        </div>
+      </section>
+
+      {/* Change Password */}
+      <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Change Password</h2>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Current Password</label>
+            <div className="flex">
+              <input type={showCurrent ? "text" : "password"} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="input flex-1" placeholder="Current password" />
+              <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="ml-2 px-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs">{showCurrent ? "Hide" : "Show"}</button>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">New Password</label>
+            <div className="flex">
+              <input type={showNew ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="input flex-1" placeholder="New password" />
+              <button type="button" onClick={() => setShowNew(!showNew)} className="ml-2 px-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs">{showNew ? "Hide" : "Show"}</button>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Confirm New Password</label>
+            <div className="flex">
+              <input type={showConfirm ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input flex-1" placeholder="Confirm new password" />
+              <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="ml-2 px-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs">{showConfirm ? "Hide" : "Show"}</button>
+            </div>
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Minimum 6 characters</div>
+          {pwMsg && (
+            <div className={`text-xs px-3 py-2 rounded ${pwMsg.ok ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"}`}>
+              {pwMsg.text}
+            </div>
+          )}
+          <button className="btn-primary text-xs py-1.5 px-3" onClick={handleChangePassword} disabled={changingPassword}>
+            {changingPassword ? "Changing..." : "Change Password"}
+          </button>
         </div>
       </section>
 
