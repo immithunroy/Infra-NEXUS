@@ -585,38 +585,67 @@ async def upload_photo(
         except (ValueError, TypeError):
             pass
 
-    # --- Fallback: read metadata from approval payload_json if form fields are missing ---
+    # --- Fallback: read metadata from approval payload_json / location_json if form fields are missing ---
     # Android app sends GPS/date/accuracy in the approval SUBMIT payload, but may not
     # re-send them as form fields on the upload-photo endpoint.
-    if entity_id and entity_id.isdigit() and (not latitude or not captured_at or not pppoe_username):
+    needs_fallback = (
+        entity_id
+        and entity_id.isdigit()
+        and (latitude is None or longitude is None or captured_at is None or not pppoe_username)
+    )
+    if needs_fallback:
         try:
             from sqlalchemy import select as sa_select
             fallback_result = await db.execute(
                 sa_select(FiberApprovalRequest).where(FiberApprovalRequest.id == int(entity_id))
             )
             fallback_req = fallback_result.scalar_one_or_none()
-            if fallback_req and fallback_req.payload_json:
-                fp = json.loads(fallback_req.payload_json)
-                if not latitude and fp.get("latitude"):
-                    latitude = float(fp["latitude"])
-                if not longitude and fp.get("longitude"):
-                    longitude = float(fp["longitude"])
-                if not gps_accuracy and fp.get("gps_accuracy") is not None:
+            if fallback_req:
+                fp = json.loads(fallback_req.payload_json) if fallback_req.payload_json else {}
+                loc = json.loads(fallback_req.location_json) if fallback_req.location_json else {}
+
+                # GPS coordinates: prefer payload_json, then location_json
+                if latitude is None:
+                    if fp.get("latitude") is not None:
+                        latitude = float(fp["latitude"])
+                    elif fp.get("lat") is not None:
+                        latitude = float(fp["lat"])
+                    elif loc.get("lat") is not None:
+                        latitude = float(loc["lat"])
+
+                if longitude is None:
+                    if fp.get("longitude") is not None:
+                        longitude = float(fp["longitude"])
+                    elif fp.get("lng") is not None:
+                        longitude = float(fp["lng"])
+                    elif loc.get("lng") is not None:
+                        longitude = float(loc["lng"])
+
+                if gps_accuracy is None and fp.get("gps_accuracy") is not None:
                     gps_accuracy = float(fp["gps_accuracy"])
-                if not captured_at and fp.get("captured_at"):
+
+                if captured_at is None and fp.get("captured_at"):
                     captured_at = fp["captured_at"]
                     try:
                         captured_dt = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
                     except (ValueError, TypeError):
                         pass
+
                 if not pppoe_username and fp.get("pppoe_username"):
                     pppoe_username = fp["pppoe_username"]
                 if not tj_id and fp.get("tj_id"):
                     tj_id = fp["tj_id"]
-                logger.info("UPLOAD-PHOTO fallback from payload_json: lat=%s lng=%s accuracy=%s captured_at=%s pppoe=%s tj_id=%s",
-                            latitude, longitude, gps_accuracy, captured_at, pppoe_username, tj_id)
+
+                logger.info(
+                    "UPLOAD-PHOTO fallback resolved: lat=%s lng=%s accuracy=%s captured_at=%s "
+                    "pppoe=%s tj_id=%s (from payload_json keys: %s, location_json keys: %s)",
+                    latitude, longitude, gps_accuracy, captured_at,
+                    pppoe_username, tj_id,
+                    list(fp.keys()) if fp else [],
+                    list(loc.keys()) if loc else [],
+                )
         except Exception as e:
-            logger.warning("UPLOAD-PHOTO: Failed to read payload_json fallback: %s", e)
+            logger.warning("UPLOAD-PHOTO: Failed to read metadata fallback: %s", e)
 
     # --- Process photo SYNCHRONOUSLY ---
     stamp_entity_type = "user" if category == "user" else "tj"
