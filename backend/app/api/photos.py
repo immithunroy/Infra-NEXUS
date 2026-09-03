@@ -16,6 +16,7 @@ from ..models import FieldPhoto, User
 from ..security import get_current_user, require_write
 
 router = APIRouter(prefix="/api/photos", dependencies=[Depends(get_current_user)])
+file_router = APIRouter(prefix="/api/photos/file")
 
 settings = get_settings()
 UPLOAD_DIR = Path(os.environ.get("PHOTO_UPLOAD_DIR", "/app/uploads/field-photos"))
@@ -310,12 +311,11 @@ async def list_photos(
     }
 
 
-@router.get("/file/{path:path}")
+@file_router.get("/{path:path}")
 async def serve_photo(
     path: str,
-    user: User = Depends(get_current_user),
 ):
-    """Serve a photo file from disk."""
+    """Serve a photo file from disk (no auth — images loaded via <img> tags)."""
     file_path = UPLOAD_DIR / path
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(404, "Photo not found.")

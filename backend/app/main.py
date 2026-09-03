@@ -69,6 +69,7 @@ app.include_router(fiber.router)
 app.include_router(fiber_approvals.router)
 app.include_router(approvals.router)
 app.include_router(photos.router)
+app.include_router(photos.file_router)
 app.include_router(noc_pop.router)
 
 
