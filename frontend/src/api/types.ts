@@ -1042,6 +1042,7 @@ export interface FieldPhotoItem {
   longitude?: number | null;
   captured_at?: string | null;
   captured_by?: string;
+  pppoe_username?: string;
   created_at?: string;
 }
 

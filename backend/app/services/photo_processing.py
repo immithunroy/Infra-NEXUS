@@ -1,66 +1,79 @@
 """Server-side photo processing pipeline.
 
-Receives original photos from Android, applies Open Sans stamp with metadata,
-crops/resizes to square ~2MP, compresses to JPEG < 1MB.
+Processes photos submitted from the Android app and web frontend.
+
+Stamp format — USER photos:
+    PPPoE Username: <username>
+    Date & Time:    03 Sep 2026, 05:28 PM
+    GPS:            22.701234, 90.353456
+
+Stamp format — TJ photos:
+    TJ ID:          TJ-00125
+    Date & Time:    03 Sep 2026, 05:28 PM
+    GPS:            22.701234, 90.353456
 
 Pipeline:
-    Receive Original Photo
-        ↓
-    Validate Metadata
-        ↓
-    Resize/Crop to Square
-        ↓
-    ~2 MP (1414x1414)
-        ↓
-    Apply Photo Stamp (Open Sans)
-        ↓
-    JPEG Compression (< 1 MB)
-        ↓
-    Store Processed Image
+    1. Validate photo and required metadata
+    2. Correct image orientation (EXIF)
+    3. Crop to square (center)
+    4. Resize to 1440×1440 (~2 MP)
+    5. Apply stamp (Open Sans 12, bottom-left, 30px margin)
+    6. JPEG compress — progressive quality reduction until < 1 MB
+    7. Return processed bytes, width, height
 """
 
 import io
 import logging
 import os
-from pathlib import Path
+import re
 from datetime import datetime
+from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ExifTags
 
 logger = logging.getLogger("olt_commander.photo_processing")
 
 # Constants
-TARGET_SIZE = 1414  # ~2MP square image
-MAX_FILE_SIZE = 1024 * 1024  # 1MB
+TARGET_SIZE = 1440
+MAX_FILE_SIZE = 1024 * 1024  # 1 MB
+MARGIN_PX = 30
+STAMP_FONT_SIZE = 12
+INITIAL_QUALITY = 85
+MIN_QUALITY = 30
+QUALITY_STEP = 5
 
-# Font paths to try (Open Sans preferred, DejaVu Sans fallback)
-FONT_PATHS = [
-    "/usr/share/fonts/truetype/opensans/OpenSans-Regular.ttf",
-    "/usr/share/fonts/truetype/opensans/OpenSans-Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+# Font search paths — Open Sans preferred, Liberation/DejaVu fallback
+_FONT_DIRS = [
+    "/usr/share/fonts/truetype/opensans",
+    "/usr/share/fonts/truetype/liberation",
+    "/usr/share/fonts/truetype/dejavu",
+    "/usr/share/fonts/truetype",
+    "/usr/share/fonts",
 ]
 
-FONT_BOLD_PATHS = [
-    "/usr/share/fonts/truetype/opensans/OpenSans-Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-]
+_FONT_NAMES = {
+    "regular": ["OpenSans-Regular.ttf", "LiberationSans-Regular.ttf", "DejaVuSans.ttf", "FreeSans.ttf"],
+    "bold": ["OpenSans-Bold.ttf", "LiberationSans-Bold.ttf", "DejaVuSans-Bold.ttf", "FreeSansBold.ttf"],
+}
 
 
-def _find_font(paths: list[str], size: int) -> ImageFont.FreeTypeFont:
-    """Find the first available font from the list."""
-    for path in paths:
-        if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, size)
-            except (OSError, IOError):
-                continue
-    # Fallback to default
+def _find_font(variant: str, size: int) -> ImageFont.FreeTypeFont:
+    """Find the first available font by variant (regular/bold)."""
+    names = _FONT_NAMES.get(variant, _FONT_NAMES["regular"])
+    for font_dir in _FONT_DIRS:
+        for name in names:
+            path = os.path.join(font_dir, name)
+            if os.path.isfile(path):
+                try:
+                    return ImageFont.truetype(path, size)
+                except (OSError, IOError):
+                    continue
+    logger.warning("No TrueType font found — falling back to default bitmap font")
     return ImageFont.load_default()
 
 
 def _format_timestamp(dt: datetime | str | None) -> str:
-    """Format timestamp as 'DD-Mon-YYYY HH:mm:ss'."""
+    """Format as '03 Sep 2026, 05:28 PM'."""
     if dt is None:
         return "N/A"
     if isinstance(dt, str):
@@ -68,7 +81,46 @@ def _format_timestamp(dt: datetime | str | None) -> str:
             dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
         except (ValueError, TypeError):
             return dt
-    return dt.strftime("%d-%b-%Y %H:%M:%S")
+    return dt.strftime("%d %b %Y, %I:%M %p")
+
+
+def _correct_exif_orientation(img: Image.Image) -> Image.Image:
+    """Rotate/flip image according to EXIF orientation tag."""
+    try:
+        exif_data = img.getexif()
+    except Exception:
+        return img
+
+    if not exif_data:
+        return img
+
+    orientation_key = None
+    for k, v in ExifTags.TAGS.items():
+        if v == "Orientation":
+            orientation_key = k
+            break
+
+    if orientation_key is None:
+        return img
+
+    orientation = exif_data.get(orientation_key)
+    if orientation is None:
+        return img
+
+    method = {
+        2: Image.FLIP_LEFT_RIGHT,
+        3: Image.ROTATE_180,
+        4: Image.FLIP_TOP_BOTTOM,
+        5: Image.TRANSPOSE,
+        6: Image.ROTATE_270,
+        7: Image.TRANSVERSE,
+        8: Image.ROTATE_90,
+    }.get(orientation)
+
+    if method is not None:
+        img = img.transpose(method)
+
+    return img
 
 
 def _apply_stamp(
@@ -76,80 +128,79 @@ def _apply_stamp(
     entity_type: str,
     entity_id: str,
     latitude: float | None,
-    longitude: float,
-    longitude_val: float | None,
+    longitude: float | None,
     captured_at: datetime | str | None,
 ) -> Image.Image:
-    """Apply Open Sans stamp to the image.
-    
-    For user photos:
-        PPoE: <username>
-        GPS: <lat>, <lng>
-        Captured: <datetime>
-    
-    For TJ photos:
-        TJ-ID: <tj_id>
-        GPS: <lat>, <lng>
-        Captured: <datetime>
+    """Apply information stamp to the bottom-left corner of the image.
+
+    USER photos:  PPPoE Username + Date & Time + GPS
+    TJ photos:    TJ ID + Date & Time + GPS
     """
+    font_bold = _find_font("bold", STAMP_FONT_SIZE)
+    font_regular = _find_font("regular", STAMP_FONT_SIZE)
+
+    # Build label + value pairs — labels are bold, values are regular
+    if entity_type == "user":
+        label1, value1 = "PPPoE Username:", entity_id
+    else:
+        label1, value1 = "TJ ID:", entity_id
+
+    label2, value2 = "Date & Time:", _format_timestamp(captured_at)
+
+    lat_str = f"{latitude:.6f}" if latitude is not None else "N/A"
+    lng_str = f"{longitude:.6f}" if longitude is not None else "N/A"
+    label3, value3 = "GPS:", f"{lat_str}, {lng_str}"
+
+    # Measure each line: "label value" where label is bold, value is regular
+    # We render label in bold, then measure its width to offset value rendering
+    bbox_l1 = font_bold.getbbox(label1)
+    bbox_v1 = font_regular.getbbox(f" {value1}")
+    bbox_l2 = font_bold.getbbox(label2)
+    bbox_v2 = font_regular.getbbox(f" {value2}")
+    bbox_l3 = font_bold.getbbox(label3)
+    bbox_v3 = font_regular.getbbox(f" {value3}")
+
+    line_height = STAMP_FONT_SIZE + 4
+    total_h = line_height * 3
+
+    x = MARGIN_PX
+    y_start = img.size[1] - total_h - MARGIN_PX
+
     # Convert to RGBA for compositing
     if img.mode != "RGBA":
         img = img.convert("RGBA")
-    
-    # Create overlay for semi-transparent background
+
     overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    
-    # Font sizes (12px at final image scale)
-    font_size = 12
-    font_bold = _find_font(FONT_BOLD_PATHS, font_size)
-    font_regular = _find_font(FONT_PATHS, font_size)
-    
-    # Build stamp lines
-    if entity_type == "user":
-        label_id = "PPPoE:"
-        value_id = entity_id
-    else:
-        label_id = "TJ-ID:"
-        value_id = entity_id
-    
-    lat_str = f"{latitude:.6f}" if latitude is not None else "N/A"
-    lng_str = f"{longitude_val:.6f}" if longitude_val is not None else "N/A"
-    gps_text = f"{lat_str}, {lng_str}"
-    
-    captured_str = _format_timestamp(captured_at)
-    
-    line1 = f"{label_id} {value_id}"
-    line2 = f"GPS: {gps_text}"
-    line3 = f"Captured: {captured_str}"
-    
-    # Calculate text dimensions
-    bbox1 = draw.textbbox((0, 0), line1, font=font_bold)
-    bbox2 = draw.textbbox((0, 0), line2, font=font_regular)
-    bbox3 = draw.textbbox((0, 0), line3, font=font_regular)
-    
-    line_h = bbox1[3] - bbox1[1] + 4
-    total_h = (bbox1[3] - bbox1[1]) + (bbox2[3] - bbox2[1]) + (bbox3[3] - bbox3[1]) + 12
-    
-    # Position at bottom-left with padding
-    padding = 10
-    y_start = img.size[1] - total_h - padding
-    
-    # Calculate max width for background
-    max_w = max(bbox1[2] - bbox1[0], bbox2[2] - bbox2[0], bbox3[2] - bbox3[0])
-    
-    # Draw semi-transparent background
-    bg_rect = [padding - 4, y_start - 4, padding + max_w + 8, y_start + total_h + 8]
-    draw.rounded_rectangle(bg_rect, radius=4, fill=(0, 0, 0, 140))
-    
-    # Draw text
-    draw.text((padding, y_start), line1, fill="white", font=font_bold)
-    draw.text((padding, y_start + line_h), line2, fill="white", font=font_regular)
-    draw.text((padding, y_start + line_h * 2), line3, fill="white", font=font_regular)
-    
-    # Composite overlay onto image
+
+    # Measure total width for background rect
+    w1 = (bbox_l1[2] - bbox_l1[0]) + (bbox_v1[2] - bbox_v1[0])
+    w2 = (bbox_l2[2] - bbox_l2[0]) + (bbox_v2[2] - bbox_v2[0])
+    w3 = (bbox_l3[2] - bbox_l3[0]) + (bbox_v3[2] - bbox_v3[0])
+    max_w = max(w1, w2, w3)
+
+    # Semi-transparent background
+    bg_pad = 6
+    bg_rect = [
+        x - bg_pad,
+        y_start - bg_pad,
+        x + max_w + bg_pad,
+        y_start + total_h + bg_pad,
+    ]
+    draw.rounded_rectangle(bg_rect, radius=4, fill=(0, 0, 0, 150))
+
+    # Draw each line: bold label + regular value
+    for i, (lbl, val, f_bold, f_reg) in enumerate([
+        (label1, value1, font_bold, font_regular),
+        (label2, value2, font_bold, font_regular),
+        (label3, value3, font_bold, font_regular),
+    ]):
+        y = y_start + i * line_height
+        draw.text((x, y), lbl, fill="white", font=f_bold)
+        lbl_w = f_bold.getbbox(lbl)[2] - f_bold.getbbox(lbl)[0]
+        draw.text((x + lbl_w, y), f" {val}", fill="white", font=f_reg)
+
     img = Image.alpha_composite(img, overlay)
-    
     return img
 
 
@@ -160,69 +211,87 @@ def process_photo(
     latitude: float | None,
     longitude: float | None,
     captured_at: datetime | str | None,
-    output_format: str = "JPEG",
-    quality: int = 85,
 ) -> tuple[bytes, int, int]:
-    """Process a photo: resize, crop, stamp, compress.
-    
+    """Full processing pipeline: EXIF → crop → resize → stamp → compress.
+
     Args:
-        image_bytes: Original image bytes
-        entity_type: "user" or "tj"
-        entity_id: PPPoE username or TJ-ID
-        latitude: GPS latitude
-        longitude: GPS longitude
-        captured_at: Photo capture timestamp
-        output_format: Output format (JPEG)
-        initial quality: Initial JPEG quality
-        
+        image_bytes:  Original image bytes (any format).
+        entity_type:  "user" | "tj".
+        entity_id:    PPPoE username or TJ ID.
+        latitude:     GPS latitude  (-90..90).
+        longitude:    GPS longitude (-180..180).
+        captured_at:  Capture timestamp.
+
     Returns:
-        Tuple of (processed_bytes, width, height)
+        (processed_jpeg_bytes, width, height)
+
+    Raises:
+        ValueError: If the image cannot be processed.
     """
-    # Open image
-    img = Image.open(io.BytesIO(image_bytes))
-    
-    # Convert to RGB if necessary
+    # --- 1. Open ---
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+    except Exception as e:
+        raise ValueError(f"Cannot open image: {e}") from e
+
+    # --- 2. Correct EXIF orientation ---
+    img = _correct_exif_orientation(img)
+
+    # --- 3. Convert to RGB ---
     if img.mode not in ("RGB",):
         img = img.convert("RGB")
-    
-    # Center-crop to square
+
+    # --- 4. Center-crop to square ---
     w, h = img.size
     side = min(w, h)
     left = (w - side) // 2
     top = (h - side) // 2
     img = img.crop((left, top, left + side, top + side))
-    
-    # Resize to target size
+
+    # --- 5. Resize to target ---
     if img.size[0] != TARGET_SIZE:
         img = img.resize((TARGET_SIZE, TARGET_SIZE), Image.LANCZOS)
-    
-    # Apply stamp
+
+    # --- 6. Apply stamp ---
     img = _apply_stamp(img, entity_type, entity_id, latitude, longitude, captured_at)
-    
-    # Convert back to RGB for JPEG
+
+    # --- 7. Convert to RGB for JPEG ---
     if img.mode == "RGBA":
         img = img.convert("RGB")
-    
-    # Compress to JPEG with adaptive quality
+
+    # --- 8. Progressive JPEG compression (< 1 MB) ---
     buf = io.BytesIO()
-    current_quality = quality
-    img.save(buf, format="JPEG", quality=current_quality, optimize=True)
-    
-    # Reduce quality if too large
-    while buf.tell() > MAX_FILE_SIZE and current_quality > 30:
+    quality = INITIAL_QUALITY
+    img.save(buf, format="JPEG", quality=quality, optimize=True)
+
+    while buf.tell() > MAX_FILE_SIZE and quality > MIN_QUALITY:
         buf = io.BytesIO()
-        current_quality -= 10
-        img.save(buf, format="JPEG", quality=current_quality, optimize=True)
-    
+        quality -= QUALITY_STEP
+        img.save(buf, format="JPEG", quality=quality, optimize=True)
+
+    if buf.tell() > MAX_FILE_SIZE:
+        # Last resort: reduce resolution slightly
+        scale = 0.9
+        while buf.tell() > MAX_FILE_SIZE and scale > 0.5:
+            buf = io.BytesIO()
+            reduced = img.resize(
+                (int(TARGET_SIZE * scale), int(TARGET_SIZE * scale)),
+                Image.LANCZOS,
+            )
+            reduced.save(buf, format="JPEG", quality=MIN_QUALITY, optimize=True)
+            scale -= 0.05
+
     buf.seek(0)
-    processed_bytes = buf.read()
-    
+    processed = buf.read()
+
+    if len(processed) > MAX_FILE_SIZE:
+        raise ValueError(f"Could not compress image below {MAX_FILE_SIZE // 1024} KB")
+
     logger.info(
         "Photo processed: %dx%d, quality=%d, size=%d bytes",
-        img.size[0], img.size[1], current_quality, len(processed_bytes)
+        img.size[0], img.size[1], quality, len(processed),
     )
-    
-    return processed_bytes, img.size[0], img.size[1]
+    return processed, img.size[0], img.size[1]
 
 
 def process_approval_photo(
@@ -233,40 +302,20 @@ def process_approval_photo(
     longitude: float | None,
     captured_at: datetime | str | None,
 ) -> tuple[str, int, int, int]:
-    """Process an approval photo and save the processed version.
-    
-    Args:
-        original_path: Path to the original photo
-        entity_type: "user" or "tj"
-        entity_id: PPPoE username or TJ-ID
-        latitude: GPS latitude
-        longitude: GPS longitude
-        captured_at: Photo capture timestamp
-        
-    Returns:
-        Tuple of (processed_path, width, height, file_size)
-    """
-    # Read original
+    """Process an approval photo, save processed version, return metadata."""
     with open(original_path, "rb") as f:
         image_bytes = f.read()
-    
-    # Process
+
     processed_bytes, width, height = process_photo(
-        image_bytes, entity_type, entity_id, latitude, longitude, captured_at
+        image_bytes, entity_type, entity_id, latitude, longitude, captured_at,
     )
-    
-    # Save processed version
+
     original_p = Path(original_path)
     processed_path = original_p.parent / f"processed_{original_p.name}"
-    
     with open(processed_path, "wb") as f:
         f.write(processed_bytes)
-    
+
     file_size = len(processed_bytes)
-    
-    logger.info(
-        "Approval photo processed: %s -> %s (%dx%d, %d bytes)",
-        original_path, processed_path, width, height, file_size
-    )
-    
+    logger.info("Approval photo processed: %s -> %s (%dx%d, %d bytes)",
+                original_path, processed_path, width, height, file_size)
     return str(processed_path), width, height, file_size

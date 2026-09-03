@@ -99,6 +99,44 @@
 
 ---
 
+## 2026-09-03
+
+### Changed
+
+- **Photo Processing Pipeline — Standardized Stamping for Android Submissions**
+  - Rewrote `photo_processing.py` with new stamp format matching specification
+  - USER photos: `PPPoE Username:`, `Date & Time:`, `GPS:` with correct formatting
+  - TJ photos: `TJ ID:`, `Date & Time:`, `GPS:` — no PPPoE username shown
+  - Date/time format: `03 Sep 2026, 05:28 PM` (was `DD-Mon-YYYY HH:MM:SS`)
+  - Stamp at bottom-left corner with 30px margin (was 10px)
+  - Open Sans 12px font — labels bold, values regular weight
+  - Semi-transparent dark background behind stamp text for readability
+  - EXIF orientation correction before crop/resize
+  - Progressive JPEG compression: starts at Q85, reduces by 5 until < 1 MB
+  - Resolution fallback: if compression alone can't reach < 1 MB, scales down progressively
+  - Unified stamp logic: `photos.py` now uses shared `photo_processing.process_photo()` instead of inline processing
+
+### Added
+
+- `pppoe_username` column on `field_photos` table for subscriber photo identification
+- GPS coordinate validation on both `/api/photos` and `/api/approvals/upload-photo` endpoints
+- Liberation Sans font installed in Docker backend as fallback for Open Sans
+- `FieldPhotoItem.pppoe_username` field in frontend TypeScript types
+- `uploadPhoto()` client helper accepts optional `pppoeUsername` parameter
+- Photo viewer modal now shows capture date/time
+
+### Database
+
+- `field_photos` table: new `pppoe_username VARCHAR(128)` column (via `init_db()` ALTER)
+
+### API
+
+- `POST /api/photos/{entity_type}/{entity_id}` — new `pppoe_username` query parameter
+- `GET /api/photos/{entity_type}/{entity_id}` — response includes `pppoe_username` field
+- `POST /api/approvals/upload-photo` — GPS validation added (lat: -90..90, lng: -180..180)
+
+---
+
 ## 2026-08-31
 
 ### Added

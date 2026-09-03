@@ -95,13 +95,15 @@ export async function uploadPhoto(
   file: File,
   latitude?: number | null,
   longitude?: number | null,
-  capturedAt?: string
+  capturedAt?: string,
+  pppoeUsername?: string
 ): Promise<{ id: number; photo_type: string; storage_key: string; file_size: number; width: number; height: number; url: string }> {
   const token = getToken();
   const params = new URLSearchParams({ photo_type: photoType });
   if (latitude != null) params.set("latitude", String(latitude));
   if (longitude != null) params.set("longitude", String(longitude));
   if (capturedAt) params.set("captured_at", capturedAt);
+  if (pppoeUsername) params.set("pppoe_username", pppoeUsername);
 
   const formData = new FormData();
   formData.append("file", file);

@@ -212,6 +212,11 @@ export default function PhotoGallery({ entityType, entityId, photoTypes, photoLa
             <div className="mt-2 flex items-center justify-between rounded-lg bg-white/90 px-3 py-2 text-xs text-slate-600 backdrop-blur dark:bg-slate-900/90 dark:text-slate-300">
               <span className="font-medium">{photoLabels[viewerPhoto.photo_type] || viewerPhoto.photo_type}</span>
               <div className="flex gap-3">
+                {viewerPhoto.captured_at && (
+                  <span className="text-slate-400">
+                    {new Date(viewerPhoto.captured_at).toLocaleString()}
+                  </span>
+                )}
                 {viewerPhoto.latitude != null && (
                   <span className="text-slate-400">
                     GPS: {viewerPhoto.latitude.toFixed(6)}, {viewerPhoto.longitude?.toFixed(6)}

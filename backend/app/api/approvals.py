@@ -561,11 +561,17 @@ async def upload_photo(
 
     logger.info("UPLOAD-PHOTO saved: filename=%s size=%d bytes path=%s", filename, len(content), filepath)
 
-    # --- Queue for background photo processing ---
-    # Determine entity type and ID for stamping
+    # --- Validate required metadata for stamping ---
     stamp_entity_type = "user" if category == "user" else "tj"
     stamp_entity_id = pppoe_username or tj_id or entity_id
-    
+
+    # Validate GPS coordinates
+    if latitude is not None and not (-90 <= latitude <= 90):
+        raise HTTPException(400, f"Latitude must be between -90 and 90, got {latitude}")
+    if longitude is not None and not (-180 <= longitude <= 180):
+        raise HTTPException(400, f"Longitude must be between -180 and 180, got {longitude}")
+
+    # --- Queue for background photo processing ---
     # Parse captured_at timestamp
     captured_dt = None
     if captured_at:

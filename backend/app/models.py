@@ -821,6 +821,7 @@ class FieldPhoto(Base):
     longitude: Mapped[float | None] = mapped_column(nullable=True)
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     captured_by: Mapped[str] = mapped_column(String(128), default="")
+    pppoe_username: Mapped[str] = mapped_column(String(128), default="")
     uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
