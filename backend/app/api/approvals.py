@@ -591,7 +591,7 @@ async def upload_photo(
     needs_fallback = (
         entity_id
         and entity_id.isdigit()
-        and (latitude is None or longitude is None or captured_at is None or not pppoe_username)
+        and (latitude is None or longitude is None or not captured_at or not pppoe_username)
     )
     if needs_fallback:
         try:
@@ -606,30 +606,35 @@ async def upload_photo(
 
                 # GPS coordinates: prefer payload_json, then location_json
                 if latitude is None:
-                    if fp.get("latitude") is not None:
-                        latitude = float(fp["latitude"])
-                    elif fp.get("lat") is not None:
-                        latitude = float(fp["lat"])
-                    elif loc.get("lat") is not None:
+                    for key in ("latitude", "lat", "gps_lat"):
+                        if fp.get(key) is not None:
+                            latitude = float(fp[key])
+                            break
+                    if latitude is None and loc.get("lat") is not None:
                         latitude = float(loc["lat"])
 
                 if longitude is None:
-                    if fp.get("longitude") is not None:
-                        longitude = float(fp["longitude"])
-                    elif fp.get("lng") is not None:
-                        longitude = float(fp["lng"])
-                    elif loc.get("lng") is not None:
+                    for key in ("longitude", "lng", "gps_lng"):
+                        if fp.get(key) is not None:
+                            longitude = float(fp[key])
+                            break
+                    if longitude is None and loc.get("lng") is not None:
                         longitude = float(loc["lng"])
 
                 if gps_accuracy is None and fp.get("gps_accuracy") is not None:
                     gps_accuracy = float(fp["gps_accuracy"])
 
-                if captured_at is None and fp.get("captured_at"):
+                if not captured_at and fp.get("captured_at"):
                     captured_at = fp["captured_at"]
                     try:
                         captured_dt = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
                     except (ValueError, TypeError):
                         pass
+
+                # Last resort: use approval request created_at as capture timestamp
+                if not captured_at and fallback_req.created_at:
+                    captured_dt = fallback_req.created_at
+                    captured_at = fallback_req.created_at.isoformat()
 
                 if not pppoe_username and fp.get("pppoe_username"):
                     pppoe_username = fp["pppoe_username"]
