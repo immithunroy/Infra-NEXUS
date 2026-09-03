@@ -639,7 +639,7 @@ async def upload_photo(
                 if not pppoe_username and fp.get("pppoe_username"):
                     pppoe_username = fp["pppoe_username"]
                 if not tj_id:
-                    tj_id = fp.get("tj_id") or fp.get("name")
+                    tj_id = fp.get("unique_id") or fp.get("tj_id") or fp.get("name")
 
                 logger.info(
                     "UPLOAD-PHOTO fallback resolved: lat=%s lng=%s accuracy=%s captured_at=%s "
@@ -876,7 +876,7 @@ async def _migrate_photo_to_field(
         logger.info("MIGRATE-PHOTO: User category — subscriber_id=%s entity_id=%s target=%s", subscriber_id, entity_id, target_dir)
     elif category == "tj_box":
         entity_type = "tj"
-        stamp_entity_id = payload.get("tj_id") or payload.get("name") or ""
+        stamp_entity_id = payload.get("unique_id") or payload.get("tj_id") or payload.get("name") or ""
         stamp_entity_name = payload.get("name") or ""
         photo_types = _TJ_PHOTO_TYPES
         # TJ unique_id not yet known — store in pending dir until approved
