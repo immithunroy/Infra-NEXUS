@@ -998,17 +998,7 @@ async def _finalize_pending_tj_photos(unique_id: str, db: AsyncSession):
 # Execute helpers (shared with fiber_approvals.py)
 # ---------------------------------------------------------------------------
 
-async def _next_tj_id(db) -> str:
-    result = await db.execute(select(TjBox.unique_id).order_by(TjBox.id.desc()).limit(1))
-    last = result.scalar_one_or_none()
-    if last:
-        try:
-            num = int(last.split("-")[1]) + 1
-        except (IndexError, ValueError):
-            num = 5001
-    else:
-        num = 5001
-    return f"TJ-{num:04d}"
+from .fiber import _next_tj_id  # Import shared async version
 
 
 async def _next_sp_id(db) -> str:
@@ -1064,7 +1054,22 @@ async def _execute_action(action: str, entity_type: str, entity_id: int | None, 
 
 async def _execute_tj(action: str, entity_id: int | None, payload: dict, db: AsyncSession):
     if action == "create":
-        unique_id = await _next_tj_id(db)
+        # Use reserved unique_id from payload if present, otherwise generate
+        unique_id = payload.get("unique_id")
+        if unique_id:
+            # Mark reservation as consumed
+            from ..models import TjIdReservation
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            await db.execute(
+                update(TjIdReservation)
+                .where(TjIdReservation.unique_id == unique_id)
+                .where(TjIdReservation.status == "active")
+                .where(TjIdReservation.expires_at > now)
+                .values(status="consumed")
+            )
+        else:
+            unique_id = await _next_tj_id(db)
 
         # Map Android box_type values to backend values
         _BOX_TYPE_MAP = {

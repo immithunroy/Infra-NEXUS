@@ -56,3 +56,16 @@ async def init_db() -> None:
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_field_photos_entity_type ON field_photos (entity_type, entity_id, photo_type)"))
         await conn.execute(text("ALTER TABLE field_photos ADD COLUMN IF NOT EXISTS pppoe_username VARCHAR(128) DEFAULT ''"))
         await conn.execute(text("ALTER TABLE field_photos ADD COLUMN IF NOT EXISTS gps_accuracy DOUBLE PRECISION"))
+        # TJ ID reservations table
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS tj_id_reservations (
+                id SERIAL PRIMARY KEY,
+                unique_id VARCHAR(16) NOT NULL UNIQUE,
+                reserved_by VARCHAR(128) DEFAULT '',
+                reserved_at TIMESTAMPTZ DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL,
+                status VARCHAR(16) DEFAULT 'active'
+            )
+        """))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_tj_id_reservations_status ON tj_id_reservations (status)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_tj_id_reservations_expires ON tj_id_reservations (expires_at)"))

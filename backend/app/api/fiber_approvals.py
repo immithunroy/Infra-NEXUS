@@ -68,18 +68,7 @@ class ApprovalOutCompat(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _next_tj_id(db) -> str:
-    """Generate next TJ-XXXX ID."""
-    result = db.execute(select(TjBox.unique_id).order_by(TjBox.id.desc()).limit(1))
-    last = result.scalar_one_or_none()
-    if last:
-        try:
-            num = int(last.split("-")[1]) + 1
-        except (IndexError, ValueError):
-            num = 5001
-    else:
-        num = 5001
-    return f"TJ-{num:04d}"
+from .fiber import _next_tj_id  # Import shared async version
 
 
 def _next_sp_id(db) -> str:
@@ -371,7 +360,7 @@ async def resubmit(
 
 async def _execute_tj_box(action: str, entity_id: int | None, payload: dict, db: AsyncSession):
     if action == "create":
-        unique_id = _next_tj_id(db)
+        unique_id = await _next_tj_id(db)
         box = TjBox(
             unique_id=unique_id,
             name=payload.get("name", ""),

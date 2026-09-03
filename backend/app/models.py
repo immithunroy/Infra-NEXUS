@@ -826,3 +826,16 @@ class FieldPhoto(Base):
     uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class TjIdReservation(Base):
+    """Reserved TJ ID — expires after 1 hour if not consumed."""
+
+    __tablename__ = "tj_id_reservations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    unique_id: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    reserved_by: Mapped[str] = mapped_column(String(128), default="")
+    reserved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active | expired | consumed

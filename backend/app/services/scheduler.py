@@ -311,6 +311,26 @@ async def _write_all_olts_retry() -> None:
         logger.info("OLT write all retry skipped — no failures at 01:00")
 
 
+async def _cleanup_tj_reservations():
+    """Expire old TJ ID reservations (older than 1 hour)."""
+    from sqlalchemy import update
+    from ..models import TjIdReservation
+    now = utcnow()
+    try:
+        async with SessionLocal() as db:
+            result = await db.execute(
+                update(TjIdReservation)
+                .where(TjIdReservation.status == "active")
+                .where(TjIdReservation.expires_at < now)
+                .values(status="expired")
+            )
+            if result.rowcount > 0:
+                logger.info("Expired %d TJ ID reservations", result.rowcount)
+            await db.commit()
+    except Exception as e:
+        logger.error("TJ reservation cleanup failed: %s", e)
+
+
 def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -381,6 +401,15 @@ def start_scheduler() -> AsyncIOScheduler:
         id="olt_write_all",
         replace_existing=True,
         misfire_grace_time=300,
+    )
+
+    # TJ ID reservation cleanup — every 5 minutes
+    scheduler.add_job(
+        _cleanup_tj_reservations,
+        IntervalTrigger(minutes=5),
+        id="cleanup_tj_reservations",
+        replace_existing=True,
+        misfire_grace_time=30,
     )
 
     scheduler.start()

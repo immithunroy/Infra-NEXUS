@@ -22,6 +22,49 @@ from ..security import get_current_user, require_write
 router = APIRouter(prefix="/api/fiber", tags=["fiber"], dependencies=[Depends(get_current_user)])
 
 
+# ------------------------------------------------------------------ TJ ID Generation (shared)
+
+async def _next_tj_id(db) -> str:
+    """Generate next TJ-XXXX ID, skipping reserved IDs."""
+    from datetime import datetime, timezone
+    from ..models import TjBox, TjIdReservation
+
+    now = datetime.now(timezone.utc)
+
+    # Get the highest existing TJ number from tj_boxes
+    result = await db.execute(
+        select(TjBox.unique_id).where(TjBox.unique_id.like("TJ-%")).order_by(TjBox.id.desc()).limit(1)
+    )
+    last_box = result.scalar_one_or_none()
+
+    # Get all active (non-expired, non-consumed) reservation numbers
+    res_result = await db.execute(
+        select(TjIdReservation.unique_id)
+        .where(TjIdReservation.status == "active")
+        .where(TjIdReservation.expires_at > now)
+    )
+    reserved_numbers = set()
+    for uid in res_result.scalars().all():
+        try:
+            reserved_numbers.add(int(uid.split("-")[1]))
+        except (IndexError, ValueError):
+            pass
+
+    # Find next available number
+    next_num = 5001
+    if last_box:
+        try:
+            next_num = int(last_box.split("-")[1]) + 1
+        except (IndexError, ValueError):
+            pass
+
+    # Skip reserved numbers
+    while next_num in reserved_numbers:
+        next_num += 1
+
+    return f"TJ-{next_num:04d}"
+
+
 # ------------------------------------------------------------------ Cables
 @router.get("/cables", response_model=list[CableOut])
 async def list_cables(db: AsyncSession = Depends(get_db)):
@@ -132,6 +175,30 @@ async def delete_cable(cable_id: int, user: User = Depends(require_write), db: A
 
 
 # ------------------------------------------------------------------ TJ Boxes
+
+@router.get("/tj-boxes/next-id")
+async def get_next_tj_id(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Reserve the next available TJ ID for 1 hour."""
+    from datetime import datetime, timedelta, timezone
+    from ..models import TjIdReservation
+
+    unique_id = await _next_tj_id(db)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(hours=1)
+
+    reservation = TjIdReservation(
+        unique_id=unique_id,
+        reserved_by=user.username,
+        reserved_at=now,
+        expires_at=expires,
+        status="active",
+    )
+    db.add(reservation)
+    await db.commit()
+
+    return {"unique_id": unique_id, "expires_at": expires.isoformat()}
+
+
 @router.get("/tj-boxes", response_model=list[TjBoxOut])
 async def list_tj_boxes(db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(TjBox).order_by(TjBox.id))
@@ -140,17 +207,10 @@ async def list_tj_boxes(db: AsyncSession = Depends(get_db)):
 
 @router.post("/tj-boxes", response_model=TjBoxOut)
 async def create_tj_box(body: TjBoxCreate, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(TjBox.unique_id).where(TjBox.unique_id.like("TJ-%")).order_by(TjBox.id.desc()).limit(1))
-    last = res.scalar()
-    next_num = 5001
-    if last:
-        try:
-            next_num = int(last.split("-")[1]) + 1
-        except (IndexError, ValueError):
-            pass
     data = body.model_dump()
     data["capacity"] = data.get("tray_count", 1) * data.get("splice_per_tray", 12)
-    box = TjBox(unique_id=f"TJ-{next_num}", **data)
+    unique_id = await _next_tj_id(db)
+    box = TjBox(unique_id=unique_id, **data)
     db.add(box)
     await db.commit()
     await db.refresh(box)
@@ -443,15 +503,7 @@ async def recover_cut(cut_id: int, user: User = Depends(require_write), db: Asyn
     tj_capacity = _select_tj_capacity(core_count)
 
     # 4. Generate unique TJ ID
-    res = await db.execute(select(TjBox.unique_id).where(TjBox.unique_id.like("TJ-%")).order_by(TjBox.id.desc()).limit(1))
-    last = res.scalar()
-    next_num = 5001
-    if last:
-        try:
-            next_num = int(last.split("-")[1]) + 1
-        except (IndexError, ValueError):
-            pass
-    tj_unique_id = f"TJ-{next_num:04d}"
+    tj_unique_id = await _next_tj_id(db)
 
     # 5. Create new TJ at cut location
     new_tj = TjBox(
