@@ -37,7 +37,7 @@ logger = logging.getLogger("olt_commander.photo_processing")
 TARGET_SIZE = 1440
 MAX_FILE_SIZE = 1024 * 1024  # 1 MB
 MARGIN_PX = 30
-STAMP_FONT_SIZE = 12
+STAMP_FONT_SIZE = 48
 INITIAL_QUALITY = 85
 MIN_QUALITY = 30
 QUALITY_STEP = 5
@@ -186,7 +186,7 @@ def _apply_stamp(
     max_w = max(w1, w2, w3, w4)
 
     # Semi-transparent background
-    bg_pad = 6
+    bg_pad = 12
     bg_rect = [
         x - bg_pad,
         y_start - bg_pad,

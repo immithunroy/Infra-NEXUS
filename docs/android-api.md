@@ -480,17 +480,116 @@ cameraLauncher.launch(uri)
 
 ### Upload Photo
 
+The backend processes every photo synchronously: EXIF correction → crop → resize → stamp → compress.
+
+**Endpoint:** `POST /api/approvals/upload-photo`
+
+#### USER / Subscriber Photo
+
 ```kotlin
-suspend fun uploadPhoto(file: File): String {
+suspend fun uploadUserPhoto(
+    file: File,
+    pppoeUsername: String,
+    latitude: Double,
+    longitude: Double,
+    gpsAccuracy: Double,
+    capturedAt: String,   // ISO 8601, e.g. "2026-09-03T17:28:00+06:00"
+    categoryId: Int       // approval request ID
+): String {
     val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
-    val body = MultipartBody.Part.createFormData("file", file.name, requestFile)
-    
+    val body = MultipartBody.Part.createFormData("photo", file.name, requestFile)
+
     val response = api.uploadPhoto(
         authorization = "Bearer $token",
-        file = body
+        photo = body,
+        category = "user".toRequestBody("text/plain".toMediaTypeOrNull()),
+        entity_id = categoryId.toString().toRequestBody("text/plain".toMediaTypeOrNull()),
+        pppoe_username = pppoeUsername.toRequestBody("text/plain".toMediaTypeOrNull()),
+        latitude = latitude.toString().toRequestBody("text/plain".toMediaTypeOrNull()),
+        longitude = longitude.toString().toRequestBody("text/plain".toMediaTypeOrNull()),
+        gps_accuracy = gpsAccuracy.toString().toRequestBody("text/plain".toMediaTypeOrNull()),
+        captured_at = capturedAt.toRequestBody("text/plain".toMediaTypeOrNull()),
     )
-    
+
     return response.body()?.filename ?: throw Exception("Upload failed")
+}
+```
+
+**Stamp applied:**
+```
+PPPoE Username: qb-user001
+Date & Time: 03 Sep 2026, 05:28 PM
+GPS: 22.701234, 90.353456
+GPS Accuracy: 8.5 m
+```
+
+#### TJ Photo
+
+```kotlin
+suspend fun uploadTjPhoto(
+    file: File,
+    tjId: String,
+    latitude: Double,
+    longitude: Double,
+    gpsAccuracy: Double,
+    capturedAt: String,
+    categoryId: Int
+): String {
+    val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
+    val body = MultipartBody.Part.createFormData("photo", file.name, requestFile)
+
+    val response = api.uploadPhoto(
+        authorization = "Bearer $token",
+        photo = body,
+        category = "tj_box".toRequestBody("text/plain".toMediaTypeOrNull()),
+        entity_id = categoryId.toString().toRequestBody("text/plain".toMediaTypeOrNull()),
+        tj_id = tjId.toRequestBody("text/plain".toMediaTypeOrNull()),
+        latitude = latitude.toString().toRequestBody("text/plain".toMediaTypeOrNull()),
+        longitude = longitude.toString().toRequestBody("text/plain".toMediaTypeOrNull()),
+        gps_accuracy = gpsAccuracy.toString().toRequestBody("text/plain".toMediaTypeOrNull()),
+        captured_at = capturedAt.toRequestBody("text/plain".toMediaTypeOrNull()),
+    )
+
+    return response.body()?.filename ?: throw Exception("Upload failed")
+}
+```
+
+**Stamp applied:**
+```
+TJ ID: TJ-00125
+Date & Time: 03 Sep 2026, 05:28 PM
+GPS: 22.701234, 90.353456
+GPS Accuracy: 8.5 m
+```
+
+#### Form Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `photo` | File | Yes | Image file (JPEG, PNG, WebP, max 10 MB) |
+| `category` | String | Yes | `"user"` for subscriber, `"tj_box"` for TJ |
+| `entity_id` | String | Yes | Approval request ID |
+| `pppoe_username` | String | For USER | Subscriber PPPoE username |
+| `tj_id` | String | For TJ | TJ unique ID (e.g. `TJ-00125`) |
+| `latitude` | Float | Yes | GPS latitude (-90 to 90) |
+| `longitude` | Float | Yes | GPS longitude (-180 to 180) |
+| `gps_accuracy` | Float | Yes | GPS accuracy in meters (≥ 0) |
+| `captured_at` | String | Yes | ISO 8601 timestamp of capture |
+
+**Important:** All metadata fields must be sent for the stamp to display correctly. If metadata is missing, the stamp will show "N/A" for those fields.
+
+#### Getting GPS from Android
+
+```kotlin
+// Before taking photo, get current location
+val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+
+fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+    val latitude = location.latitude
+    val longitude = location.longitude
+    val accuracy = location.accuracy  // meters
+    val capturedAt = Instant.now().toString()  // ISO 8601
+    // Pass these to uploadUserPhoto() or uploadTjPhoto()
 }
 ```
 
