@@ -73,7 +73,7 @@ def _find_font(variant: str, size: int) -> ImageFont.FreeTypeFont:
 
 
 def _format_timestamp(dt: datetime | str | None) -> str:
-    """Format as '03 Sep 2026, 05:28 PM'."""
+    """Format as '03 Sep 2026, 05:28 PM' in local time (Asia/Dhaka, UTC+6)."""
     if dt is None:
         return "N/A"
     if isinstance(dt, str):
@@ -81,6 +81,12 @@ def _format_timestamp(dt: datetime | str | None) -> str:
             dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
         except (ValueError, TypeError):
             return dt
+    # Convert to local timezone (UTC+6 for Bangladesh)
+    from datetime import timezone, timedelta
+    local_tz = timezone(timedelta(hours=6))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    dt = dt.astimezone(local_tz)
     return dt.strftime("%d %b %Y, %I:%M %p")
 
 
