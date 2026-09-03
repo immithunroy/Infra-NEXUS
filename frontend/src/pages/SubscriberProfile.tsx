@@ -690,16 +690,6 @@ export default function SubscriberProfilePage() {
         {profile.down_reason && <><span className="text-slate-300 dark:text-slate-600">|</span> <span className="text-amber-600 dark:text-amber-400">dereg: {profile.down_reason}</span></>}
       </div>
 
-      {/* ── Field Photos ── */}
-      <div className="card p-4">
-        <PhotoGallery
-          entityType="subscriber"
-          entityId={subscriber}
-          photoTypes={SUBSCRIBER_PHOTO_TYPES}
-          photoLabels={SUBSCRIBER_PHOTO_LABELS}
-        />
-      </div>
-
       {/* ── Charts ── */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card p-3">
@@ -874,6 +864,16 @@ export default function SubscriberProfilePage() {
             </div>
           </div>
         </form>
+      </div>
+
+      {/* ── Field Photos ── */}
+      <div className="card p-4">
+        <PhotoGallery
+          entityType="subscriber"
+          entityId={subscriber}
+          photoTypes={SUBSCRIBER_PHOTO_TYPES}
+          photoLabels={SUBSCRIBER_PHOTO_LABELS}
+        />
       </div>
     </div>
   );
