@@ -133,6 +133,7 @@ def _apply_stamp(
     img: Image.Image,
     entity_type: str,
     entity_id: str,
+    entity_name: str,
     latitude: float | None,
     longitude: float | None,
     gps_accuracy: float | None,
@@ -140,25 +141,26 @@ def _apply_stamp(
 ) -> Image.Image:
     """Apply information stamp to the bottom-left corner of the image.
 
-    USER photos:  PPPoE Username + Date & Time + GPS + GPS Accuracy
-    TJ photos:    TJ ID + Date & Time + GPS + GPS Accuracy
+    USER photos:  ID + Name + Date & Time + GPS + GPS Accuracy
+    TJ photos:    ID + Name + Date & Time + GPS + GPS Accuracy
     """
     font_bold = _find_font("bold", STAMP_FONT_SIZE)
     font_regular = _find_font("regular", STAMP_FONT_SIZE)
 
     # Build label + value pairs — labels are bold, values are regular
     if entity_type == "user":
-        label1, value1 = "PPPoE Username:", entity_id
+        label1, value1 = "ID:", entity_id
     else:
-        label1, value1 = "TJ ID:", entity_id
+        label1, value1 = "ID:", entity_id
 
-    label2, value2 = "Date & Time:", _format_timestamp(captured_at)
+    label2, value2 = "Name:", entity_name or "N/A"
+    label3, value3 = "Date & Time:", _format_timestamp(captured_at)
 
     lat_str = f"{latitude:.6f}" if latitude is not None else "N/A"
     lng_str = f"{longitude:.6f}" if longitude is not None else "N/A"
-    label3, value3 = "GPS:", f"{lat_str}, {lng_str}"
+    label4, value4 = "GPS:", f"{lat_str}, {lng_str}"
 
-    label4, value4 = "GPS Accuracy:", f"{gps_accuracy:.1f} m" if gps_accuracy is not None else "N/A"
+    label5, value5 = "GPS Accuracy:", f"{gps_accuracy:.1f} m" if gps_accuracy is not None else "N/A"
 
     # Measure each line
     bbox_l1 = font_bold.getbbox(label1)
@@ -169,9 +171,11 @@ def _apply_stamp(
     bbox_v3 = font_regular.getbbox(f" {value3}")
     bbox_l4 = font_bold.getbbox(label4)
     bbox_v4 = font_regular.getbbox(f" {value4}")
+    bbox_l5 = font_bold.getbbox(label5)
+    bbox_v5 = font_regular.getbbox(f" {value5}")
 
     line_height = STAMP_FONT_SIZE + 4
-    num_lines = 4
+    num_lines = 5
     total_h = line_height * num_lines
 
     x = MARGIN_PX
@@ -189,7 +193,8 @@ def _apply_stamp(
     w2 = (bbox_l2[2] - bbox_l2[0]) + (bbox_v2[2] - bbox_v2[0])
     w3 = (bbox_l3[2] - bbox_l3[0]) + (bbox_v3[2] - bbox_v3[0])
     w4 = (bbox_l4[2] - bbox_l4[0]) + (bbox_v4[2] - bbox_v4[0])
-    max_w = max(w1, w2, w3, w4)
+    w5 = (bbox_l5[2] - bbox_l5[0]) + (bbox_v5[2] - bbox_v5[0])
+    max_w = max(w1, w2, w3, w4, w5)
 
     # Semi-transparent background
     bg_pad = 12
@@ -207,6 +212,7 @@ def _apply_stamp(
         (label2, value2, font_bold, font_regular),
         (label3, value3, font_bold, font_regular),
         (label4, value4, font_bold, font_regular),
+        (label5, value5, font_bold, font_regular),
     ]
     for i, (lbl, val, f_bold, f_reg) in enumerate(lines):
         y = y_start + i * line_height
@@ -279,6 +285,7 @@ def process_photo(
     longitude: float | None,
     gps_accuracy: float | None,
     captured_at: datetime | str | None,
+    entity_name: str = "",
 ) -> tuple[bytes, int, int]:
     """Full processing pipeline: EXIF → crop → resize → stamp → compress.
 
@@ -290,6 +297,7 @@ def process_photo(
         longitude:    GPS longitude (-180..180).
         gps_accuracy: GPS accuracy in meters (>= 0).
         captured_at:  Capture timestamp.
+        entity_name:  Customer name or TJ name (shown in stamp).
 
     Returns:
         (processed_jpeg_bytes, width, height)
@@ -336,7 +344,7 @@ def process_photo(
         img = img.resize((TARGET_SIZE, TARGET_SIZE), Image.LANCZOS)
 
     # --- 6. Apply stamp ---
-    img = _apply_stamp(img, entity_type, entity_id, latitude, longitude, gps_accuracy, captured_at)
+    img = _apply_stamp(img, entity_type, entity_id, entity_name, latitude, longitude, gps_accuracy, captured_at)
 
     # --- 7. Convert to RGB for JPEG ---
     if img.mode == "RGBA":
@@ -385,13 +393,14 @@ def process_approval_photo(
     longitude: float | None,
     gps_accuracy: float | None,
     captured_at: datetime | str | None,
+    entity_name: str = "",
 ) -> tuple[str, int, int, int]:
     """Process an approval photo, save processed version, return metadata."""
     with open(original_path, "rb") as f:
         image_bytes = f.read()
 
     processed_bytes, width, height = process_photo(
-        image_bytes, entity_type, entity_id, latitude, longitude, gps_accuracy, captured_at,
+        image_bytes, entity_type, entity_id, latitude, longitude, gps_accuracy, captured_at, entity_name,
     )
 
     original_p = Path(original_path)

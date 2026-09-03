@@ -655,6 +655,22 @@ async def upload_photo(
     # --- Process photo SYNCHRONOUSLY ---
     stamp_entity_type = "user" if category == "user" else "tj"
     stamp_entity_id = pppoe_username or tj_id or entity_id
+    stamp_entity_name = ""
+
+    # Look up entity name for stamp
+    if stamp_entity_id:
+        try:
+            from sqlalchemy import select as sa_name_select
+            if stamp_entity_type == "tj":
+                from ..models import TjBox
+                res = await db.execute(sa_name_select(TjBox.name).where(TjBox.unique_id == stamp_entity_id))
+                stamp_entity_name = res.scalar_one_or_none() or ""
+            else:
+                from ..models import Onu
+                res = await db.execute(sa_name_select(Onu.name).where(Onu.subscriber == stamp_entity_id))
+                stamp_entity_name = res.scalar_one_or_none() or ""
+        except Exception:
+            pass
 
     processed_url = None
     processed_filename = None
@@ -667,6 +683,7 @@ async def upload_photo(
                 image_bytes=content,
                 entity_type=stamp_entity_type,
                 entity_id=stamp_entity_id,
+                entity_name=stamp_entity_name,
                 latitude=latitude,
                 longitude=longitude,
                 gps_accuracy=gps_accuracy,
@@ -845,12 +862,22 @@ async def _migrate_photo_to_field(
 
         # Use PPPoE username for stamping
         stamp_entity_id = pppoe_username or pppoe_from_payload or entity_id
+        stamp_entity_name = ""
+        if stamp_entity_id:
+            try:
+                from sqlalchemy import select as sa_name_select
+                from ..models import Onu
+                res = await db.execute(sa_name_select(Onu.name).where(Onu.subscriber == stamp_entity_id))
+                stamp_entity_name = res.scalar_one_or_none() or ""
+            except Exception:
+                pass
         photo_types = _SUBSCRIBER_PHOTO_TYPES
         target_dir = _FIELD_PHOTOS_DIR / entity_type / entity_id
         logger.info("MIGRATE-PHOTO: User category — subscriber_id=%s entity_id=%s target=%s", subscriber_id, entity_id, target_dir)
     elif category == "tj_box":
         entity_type = "tj"
         stamp_entity_id = payload.get("tj_id") or payload.get("name") or ""
+        stamp_entity_name = payload.get("name") or ""
         photo_types = _TJ_PHOTO_TYPES
         # TJ unique_id not yet known — store in pending dir until approved
         target_dir = _PENDING_PHOTOS_DIR / str(approval_id)
@@ -897,6 +924,7 @@ async def _migrate_photo_to_field(
                 image_bytes=img_bytes,
                 entity_type=stamp_type,
                 entity_id=stamp_entity_id,
+                entity_name=stamp_entity_name,
                 latitude=latitude,
                 longitude=longitude,
                 gps_accuracy=gps_accuracy,
@@ -1059,10 +1087,11 @@ async def _execute_tj(action: str, entity_id: int | None, payload: dict, db: Asy
         if unique_id:
             # Mark reservation as consumed
             from ..models import TjIdReservation
+            from sqlalchemy import update as sa_update
             from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             await db.execute(
-                update(TjIdReservation)
+                sa_update(TjIdReservation)
                 .where(TjIdReservation.unique_id == unique_id)
                 .where(TjIdReservation.status == "active")
                 .where(TjIdReservation.expires_at > now)

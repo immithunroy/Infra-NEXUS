@@ -125,6 +125,22 @@ async def upload_photo(
     if entity_type == "subscriber" and pppoe_username:
         stamp_entity_id = pppoe_username
 
+    # Look up entity name for stamp
+    stamp_entity_name = ""
+    if stamp_entity_id:
+        try:
+            from sqlalchemy import select as sa_select
+            if stamp_entity_type == "tj":
+                from ..models import TjBox
+                res = await db.execute(sa_select(TjBox.name).where(TjBox.unique_id == stamp_entity_id))
+                stamp_entity_name = res.scalar_one_or_none() or ""
+            else:
+                from ..models import Onu
+                res = await db.execute(sa_select(Onu.name).where(Onu.subscriber == stamp_entity_id))
+                stamp_entity_name = res.scalar_one_or_none() or ""
+        except Exception:
+            pass
+
     # --- Process image via shared pipeline ---
     from ..services.photo_processing import process_photo
 
@@ -133,6 +149,7 @@ async def upload_photo(
             image_bytes=content,
             entity_type=stamp_entity_type,
             entity_id=stamp_entity_id,
+            entity_name=stamp_entity_name,
             latitude=latitude,
             longitude=longitude,
             gps_accuracy=gps_accuracy,
