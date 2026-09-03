@@ -79,6 +79,16 @@ async def upload_photo(
     Accepts metadata from Android app or web frontend.
     Photo is processed server-side: EXIF correction → crop → resize → stamp → compress.
     """
+    import logging
+    _log = logging.getLogger("olt_commander.photos")
+    _log.info(
+        "PHOTO-UPLOAD RECEIVED: entity_type=%s entity_id=%s photo_type=%s "
+        "pppoe_username=%s latitude=%s longitude=%s gps_accuracy=%s captured_at=%s file=%s",
+        entity_type, entity_id, photo_type,
+        pppoe_username, latitude, longitude, gps_accuracy, captured_at,
+        f"{file.filename}({file.size})" if file else "None",
+    )
+
     # --- Validate entity type ---
     if entity_type not in ENTITY_PHOTO_TYPES:
         raise HTTPException(400, f"Invalid entity type: {entity_type}. Must be 'tj' or 'subscriber'.")

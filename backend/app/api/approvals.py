@@ -537,11 +537,17 @@ async def upload_photo(
     Photo is processed synchronously: EXIF correction → crop → resize → stamp → compress.
     Processing happens BEFORE the response is returned — guaranteed.
     """
-    logger.info("UPLOAD-PHOTO request: category=%s entity_id=%s user=%s file=%s photo=%s content_type=%s",
-                category, entity_id, user.username,
-                f"{file.filename}({file.size})" if file else "None",
-                f"{photo.filename}({photo.size})" if photo else "None",
-                (file or photo).content_type if (file or photo) else "None")
+    upload = file or photo
+    logger.info(
+        "UPLOAD-PHOTO RECEIVED: category=%s entity_id=%s user=%s "
+        "pppoe_username=%s tj_id=%s latitude=%s longitude=%s gps_accuracy=%s captured_at=%s "
+        "file=%s photo=%s content_type=%s",
+        category, entity_id, user.username,
+        pppoe_username, tj_id, latitude, longitude, gps_accuracy, captured_at,
+        f"{file.filename}({file.size})" if file else "None",
+        f"{photo.filename}({photo.size})" if photo else "None",
+        upload.content_type if upload else "None",
+    )
     upload = file or photo
     if not upload:
         raise HTTPException(400, "No file uploaded")
@@ -610,8 +616,10 @@ async def upload_photo(
             processed_url = f"/api/approvals/photos/{processed_filename}"
 
             logger.info(
-                "UPLOAD-PHOTO processed synchronously: %s -> processed_%s (%dx%d, %d bytes, quality-adapted)",
-                filename, filename, width, height, len(processed_bytes)
+                "UPLOAD-PHOTO processed synchronously: %s -> processed_%s (%dx%d, %d bytes) "
+                "stamp_entity_type=%s stamp_entity_id=%s latitude=%s longitude=%s gps_accuracy=%s captured_at=%s",
+                filename, filename, width, height, len(processed_bytes),
+                stamp_entity_type, stamp_entity_id, latitude, longitude, gps_accuracy, captured_dt,
             )
 
             # Update approval status if approval_id provided
