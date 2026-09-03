@@ -331,7 +331,7 @@ async def approve_request(
 
     # Execute the change against the actual DB
     try:
-        await _execute_action(req.action, req.entity_type, req.entity_id, payload, db)
+        await _execute_action(req.action, req.entity_type, req.entity_id, payload, db, approval_id=req.id)
     except HTTPException:
         raise
     except Exception as e:
@@ -666,8 +666,8 @@ async def upload_photo(
                 res = await db.execute(sa_name_select(TjBox.name).where(TjBox.unique_id == stamp_entity_id))
                 stamp_entity_name = res.scalar_one_or_none() or ""
             else:
-                from ..models import Onu
-                res = await db.execute(sa_name_select(Onu.name).where(Onu.subscriber == stamp_entity_id))
+                from ..models import Onu as OnuModel
+                res = await db.execute(sa_name_select(OnuModel.name).where(OnuModel.subscriber == stamp_entity_id))
                 stamp_entity_name = res.scalar_one_or_none() or ""
         except Exception:
             pass
@@ -866,8 +866,8 @@ async def _migrate_photo_to_field(
         if stamp_entity_id:
             try:
                 from sqlalchemy import select as sa_name_select
-                from ..models import Onu
-                res = await db.execute(sa_name_select(Onu.name).where(Onu.subscriber == stamp_entity_id))
+                from ..models import Onu as OnuModel2
+                res = await db.execute(sa_name_select(OnuModel2.name).where(OnuModel2.subscriber == stamp_entity_id))
                 stamp_entity_name = res.scalar_one_or_none() or ""
             except Exception:
                 pass
@@ -969,19 +969,27 @@ async def _migrate_photo_to_field(
         logger.info("Saved pending TJ photo: %s (type=%s, approval=%d)", storage_key, photo_type, approval_id)
 
 
-async def _finalize_pending_tj_photos(unique_id: str, db: AsyncSession):
+async def _finalize_pending_tj_photos(unique_id: str, db: AsyncSession, approval_id: int | None = None):
     """Move pending TJ photos (stored by approval_id) into field-photos system."""
     if not _PENDING_PHOTOS_DIR.exists():
         return
+
+    # If approval_id is known, only look at that specific pending dir
+    if approval_id is not None:
+        pending_dir = _PENDING_PHOTOS_DIR / str(approval_id)
+        if pending_dir.exists() and pending_dir.is_dir():
+            await _move_pending_dir_to_field(pending_dir, unique_id, approval_id, db)
+        return
+
+    # Fallback: iterate all pending dirs (legacy path)
     for pending_dir in _PENDING_PHOTOS_DIR.iterdir():
         if not pending_dir.is_dir():
             continue
-        approval_id = pending_dir.name
-        # Check if this pending dir belongs to a TJ approval
+        aid = pending_dir.name
         try:
             result = await db.execute(
                 select(FiberApprovalRequest).where(
-                    FiberApprovalRequest.id == int(approval_id),
+                    FiberApprovalRequest.id == int(aid),
                     FiberApprovalRequest.entity_type == "tj",
                 )
             )
@@ -991,17 +999,47 @@ async def _finalize_pending_tj_photos(unique_id: str, db: AsyncSession):
         except (ValueError, Exception):
             continue
 
-        dest_dir = _FIELD_PHOTOS_DIR / "tj" / unique_id
-        dest_dir.mkdir(parents=True, exist_ok=True)
+        await _move_pending_dir_to_field(pending_dir, unique_id, int(aid), db)
+        break
 
-        photo_types = _TJ_PHOTO_TYPES
-        for photo_type in photo_types:
-            src = pending_dir / f"{photo_type}.jpg"
-            if not src.exists():
-                continue
-            dst = dest_dir / f"{photo_type}.jpg"
-            dst.write_bytes(src.read_bytes())
-            rel_key = f"tj/{unique_id}/{photo_type}.jpg"
+    await db.flush()
+
+
+async def _move_pending_dir_to_field(pending_dir, unique_id: str, approval_id: int, db: AsyncSession):
+    """Move photos from a single pending dir into field-photos system."""
+    result = await db.execute(
+        select(FiberApprovalRequest).where(FiberApprovalRequest.id == approval_id)
+    )
+    req = result.scalar_one_or_none()
+    if not req:
+        return
+
+    dest_dir = _FIELD_PHOTOS_DIR / "tj" / unique_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    photo_types = _TJ_PHOTO_TYPES
+    for photo_type in photo_types:
+        src = pending_dir / f"{photo_type}.jpg"
+        if not src.exists():
+            continue
+        dst = dest_dir / f"{photo_type}.jpg"
+        dst.write_bytes(src.read_bytes())
+        rel_key = f"tj/{unique_id}/{photo_type}.jpg"
+
+        # Upsert: update existing or create new
+        existing = (await db.execute(
+            select(FieldPhoto).where(
+                FieldPhoto.entity_type == "tj",
+                FieldPhoto.entity_id == unique_id,
+                FieldPhoto.photo_type == photo_type,
+            )
+        )).scalar_one_or_none()
+
+        if existing:
+            existing.storage_key = rel_key
+            existing.file_size = src.stat().st_size
+            existing.captured_by = req.submitted_by_name or ""
+        else:
             db.add(FieldPhoto(
                 entity_type="tj",
                 entity_id=unique_id,
@@ -1013,12 +1051,9 @@ async def _finalize_pending_tj_photos(unique_id: str, db: AsyncSession):
                 captured_by=req.submitted_by_name or "",
             ))
 
-        # Clean up pending dir
-        import shutil
-        shutil.rmtree(pending_dir, ignore_errors=True)
-        logger.info("Finalized pending TJ photos: approval #%s -> tj/%s", approval_id, unique_id)
-        break  # only one pending dir per TJ approval
-
+    import shutil
+    shutil.rmtree(pending_dir, ignore_errors=True)
+    logger.info("Finalized pending TJ photos: approval #%s -> tj/%s", approval_id, unique_id)
     await db.flush()
 
 
@@ -1055,10 +1090,10 @@ async def _next_link_id(db) -> str:
     return f"LINK-{num:04d}"
 
 
-async def _execute_action(action: str, entity_type: str, entity_id: int | None, payload: dict, db: AsyncSession):
+async def _execute_action(action: str, entity_type: str, entity_id: int | None, payload: dict, db: AsyncSession, approval_id: int | None = None):
     """Execute an approved action against the actual database."""
     if entity_type in ("tj", "tj_box"):
-        await _execute_tj(action, entity_id, payload, db)
+        await _execute_tj(action, entity_id, payload, db, approval_id=approval_id)
     elif entity_type == "tj_splitter":
         await _execute_tj_splitter(action, entity_id, payload, db)
     elif entity_type == "cable":
@@ -1066,7 +1101,7 @@ async def _execute_action(action: str, entity_type: str, entity_id: int | None, 
     elif entity_type == "splitter":
         await _execute_splitter(action, entity_id, payload, db)
     elif entity_type == "splice_box":
-        await _execute_tj(action, entity_id, payload, db)  # splice box = TJ box
+        await _execute_tj(action, entity_id, payload, db, approval_id=approval_id)  # splice box = TJ box
     elif entity_type == "user":
         await _execute_user(action, entity_id, payload, db)
     elif entity_type == "user_location":
@@ -1080,7 +1115,7 @@ async def _execute_action(action: str, entity_type: str, entity_id: int | None, 
     # "other" type has no auto-execution — requires manual handling
 
 
-async def _execute_tj(action: str, entity_id: int | None, payload: dict, db: AsyncSession):
+async def _execute_tj(action: str, entity_id: int | None, payload: dict, db: AsyncSession, approval_id: int | None = None):
     if action == "create":
         # Use reserved unique_id from payload if present, otherwise generate
         unique_id = payload.get("unique_id")
@@ -1151,7 +1186,7 @@ async def _execute_tj(action: str, entity_id: int | None, payload: dict, db: Asy
             db.add(splitter)
 
         # Move pending photos from approval upload into field-photos system
-        await _finalize_pending_tj_photos(unique_id, db)
+        await _finalize_pending_tj_photos(unique_id, db, approval_id=approval_id)
     elif action == "update" and entity_id:
         result = await db.execute(select(TjBox).where(TjBox.id == entity_id))
         box = result.scalar_one_or_none()

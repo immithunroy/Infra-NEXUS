@@ -135,8 +135,8 @@ async def upload_photo(
                 res = await db.execute(sa_select(TjBox.name).where(TjBox.unique_id == stamp_entity_id))
                 stamp_entity_name = res.scalar_one_or_none() or ""
             else:
-                from ..models import Onu
-                res = await db.execute(sa_select(Onu.name).where(Onu.subscriber == stamp_entity_id))
+                from ..models import Onu as OnuPhoto
+                res = await db.execute(sa_select(OnuPhoto.name).where(OnuPhoto.subscriber == stamp_entity_id))
                 stamp_entity_name = res.scalar_one_or_none() or ""
         except Exception:
             pass
