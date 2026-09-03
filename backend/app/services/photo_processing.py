@@ -18,7 +18,7 @@ Pipeline:
     3. Crop to square (center)
     4. Resize to 1440×1440 (~2 MP)
     5. Apply stamp (Open Sans 12, bottom-left, 30px margin)
-    6. JPEG compress — progressive quality reduction until < 1 MB
+    6. JPEG compress — progressive quality reduction until < 500 KB
     7. Return processed bytes, width, height
 """
 
@@ -35,7 +35,7 @@ logger = logging.getLogger("olt_commander.photo_processing")
 
 # Constants
 TARGET_SIZE = 1440
-MAX_FILE_SIZE = 1024 * 1024  # 1 MB
+MAX_FILE_SIZE = 500 * 1024  # 500 KB
 MARGIN_PX = 30
 STAMP_FONT_SIZE = 50
 INITIAL_QUALITY = 85
