@@ -212,6 +212,59 @@ def _apply_stamp(
     return img
 
 
+def _extract_exif_gps(img: Image.Image) -> tuple[float | None, float | None, datetime | None]:
+    """Extract GPS coordinates and timestamp from EXIF data.
+
+    Returns (latitude, longitude, captured_at) — any may be None.
+    """
+    lat, lng, ts = None, None, None
+    try:
+        exif_data = img.getexif()
+    except Exception:
+        return lat, lng, ts
+
+    if not exif_data:
+        return lat, lng, ts
+
+    # Extract timestamp from EXIF
+    for tag_id, tag_name in ExifTags.TAGS.items():
+        if tag_name == "DateTimeOriginal":
+            raw = exif_data.get(tag_id)
+            if raw:
+                try:
+                    ts = datetime.strptime(raw, "%Y:%m:%d %H:%M:%S")
+                except (ValueError, TypeError):
+                    pass
+            break
+
+    # Extract GPS info
+    gps_info = exif_data.get(0x8825)  # GPSInfo tag
+    if not gps_info:
+        return lat, lng, ts
+
+    def _to_degrees(value):
+        """Convert GPS coordinates from (degrees, minutes, seconds) to decimal degrees."""
+        d, m, s = value
+        return float(d) + float(m) / 60 + float(s) / 3600
+
+    gps_lat = gps_info.get(2)  # GPSLatitude
+    gps_lat_ref = gps_info.get(1)  # GPSLatitudeRef
+    gps_lng = gps_info.get(4)  # GPSLongitude
+    gps_lng_ref = gps_info.get(3)  # GPSLongitudeRef
+
+    if gps_lat and gps_lat_ref:
+        lat = _to_degrees(gps_lat)
+        if gps_lat_ref == "S":
+            lat = -lat
+
+    if gps_lng and gps_lng_ref:
+        lng = _to_degrees(gps_lng)
+        if gps_lng_ref == "W":
+            lng = -lng
+
+    return lat, lng, ts
+
+
 def process_photo(
     image_bytes: bytes,
     entity_type: str,
@@ -246,6 +299,20 @@ def process_photo(
 
     # --- 2. Correct EXIF orientation ---
     img = _correct_exif_orientation(img)
+
+    # --- 2b. Extract GPS + timestamp from EXIF if not provided ---
+    if latitude is None or longitude is None or captured_at is None:
+        exif_lat, exif_lng, exif_ts = _extract_exif_gps(img)
+        if latitude is None:
+            latitude = exif_lat
+        if longitude is None:
+            longitude = exif_lng
+        if captured_at is None and exif_ts is not None:
+            captured_at = exif_ts
+    logger.info(
+        "STAMP VALUES: entity=%s/%s latitude=%s longitude=%s accuracy=%s captured_at=%s",
+        entity_type, entity_id, latitude, longitude, gps_accuracy, captured_at,
+    )
 
     # --- 3. Convert to RGB ---
     if img.mode not in ("RGB",):
