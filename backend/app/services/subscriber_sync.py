@@ -90,6 +90,21 @@ async def sync_subscribers(
                     sub.is_deleted = True
                     sub.deleted_at = now
                     soft_deleted += 1
+                    # Delete field photos for this subscriber
+                    from ..models import FieldPhoto
+                    import shutil
+                    from pathlib import Path
+                    photos = (await session.execute(
+                        select(FieldPhoto).where(
+                            FieldPhoto.entity_type == "subscriber",
+                            FieldPhoto.entity_id == sub.pppoe_username,
+                        )
+                    )).scalars().all()
+                    for p in photos:
+                        await session.delete(p)
+                    photo_dir = Path("/app/uploads/field-photos/subscriber") / sub.pppoe_username
+                    if photo_dir.exists():
+                        shutil.rmtree(photo_dir, ignore_errors=True)
 
     await session.flush()
     log.info(
