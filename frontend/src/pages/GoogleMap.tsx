@@ -1235,12 +1235,24 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {activeTab === "links" && filteredCables.map((c) => (
-            <div key={c.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-xs" onClick={() => highlightObject("cable", c.id)}>
-              <div className="font-semibold text-slate-900 dark:text-white">{c.code}</div>
-              <div className="text-slate-500">{c.core_count}C · {c.cable_type} · {c.manufacturer}</div>
-            </div>
-          ))}
+          {activeTab === "links" && (
+            <>
+              <input className="input text-xs w-full mb-1 py-1" placeholder="Search links..." value={searchCables} onChange={(e) => setSearchCables(e.target.value)} />
+              {filteredCables.map((c) => {
+                const lenM = cableLengthM(c);
+                return (
+                  <div key={c.id} className={`rounded-md border p-2 cursor-pointer transition ${highlightedObject?.type === "cable" && highlightedObject?.id === c.id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => { setSelectedCable(c); highlightObject("cable", c.id); }}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">{c.link_id || "?"} | {c.link_name || c.code}</span>
+                      <span className="badge text-[10px] ml-1 shrink-0" style={{ background: CORE_COLORS[c.core_count] || "#6b7280", color: "white" }}>{c.core_count}C</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{c.manufacturer || "?"} | {c.code} · {(lenM / 1000).toFixed(2)} km · +10%: {Math.round(lenM * 1.10).toLocaleString()} m</div>
+                    {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0" onClick={(e) => { e.stopPropagation(); startEdit("cable", c); }}>Edit</button><button className="btn-ghost text-[10px] py-0 text-red-600" onClick={(e) => { e.stopPropagation(); deleteItem("cable", c.id); }}>Del</button></div>}
+                  </div>
+                );
+              })}
+            </>
+          )}
           {activeTab === "tj" && filteredTj.map((t) => (
             <div key={t.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-xs" onClick={() => highlightObject("tj", t.id)}>
               <div className="font-semibold text-slate-900 dark:text-white">{t.unique_id} — {t.name}</div>
