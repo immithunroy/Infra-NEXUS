@@ -330,6 +330,7 @@ These fields are forced to uppercase:
 - Trigger: Push to `main` branch
 - Steps: SSH → git pull → docker compose build → up -d → prune images
 - No manual intervention required
+- **If CI/CD fails:** Clear build cache on server, notify user. Do NOT do manual deployment (scp/cp files into container).
 
 ### 10.2 Container Rebuild
 
