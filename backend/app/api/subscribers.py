@@ -121,17 +121,6 @@ async def list_subscribers(
         sel = sel.where(Onu.bound == True)  # noqa: E712
     elif status == "unbound":
         sel = sel.where(Onu.bound == False)  # noqa: E712
-    elif status == "disabled":
-        # Disabled subscribers: check Subscriber table
-        disabled_usernames = (
-            await db.execute(
-                select(SubscriberModel.pppoe_username).where(
-                    SubscriberModel.disabled == True,  # noqa: E712
-                    SubscriberModel.is_deleted == False,  # noqa: E712
-                )
-            )
-        ).scalars().all()
-        sel = sel.where(Onu.subscriber.in_(disabled_usernames))
 
     # Text search
     if q:
@@ -158,6 +147,63 @@ async def list_subscribers(
         sel = sel.order_by(sort_col.asc())
 
     sel = sel.limit(limit)
+
+    # Disabled tab: query subscribers table directly (disabled accounts may not have ONUs)
+    if status == "disabled":
+        sub_sel = (
+            select(SubscriberModel)
+            .where(SubscriberModel.disabled == True, SubscriberModel.is_deleted == False)  # noqa: E712
+        )
+        if q:
+            like = f"%{q}%"
+            sub_sel = sub_sel.where(SubscriberModel.pppoe_username.ilike(like))
+        if order == "desc":
+            sub_sel = sub_sel.order_by(SubscriberModel.pppoe_username.desc())
+        else:
+            sub_sel = sub_sel.order_by(SubscriberModel.pppoe_username.asc())
+        sub_sel = sub_sel.limit(limit)
+        subs = (await db.execute(sub_sel)).scalars().all()
+
+        # Try to match with ONUs
+        sub_usernames = [s.pppoe_username for s in subs]
+        onu_map: dict[str, Onu] = {}
+        if sub_usernames:
+            onus_match = (
+                await db.execute(
+                    select(Onu).options(selectinload(Onu.olt)).where(Onu.subscriber.in_(sub_usernames))
+                )
+            ).scalars().all()
+            onu_map = {o.subscriber: o for o in onus_match}
+
+        vendors = await vendor_map(db, [onu_map[u].last_mac for u in sub_usernames if u in onu_map])
+        acs_by_onu = await _acs_map(db)
+        out: list[SubscriberSummary] = []
+        for s in subs:
+            o = onu_map.get(s.pppoe_username)
+            state = (o.state.value if hasattr(o.state, "value") else str(o.state)) if o else "inactive"
+            out.append(
+                SubscriberSummary(
+                    subscriber=s.pppoe_username,
+                    onu_id=o.id if o else 0,
+                    onu_name=o.name if o else "",
+                    olt_name=o.olt.name if o and o.olt else "",
+                    pon_port=o.pon_port if o else "",
+                    last_mac=o.last_mac if o else "",
+                    mac_vendor=vendors.get((o.last_mac if o else "").lower(), ""),
+                    mikrotik_ip=o.mikrotik_ip if o else "",
+                    state=state,
+                    bound=o.bound if o else False,
+                    down_reason=o.down_reason if o else "",
+                    status="disabled",
+                    disabled=True,
+                    acs_device_id=acs_by_onu.get(o.id) if o else None,
+                    rx_power=o.rx_power if o else None,
+                    tx_power=o.tx_power if o else None,
+                    mac_change_count=0,
+                    last_seen=o.last_seen if o else None,
+                )
+            )
+        return out
     onus = (await db.execute(sel)).scalars().all()
 
     counts: dict[int, int] = {}
