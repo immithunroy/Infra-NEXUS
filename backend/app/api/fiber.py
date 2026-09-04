@@ -308,6 +308,18 @@ async def delete_tj_box(box_id: int, user: User = Depends(require_write), db: As
     splitters = (await db.execute(select(Splitter).where(Splitter.tj_box_id == box_id))).scalars().all()
     for sp in splitters:
         await db.delete(sp)
+    # Delete field photos (DB + disk)
+    from ..models import FieldPhoto
+    import shutil
+    from pathlib import Path
+    photos = (await db.execute(
+        select(FieldPhoto).where(FieldPhoto.entity_type == "tj", FieldPhoto.entity_id == box.unique_id)
+    )).scalars().all()
+    for p in photos:
+        await db.delete(p)
+    photo_dir = Path("/app/uploads/field-photos/tj") / box.unique_id
+    if photo_dir.exists():
+        shutil.rmtree(photo_dir, ignore_errors=True)
     await db.delete(box)
     await db.commit()
 
