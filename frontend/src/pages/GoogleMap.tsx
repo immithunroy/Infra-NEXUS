@@ -1419,6 +1419,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
               <div className="mt-4 flex gap-2">
                 <button className="btn-primary text-xs" onClick={() => startCableEdit(selectedCable)}>Edit Path</button>
                 <button className="btn-secondary text-xs" onClick={() => { setSelectedCable(null); startEdit("cable", selectedCable); }}>Edit Info</button>
+                <button className="btn-danger text-xs" onClick={() => { setSelectedCable(null); deleteItem("cable", selectedCable.id); }}>Delete</button>
               </div>
             )}
           </div>
@@ -1445,7 +1446,11 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
               <SubscriberLink subscriber={selectedUser.subscriber || ""} />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Serial</div><div className="font-mono font-semibold">{selectedUser.serial || "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Connected OLT</div><div className="font-semibold">{selectedUser.olt_name || "—"}</div></div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">PON Port</div><div className="font-mono font-semibold">{selectedUser.pon_port || "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">GPS Accuracy</div><div className="font-semibold">{selectedUser.gps_accuracy != null ? `±${selectedUser.gps_accuracy}m` : "—"}</div></div>
               </div>
               <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3">
                 <div className="text-xs text-slate-400">Address</div>

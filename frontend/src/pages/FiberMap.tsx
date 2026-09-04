@@ -1097,6 +1097,7 @@ export default function FiberMap() {
             <TjDetailPanel tj={selectedTj} cables={cables} splitters={splitters} splices={splices} onClose={() => setSelectedTj(null)} onSpliceChange={load} writeOk={writeOk}
               onAddSplitter={() => { setSplitterForm({ split_ratio: 2, tj_box_id: selectedTj.id, lat: selectedTj.lat, lng: selectedTj.lng }); setEditingId(null); setShowForm("splitter"); }}
               onEditSplitter={(sp) => { setEditingId(sp.id); setEditKind("splitter"); setSplitterForm(sp as any); setShowForm("splitter"); }}
+              onDelete={() => { setSelectedTj(null); deleteItem("tj", selectedTj.id); }}
             />
           </div>
         </div>
@@ -1156,6 +1157,7 @@ export default function FiberMap() {
               <div className="mt-4 flex gap-2">
                 <button className="btn-primary text-xs" onClick={() => startCableEdit(selectedCable)}>Edit Path</button>
                 <button className="btn-secondary text-xs" onClick={() => { setSelectedCable(null); startEdit("cable", selectedCable); }}>Edit Info</button>
+                <button className="btn-danger text-xs" onClick={() => { setSelectedCable(null); deleteItem("cable", selectedCable.id); }}>Delete</button>
               </div>
             )}
           </div>
@@ -1181,7 +1183,11 @@ export default function FiberMap() {
               <SubscriberLink subscriber={selectedUser.subscriber || ""} />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Serial</div><div className="font-mono font-semibold">{selectedUser.serial || "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Connected OLT</div><div className="font-semibold">{selectedUser.olt_name || "—"}</div></div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">PON Port</div><div className="font-mono font-semibold">{selectedUser.pon_port || "—"}</div></div>
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">GPS Accuracy</div><div className="font-semibold">{selectedUser.gps_accuracy != null ? `±${selectedUser.gps_accuracy}m` : "—"}</div></div>
               </div>
               <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3">
                 <div className="text-xs text-slate-400">Address</div>
@@ -1692,7 +1698,7 @@ function CoreSelect({ coreCount, value, onChange, occupiedCores, spareCores }: {
   );
 }
 
-function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange, writeOk, onAddSplitter, onEditSplitter }: { tj: TjBox; cables: Cable[]; splitters: Splitter[]; splices: any[]; onClose: () => void; onSpliceChange: () => void; writeOk: boolean; onAddSplitter?: () => void; onEditSplitter?: (sp: Splitter) => void }) {
+function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange, writeOk, onAddSplitter, onEditSplitter, onDelete }: { tj: TjBox; cables: Cable[]; splitters: Splitter[]; splices: any[]; onClose: () => void; onSpliceChange: () => void; writeOk: boolean; onAddSplitter?: () => void; onEditSplitter?: (sp: Splitter) => void; onDelete?: () => void }) {
   const hostedSplitters = useMemo(() => splitters.filter((s) => s.tj_box_id === tj.id), [splitters, tj.id]);
   const connectedCables = useMemo(() => cables.filter((c) => {
     if (!c.segments?.length) return false;
@@ -1808,7 +1814,8 @@ function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange
           {tj.notes && <p className="text-xs text-slate-400 mt-1">{tj.notes}</p>}
         </div>
         <div className="flex items-center gap-1">
-          <button className="btn-secondary text-[10px] py-1 px-2" onClick={() => { setTjEditForm({ name: tj.name || "", address: tj.address || "", notes: tj.notes || "" }); setShowTjEdit(true); }}>Edit</button>
+          {writeOk && <button className="btn-secondary text-[10px] py-1 px-2" onClick={() => { setTjEditForm({ name: tj.name || "", address: tj.address || "", notes: tj.notes || "" }); setShowTjEdit(true); }}>Edit</button>}
+          {writeOk && onDelete && <button className="btn-danger text-[10px] py-1 px-2" onClick={onDelete}>Delete</button>}
           <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
