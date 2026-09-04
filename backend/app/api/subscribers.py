@@ -30,7 +30,6 @@ from pydantic import BaseModel
 
 class RemoteProbeRequest(BaseModel):
     ips: list[str] = []
-from ..security import get_current_user
 
 router = APIRouter(
     prefix="/api/subscribers", tags=["subscribers"], dependencies=[Depends(get_current_user)]
@@ -436,91 +435,6 @@ def _avg(vals: list[float]) -> float | None:
     return round(sum(vals) / len(vals), 2)
 
 
-@router.get("/{subscriber}", response_model=SubscriberProfile)
-async def subscriber_profile(
-    subscriber: str,
-    hours: int = Query(default=168, le=8760),
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    """Full subscriber profile: current state + optical history + MAC changes."""
-    onu = (
-        await db.execute(
-            select(Onu).options(selectinload(Onu.olt)).where(Onu.subscriber == subscriber)
-        )
-    ).scalars().first()
-    if onu is None:
-        raise HTTPException(status_code=404, detail="Subscriber not found")
-
-    role = user_role(user)
-    can_edit = role in ("admin", "global_write")
-    if not can_edit:
-        assigned = (
-            await db.execute(
-                select(Ticket).where(
-                    Ticket.assigned_to == user.id,
-                    Ticket.onu_id == onu.id,
-                    Ticket.status.in_((TicketStatus.open, TicketStatus.in_progress)),
-                )
-            )
-        ).scalar_one_or_none()
-        can_edit = assigned is not None
-
-    acs_by_onu = await _acs_map(db)
-
-    since = utcnow() - timedelta(hours=hours)
-    telemetry_rows = (
-        await db.execute(
-            select(OnuTelemetry)
-            .where(OnuTelemetry.onu_id == onu.id, OnuTelemetry.sampled_at >= since)
-            .order_by(OnuTelemetry.sampled_at)
-        )
-    ).scalars().all()
-    mac_rows = (
-        await db.execute(
-            select(OnuMacHistory)
-            .where(OnuMacHistory.onu_id == onu.id)
-            .order_by(OnuMacHistory.changed_at.desc())
-            .limit(200)
-        )
-    ).scalars().all()
-
-    vendors = await vendor_map(
-        db, [onu.last_mac] + [m.mac for m in mac_rows]
-    )
-    state = onu.state.value if hasattr(onu.state, "value") else str(onu.state)
-    return SubscriberProfile(
-        subscriber=onu.subscriber,
-        onu_id=onu.id,
-        onu_name=onu.name,
-        olt_name=onu.olt.name if onu.olt else "",
-        pon_port=onu.pon_port,
-        serial=onu.serial,
-        last_mac=onu.last_mac,
-        mac_vendor=vendors.get(onu.last_mac.lower(), ""),
-        mikrotik_ip=onu.mikrotik_ip,
-        state=state,
-        bound=onu.bound,
-        can_edit_gps=can_edit,
-        down_reason=onu.down_reason or "",
-        status=display_status(state, onu.bound, onu.down_reason or ""),
-        acs_device_id=acs_by_onu.get(onu.id),
-        address=onu.address,
-        gps_lat=onu.gps_lat,
-        gps_lng=onu.gps_lng,
-        gps_accuracy=onu.gps_accuracy,
-        phone=onu.phone,
-        email=onu.email,
-        note=onu.note,
-        telemetry=_telemetry_points(telemetry_rows),
-        mac_history=[
-            MacHistoryEntry(mac=m.mac, mac_vendor=vendors.get(m.mac.lower(), ""), changed_at=m.changed_at)
-            for m in mac_rows
-        ],
-        last_seen=onu.last_seen,
-    )
-
-
 @router.get("/export")
 async def export_users(format: str = Query("xlsx", regex="^(xlsx|json)$"), db: AsyncSession = Depends(get_db)):
     """Export all subscribers with address fields, PPPoE username, MAC history, and router brand."""
@@ -646,4 +560,89 @@ async def export_users(format: str = Query("xlsx", regex="^(xlsx|json)$"), db: A
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=subscribers_export.xlsx"},
+    )
+
+
+@router.get("/{subscriber}", response_model=SubscriberProfile)
+async def subscriber_profile(
+    subscriber: str,
+    hours: int = Query(default=168, le=8760),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Full subscriber profile: current state + optical history + MAC changes."""
+    onu = (
+        await db.execute(
+            select(Onu).options(selectinload(Onu.olt)).where(Onu.subscriber == subscriber)
+        )
+    ).scalars().first()
+    if onu is None:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+
+    role = user_role(user)
+    can_edit = role in ("admin", "global_write")
+    if not can_edit:
+        assigned = (
+            await db.execute(
+                select(Ticket).where(
+                    Ticket.assigned_to == user.id,
+                    Ticket.onu_id == onu.id,
+                    Ticket.status.in_((TicketStatus.open, TicketStatus.in_progress)),
+                )
+            )
+        ).scalar_one_or_none()
+        can_edit = assigned is not None
+
+    acs_by_onu = await _acs_map(db)
+
+    since = utcnow() - timedelta(hours=hours)
+    telemetry_rows = (
+        await db.execute(
+            select(OnuTelemetry)
+            .where(OnuTelemetry.onu_id == onu.id, OnuTelemetry.sampled_at >= since)
+            .order_by(OnuTelemetry.sampled_at)
+        )
+    ).scalars().all()
+    mac_rows = (
+        await db.execute(
+            select(OnuMacHistory)
+            .where(OnuMacHistory.onu_id == onu.id)
+            .order_by(OnuMacHistory.changed_at.desc())
+            .limit(200)
+        )
+    ).scalars().all()
+
+    vendors = await vendor_map(
+        db, [onu.last_mac] + [m.mac for m in mac_rows]
+    )
+    state = onu.state.value if hasattr(onu.state, "value") else str(onu.state)
+    return SubscriberProfile(
+        subscriber=onu.subscriber,
+        onu_id=onu.id,
+        onu_name=onu.name,
+        olt_name=onu.olt.name if onu.olt else "",
+        pon_port=onu.pon_port,
+        serial=onu.serial,
+        last_mac=onu.last_mac,
+        mac_vendor=vendors.get(onu.last_mac.lower(), ""),
+        mikrotik_ip=onu.mikrotik_ip,
+        state=state,
+        bound=onu.bound,
+        can_edit_gps=can_edit,
+        down_reason=onu.down_reason or "",
+        status=display_status(state, onu.bound, onu.down_reason or ""),
+        acs_device_id=acs_by_onu.get(onu.id),
+        address=onu.address,
+        gps_lat=onu.gps_lat,
+        gps_lng=onu.gps_lng,
+        gps_accuracy=onu.gps_accuracy,
+        phone=onu.phone,
+        email=onu.email,
+        note=onu.note,
+        telemetry=_telemetry_points(telemetry_rows),
+        mac_history=[
+            MacHistoryEntry(mac=m.mac, mac_vendor=vendors.get(m.mac.lower(), ""), changed_at=m.changed_at)
+            for m in mac_rows
+        ],
+        last_seen=onu.last_seen,
     )
