@@ -131,15 +131,7 @@ function TjSearchSelect({ label, tjBoxes, value, onChange, excludeId }: {
 }
 
 export default function GoogleMap() {
-  const { role } = useUserRole();
-  const writeOk = canWrite(role);
-
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: "",
-    libraries: LIBRARIES,
-  });
-
-  const [apiKeyReady, setApiKeyReady] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
   const [apiKeyLoading, setApiKeyLoading] = useState(true);
   const [apiKeyError, setApiKeyError] = useState("");
 
@@ -147,13 +139,48 @@ export default function GoogleMap() {
     api.get<any[]>("/settings").then((list) => {
       const found = list.find((s: any) => s.key === "google_maps_api_key");
       if (found?.value) {
-        setApiKeyReady(true);
+        setApiKey(found.value);
       } else {
         setApiKeyError("Google Maps API key not configured. Go to Settings → API Keys.");
       }
     }).catch(() => setApiKeyError("Failed to load API key settings."))
       .finally(() => setApiKeyLoading(false));
   }, []);
+
+  if (apiKeyLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto" />
+          <div className="text-sm text-slate-500">Loading API key...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (apiKeyError || !apiKey) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="text-center space-y-3 max-w-md">
+          <div className="text-red-500 text-lg font-semibold">Google Maps Not Configured</div>
+          <div className="text-sm text-slate-500">{apiKeyError || "No API key found."}</div>
+          <a href="/settings" className="btn-primary inline-block text-sm">Go to Settings</a>
+        </div>
+      </div>
+    );
+  }
+
+  return <GoogleMapInner apiKey={apiKey} />;
+}
+
+function GoogleMapInner({ apiKey }: { apiKey: string }) {
+  const { role } = useUserRole();
+  const writeOk = canWrite(role);
+
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey,
+    libraries: LIBRARIES,
+  });
 
   const [cables, setCables] = useState<Cable[]>([]);
   const [tjBoxes, setTjBoxes] = useState<TjBox[]>([]);
@@ -1097,29 +1124,6 @@ export default function GoogleMap() {
   }, [planner.waypoints, planner.phase, planner.srcTj, planner.dstTj, customWaypoints, drawCable, cableEdit, selectedWaypoint]);
 
   const formatDistance = (m: number) => m >= 1000 ? (m / 1000).toFixed(2) + " km" : Math.round(m) + " m";
-
-  if (apiKeyLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto" />
-          <div className="text-sm text-slate-500">Loading API key...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (apiKeyError) {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <div className="text-center space-y-3 max-w-md">
-          <div className="text-red-500 text-lg font-semibold">Google Maps Not Configured</div>
-          <div className="text-sm text-slate-500">{apiKeyError}</div>
-          <a href="/settings" className="btn-primary inline-block text-sm">Go to Settings</a>
-        </div>
-      </div>
-    );
-  }
 
   if (loadError) {
     return (
