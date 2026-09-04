@@ -9,6 +9,7 @@ import SubscriberLink from "../components/SubscriberLink";
 import StatusBadge from "../components/StatusBadge";
 import { fmtTimeShort } from "../lib/time";
 import { useUserRole } from "../lib/role";
+import { tjTooltip, cableTooltip, loopTooltip, cutTooltip, userTooltip, nocTooltip, popTooltip, splitterTooltip, tooltipWrap } from "../lib/mapTooltips";
 
 interface TempSegment {
   start_lat: number; start_lng: number; end_lat: number; end_lng: number; order_index: number;
@@ -880,19 +881,29 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     polylinesRef.current.forEach((p) => p.setMap(null));
     polylinesRef.current.clear();
 
+    // Initialize shared InfoWindow for hover tooltips
+    if (!infoWindowRef.current) {
+      infoWindowRef.current = new google.maps.InfoWindow({ content: "", pixelOffset: new google.maps.Size(0, -10) });
+    }
+    const iw = infoWindowRef.current;
+
     // NOC/POP
     if (netLayers.pop) {
       for (const noc of nocPopData.nocs) {
-        const m = new google.maps.Marker({ position: { lat: noc.lat, lng: noc.lng }, map, icon: { url: nocSvgUrl(), scaledSize: new google.maps.Size(28, 28) }, title: noc.name });
+        const m = new google.maps.Marker({ position: { lat: noc.lat, lng: noc.lng }, map, icon: { url: nocSvgUrl(), scaledSize: new google.maps.Size(28, 28) } });
+        m.addListener("mouseover", () => { iw.setContent(nocTooltip(noc)); iw.open({ anchor: m, map }); });
+        m.addListener("mouseout", () => iw.close());
         markersRef.current.set(`noc-${noc.id}`, m);
       }
       for (const pop of nocPopData.pops) {
-        const m = new google.maps.Marker({ position: { lat: pop.lat, lng: pop.lng }, map, icon: { url: popSvgUrl(), scaledSize: new google.maps.Size(24, 24) }, title: pop.name });
+        const m = new google.maps.Marker({ position: { lat: pop.lat, lng: pop.lng }, map, icon: { url: popSvgUrl(), scaledSize: new google.maps.Size(24, 24) } });
+        m.addListener("mouseover", () => { iw.setContent(popTooltip(pop)); iw.open({ anchor: m, map }); });
+        m.addListener("mouseout", () => iw.close());
         markersRef.current.set(`pop-${pop.id}`, m);
       }
     }
 
-    // Cables
+    // Cables — polyline hover tooltip
     if (netLayers.fiberCable) {
       for (const cable of cables) {
         if (!cable.segments?.length) continue;
@@ -901,6 +912,16 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         const pl = new google.maps.Polyline({ path, map, strokeColor: color, strokeOpacity: 0.8, strokeWeight: 3 });
         pl.addListener("click", () => setSelectedCable(cable));
         pl.addListener("dblclick", () => { if (writeOk) startCableEdit(cable); });
+        pl.addListener("mouseover", (e: google.maps.MapMouseEvent) => {
+          if (!e.latLng) return;
+          iw.setContent(cableTooltip(cable, tjBoxes, loops));
+          iw.setPosition(e.latLng);
+          iw.open(map);
+        });
+        pl.addListener("mousemove", (e: google.maps.MapMouseEvent) => {
+          if (e.latLng) iw.setPosition(e.latLng);
+        });
+        pl.addListener("mouseout", () => iw.close());
         polylinesRef.current.set(cable.id, pl);
       }
     }
@@ -909,11 +930,13 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     if (netLayers.tjBox) {
       for (const tj of tjBoxes) {
         const color = TJ_ICONS[tj.box_type] || "#6366f1";
+        const hostedSps = splitters.filter((s) => s.tj_box_id === tj.id);
         const m = new google.maps.Marker({
           position: { lat: tj.lat, lng: tj.lng }, map,
           icon: { url: tjSvgUrl(color), scaledSize: new google.maps.Size(24, 24), anchor: new google.maps.Point(12, 12) },
-          title: `${tj.unique_id} — ${tj.name}`,
         });
+        m.addListener("mouseover", () => { iw.setContent(tjTooltip(tj, hostedSps)); iw.open({ anchor: m, map }); });
+        m.addListener("mouseout", () => iw.close());
         m.addListener("click", () => {
           if (drawCable.active && drawCable.sourceTj?.id !== tj.id) { finishDrawCable(tj); return; }
           if (planner.phase === "select-src") { setPlanner((p) => ({ ...p, srcTj: tj, phase: "select-dst" as PlanPhase })); return; }
@@ -959,8 +982,9 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         const m = new google.maps.Marker({
           position: { lat: sp.lat, lng: sp.lng }, map,
           icon: { url: splitterSvgUrl(color), scaledSize: new google.maps.Size(20, 20), anchor: new google.maps.Point(10, 10) },
-          title: `${sp.unique_id} — ${sp.name || "Splitter"} 1:${sp.split_ratio}`,
         });
+        m.addListener("mouseover", () => { iw.setContent(splitterTooltip(sp)); iw.open({ anchor: m, map }); });
+        m.addListener("mouseout", () => iw.close());
         m.addListener("click", () => {
           if (planner.phase === "select-src" || planner.phase === "select-dst") return;
           setSplitterForm(sp); setEditingId(sp.id); setEditKind("splitter"); setShowForm("splitter");
@@ -974,8 +998,9 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       const m = new google.maps.Marker({
         position: { lat: loop.lat, lng: loop.lng }, map,
         icon: { url: loopSvgUrl(), scaledSize: new google.maps.Size(24, 24), anchor: new google.maps.Point(12, 12) },
-        title: `Loop ${loop.loop_length_m}m`,
       });
+      m.addListener("mouseover", () => { iw.setContent(loopTooltip(loop)); iw.open({ anchor: m, map }); });
+      m.addListener("mouseout", () => iw.close());
       m.addListener("click", () => { setLoopForm(loop); setShowForm("loop"); });
       markersRef.current.set(`loop-${loop.id}`, m);
     }
@@ -986,8 +1011,9 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       const m = new google.maps.Marker({
         position: { lat: cut.lat, lng: cut.lng }, map,
         icon: { url: cutSvgUrl(color), scaledSize: new google.maps.Size(22, 22), anchor: new google.maps.Point(11, 11) },
-        title: `Cable Cut — ${cut.status}`,
       });
+      m.addListener("mouseover", () => { iw.setContent(cutTooltip(cut)); iw.open({ anchor: m, map }); });
+      m.addListener("mouseout", () => iw.close());
       m.addListener("click", () => { setCutForm(cut); setShowForm("cut"); });
       markersRef.current.set(`cut-${cut.id}`, m);
     }
@@ -1001,8 +1027,9 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         const m = new google.maps.Marker({
           position: { lat: p.gps_lat, lng: p.gps_lng }, map,
           icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="${color}" stroke="white" stroke-width="1.5"/></svg>`)}`, scaledSize: new google.maps.Size(12, 12), anchor: new google.maps.Point(6, 6) },
-          title: `${p.name || p.subscriber} — ${p.status}`,
         });
+        m.addListener("mouseover", () => { iw.setContent(userTooltip(p, fmtTimeShort)); iw.open({ anchor: m, map }); });
+        m.addListener("mouseout", () => iw.close());
         m.addListener("click", () => setSelectedUser(p));
         markersRef.current.set(`user-${p.olt_id}-${p.onu_id}`, m);
       }
@@ -1053,11 +1080,15 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     // Custom draw waypoints
     if (planner.phase === "custom-draw" && customWaypoints.length > 0) {
       if (planner.srcTj) {
-        const m = new google.maps.Marker({ position: { lat: planner.srcTj.lat, lng: planner.srcTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#22c55e" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) }, title: "Source TJ" });
+        const m = new google.maps.Marker({ position: { lat: planner.srcTj.lat, lng: planner.srcTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#22c55e" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) } });
+        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("<b>Source TJ</b><br>" + planner.srcTj!.name)); iw.open({ anchor: m, map }); } });
+        m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }
       if (planner.dstTj) {
-        const m = new google.maps.Marker({ position: { lat: planner.dstTj.lat, lng: planner.dstTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#3b82f6" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) }, title: "Destination TJ" });
+        const m = new google.maps.Marker({ position: { lat: planner.dstTj.lat, lng: planner.dstTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#3b82f6" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) } });
+        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("<b>Destination TJ</b><br>" + planner.dstTj!.name)); iw.open({ anchor: m, map }); } });
+        m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }
       const allPts = [...(planner.srcTj ? [{ lat: planner.srcTj.lat, lng: planner.srcTj.lng }] : []), ...customWaypoints, ...(planner.dstTj ? [{ lat: planner.dstTj.lat, lng: planner.dstTj.lng }] : [])];
@@ -1079,7 +1110,9 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     // Draw cable mode
     if (drawCable.active) {
       if (drawCable.sourceTj) {
-        const m = new google.maps.Marker({ position: { lat: drawCable.sourceTj.lat, lng: drawCable.sourceTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#22c55e" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) }, title: "Source TJ" });
+        const m = new google.maps.Marker({ position: { lat: drawCable.sourceTj.lat, lng: drawCable.sourceTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#22c55e" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) } });
+        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("<b>Source TJ</b><br>" + drawCable.sourceTj!.name)); iw.open({ anchor: m, map }); } });
+        m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }
       if (drawCable.routePoints.length >= 2) {
