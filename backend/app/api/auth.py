@@ -43,8 +43,8 @@ async def change_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
     # Validate new password length
-    if len(body.newPassword) < 6:
-        raise HTTPException(status_code=422, detail="New password must be at least 6 characters")
+    if len(body.newPassword) < 8:
+        raise HTTPException(status_code=422, detail="New password must be at least 8 characters")
 
     # Confirm new password matches
     if body.newPassword != body.confirmPassword:
