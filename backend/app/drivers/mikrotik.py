@@ -31,6 +31,14 @@ class ActiveSession:
 
 
 @dataclass
+class SecretInfo:
+    name: str = ""
+    disabled: bool = False
+    service: str = ""
+    profile: str = ""
+
+
+@dataclass
 class BgpSessionInfo:
     name: str = ""
     remote_as: int = 0
@@ -99,8 +107,8 @@ class MikrotikDriver:
         except Exception as exc:
             raise DriverError(f"Mikrotik connection failed: {exc}") from exc
 
-    async def collect(self) -> tuple[list[ActiveSession], int, int]:
-        """Return (PPPoE active sessions, PPP secret count, active count).
+    async def collect(self) -> tuple[list[ActiveSession], list[SecretInfo], int]:
+        """Return (PPPoE active sessions, PPP secrets, active count).
 
         The secret table is the total subscriber population; the active
         table carries the client's MAC (caller-id), IP and PPPoE username.
@@ -123,7 +131,15 @@ class MikrotikDriver:
                     subscriber_id=str(row.get("name", "")),
                 )
             )
-        return sessions, len(secrets), len(ppp_active)
+        secret_list: list[SecretInfo] = []
+        for s in secrets:
+            secret_list.append(SecretInfo(
+                name=str(s.get("name", "")),
+                disabled=bool(s.get("disabled", False)),
+                service=str(s.get("service", "")),
+                profile=str(s.get("profile", "")),
+            ))
+        return sessions, secret_list, len(ppp_active)
 
     def _collect_bgp(self) -> tuple[list[dict], list[dict]]:
         api = self._connect()

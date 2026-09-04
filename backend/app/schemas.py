@@ -554,6 +554,7 @@ class SubscriberSummary(BaseModel):
     bound: bool = False
     down_reason: str = ""
     status: str = ""
+    disabled: bool = False
     acs_device_id: int | None = None
     rx_power: float | None = None
     tx_power: float | None = None

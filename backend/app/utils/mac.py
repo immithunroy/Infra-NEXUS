@@ -49,6 +49,11 @@ def find_mac(text: str) -> str:
     return ""
 
 
+def macs_equal(a: str, b: str) -> bool:
+    """Compare two MAC addresses using normalized form."""
+    return normalize_mac(a) == normalize_mac(b)
+
+
 def find_macs(text: str) -> list[str]:
     """Extract all valid MAC addresses from arbitrary text."""
     if not text:

@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Binding, MacEntry, MikrotikDevice, OLTDevice, Onu, OnuMacHistory, PppActiveEntry
+from ..utils.mac import normalize_mac
 from ..utils.time import utcnow
 
 logger = logging.getLogger("olt_commander.binding")
@@ -30,8 +31,9 @@ async def _get_binding(session: AsyncSession, mac: str, olt_id: int) -> Binding:
 
 
 async def _find_onu_id(session: AsyncSession, olt_id: int, mac: str, port: str) -> int | None:
-    if mac:
-        res = await session.execute(select(Onu.id).where(Onu.olt_id == olt_id, Onu.last_mac == mac))
+    mac_norm = normalize_mac(mac)
+    if mac_norm:
+        res = await session.execute(select(Onu.id).where(Onu.olt_id == olt_id, Onu.last_mac == mac_norm))
         onu_id = res.scalar_one_or_none()
         if onu_id is not None:
             return onu_id
@@ -66,8 +68,9 @@ async def run_bindings(session: AsyncSession) -> dict:
     # Authoritative subscriber sessions: MAC -> (session, mikrotik).
     active_by_mac: dict[str, tuple[PppActiveEntry, MikrotikDevice]] = {}
     for act, mkt in active_rows:
-        if act.mac not in active_by_mac:
-            active_by_mac[act.mac] = (act, mkt)
+        mac_norm = normalize_mac(act.mac)
+        if mac_norm and mac_norm not in active_by_mac:
+            active_by_mac[mac_norm] = (act, mkt)
 
     # The OLT only locates the ONU for each MAC (PON port -> ONU).
     onu_by_mac: dict[tuple[int, str], int] = {}
@@ -80,15 +83,16 @@ async def run_bindings(session: AsyncSession) -> dict:
     unmatched = 0
 
     for mac_entry, olt in mac_rows:
-        hit = active_by_mac.get(mac_entry.mac)
+        mac_norm = normalize_mac(mac_entry.mac)
+        hit = active_by_mac.get(mac_norm)
         if hit is not None:
             act, mkt = hit
             matched += 1
         else:
             act, mkt = None, None
 
-        binding = await _get_binding(session, mac_entry.mac, olt.id)
-        binding.mac = mac_entry.mac
+        binding = await _get_binding(session, mac_norm, olt.id)
+        binding.mac = mac_norm
         binding.olt_id = olt.id
         binding.olt_port = mac_entry.port
         binding.mikrotik_id = mkt.id if mkt else None
@@ -96,7 +100,7 @@ async def run_bindings(session: AsyncSession) -> dict:
         binding.mikrotik_interface = act.interface if act else ""
         binding.subscriber = act.subscriber if act else ""
         binding.bound = hit is not None
-        binding.onu_id = onu_by_mac.get((olt.id, mac_entry.mac))
+        binding.onu_id = onu_by_mac.get((olt.id, mac_norm))
         binding.last_checked = now
 
         # Mirror the result onto the linked ONU record (if any). Only a MAC
@@ -107,27 +111,29 @@ async def run_bindings(session: AsyncSession) -> dict:
         if binding.onu_id is not None and hit is not None:
             onu = await session.get(Onu, binding.onu_id)
             if onu is not None:
-                if onu.last_mac and onu.last_mac != mac_entry.mac:
+                onu_mac_norm = normalize_mac(onu.last_mac)
+                if onu.last_mac and onu_mac_norm != mac_norm:
                     # Switch CPE/router only when the current MAC is no longer
                     # matched anymore; otherwise another bound MAC exists on
                     # this port and we keep the existing one to avoid flapping.
-                    if active_by_mac.get(onu.last_mac) is None:
+                    if active_by_mac.get(onu_mac_norm) is None:
                         session.add(
                             OnuMacHistory(onu_id=onu.id, mac=onu.last_mac, changed_at=now)
                         )
-                        onu.last_mac = mac_entry.mac
+                        onu.last_mac = mac_norm
                 else:
-                    onu.last_mac = mac_entry.mac
+                    onu.last_mac = mac_norm
                 onu.bound = True
                 onu.mikrotik_ip = act.ip
                 onu.subscriber = act.subscriber
 
     # Any ONU whose last MAC no longer matches a live PPPoE session is
     # unbound now (also clears stale bound/subscriber left with no MAC).
-    bound_macs = {e.mac for e, _ in mac_rows if e.mac in active_by_mac}
+    bound_macs = {normalize_mac(e.mac) for e, _ in mac_rows if normalize_mac(e.mac) in active_by_mac}
     onus = (await session.execute(select(Onu))).scalars().all()
     for onu in onus:
-        if onu.bound and (not onu.last_mac or onu.last_mac not in bound_macs):
+        onu_mac_norm = normalize_mac(onu.last_mac)
+        if onu.bound and (not onu.last_mac or onu_mac_norm not in bound_macs):
             onu.bound = False
             onu.mikrotik_ip = ""
             onu.subscriber = ""

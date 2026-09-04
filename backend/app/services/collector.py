@@ -223,7 +223,7 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
 
     driver = MikrotikDriver(device)
     try:
-        entries, secret_count, active_count = await driver.collect()
+        entries, secrets, active_count = await driver.collect()
     except DriverError as exc:
         device.status = "unreachable"
         device.last_message = str(exc)[:1000]
@@ -270,11 +270,18 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
             delete(PppActiveEntry).where(PppActiveEntry.device_id == device_id, PppActiveEntry.mac.notin_(seen_macs))
         )
 
-    device.subscriber_count = secret_count
+    device.subscriber_count = len(secrets)
     device.active_count = active_count
     await session.flush()
     device.status = "reachable"
     device.last_scan_at = utcnow()
+
+    # Sync PPPoE secrets into subscribers table (best-effort)
+    try:
+        from .subscriber_sync import sync_subscribers
+        await sync_subscribers(session, device_id, secrets)
+    except Exception as sync_exc:
+        _log.warning("Subscriber sync failed for device %d: %s", device_id, sync_exc)
 
     # Collect BGP data (best-effort, non-fatal if unsupported)
     bgp_msg = ""

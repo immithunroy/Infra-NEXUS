@@ -8,25 +8,54 @@ import StatusBadge from "../components/StatusBadge";
 import { RemoteAccessButton } from "../components/RemoteAccess";
 import { Pagination, usePagination } from "../components/Pagination";
 
+type TabKey = "active" | "unbound" | "disabled";
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "active", label: "Subscribers" },
+  { key: "unbound", label: "Unbound" },
+  { key: "disabled", label: "Disabled / Expired" },
+];
+
 export default function Subscribers() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<SubscriberSummary[]>([]);
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState<TabKey>("active");
+  const [sortCol, setSortCol] = useState<string>("subscriber");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(true);
   const { page, setPage, totalPages, slice, total, pageSize } = usePagination(rows);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    const params: Record<string, string> = { limit: "1000" };
+    if (q) params.q = q;
+    if (tab) params.status = tab;
+    params.sort = sortCol;
+    params.order = sortDir;
     api
-      .get<SubscriberSummary[]>(`/subscribers?q=${encodeURIComponent(q)}&limit=1000`)
+      .get<SubscriberSummary[]>("/subscribers", params)
       .then((r) => alive && setRows(r))
       .catch(() => alive && setRows([]))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [q]);
+  }, [q, tab, sortCol, sortDir]);
+
+  const toggleSort = (col: string) => {
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (sortCol !== col) return <span className="ml-1 text-slate-300 dark:text-slate-600">↕</span>;
+    return <span className="ml-1 text-brand-600 dark:text-brand-400">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
 
   return (
     <div className="space-y-6">
@@ -39,6 +68,23 @@ export default function Subscribers() {
         </div>
         <span className="badge bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">{rows.length} subscribers</span>
       </header>
+
+      {/* Tabs */}
+      <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => { setTab(t.key); setPage(1); }}
+            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              tab === t.key
+                ? "bg-white text-slate-900 shadow dark:bg-slate-700 dark:text-white"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       <div className="card flex flex-wrap items-end gap-3 p-4">
         <div className="flex-1">
@@ -53,7 +99,9 @@ export default function Subscribers() {
           <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
             <tr>
               <th className="th">#</th>
-              <th className="th">Subscriber ID</th>
+              <th className="th cursor-pointer select-none" onClick={() => toggleSort("subscriber")}>
+                Subscriber ID <SortIcon col="subscriber" />
+              </th>
               <th className="th">OLT / Port</th>
               <th className="th">Name</th>
               <th className="th">Current MAC</th>
@@ -124,7 +172,11 @@ export default function Subscribers() {
             {rows.length === 0 && (
               <tr>
                 <td className="td" colSpan={9}>
-                  {loading ? "Loading…" : "No subscribers yet. Run a Mikrotik scan and a binding pass — subscribers appear once their MAC is matched."}
+                  {loading ? "Loading…" : tab === "active"
+                    ? "No subscribers yet. Run a Mikrotik scan and a binding pass — subscribers appear once their MAC is matched."
+                    : tab === "unbound"
+                    ? "No unbound subscribers."
+                    : "No disabled/expired subscribers."}
                 </td>
               </tr>
             )}

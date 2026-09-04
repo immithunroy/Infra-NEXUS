@@ -435,6 +435,7 @@ export interface SubscriberSummary {
   bound: boolean;
   down_reason: string;
   status: string;
+  disabled: boolean;
   acs_device_id: number | null;
   rx_power: number | null;
   tx_power: number | null;

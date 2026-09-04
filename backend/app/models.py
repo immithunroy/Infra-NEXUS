@@ -839,3 +839,23 @@ class TjIdReservation(Base):
     reserved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | expired | consumed
+
+
+class Subscriber(Base):
+    """Subscriber record synced from MikroTik PPPoE secrets."""
+
+    __tablename__ = "subscribers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pppoe_username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    mikrotik_device_id: Mapped[int | None] = mapped_column(ForeignKey("mikrotik_devices.id"), nullable=True, index=True)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    service: Mapped[str] = mapped_column(String(64), default="")
+    profile: Mapped[str] = mapped_column(String(128), default="")
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

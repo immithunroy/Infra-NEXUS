@@ -69,3 +69,24 @@ async def init_db() -> None:
         """))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_tj_id_reservations_status ON tj_id_reservations (status)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_tj_id_reservations_expires ON tj_id_reservations (expires_at)"))
+        # Subscribers table (synced from MikroTik PPPoE secrets)
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS subscribers (
+                id SERIAL PRIMARY KEY,
+                pppoe_username VARCHAR(128) NOT NULL UNIQUE,
+                mikrotik_device_id INTEGER,
+                disabled BOOLEAN DEFAULT FALSE,
+                service VARCHAR(64) DEFAULT '',
+                profile VARCHAR(128) DEFAULT '',
+                last_synced_at TIMESTAMPTZ,
+                first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ,
+                is_deleted BOOLEAN DEFAULT FALSE,
+                deleted_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_username ON subscribers (pppoe_username)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_mikrotik ON subscribers (mikrotik_device_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_deleted ON subscribers (is_deleted)"))

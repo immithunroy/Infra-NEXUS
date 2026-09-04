@@ -94,17 +94,46 @@ def _telemetry_points(rows: list[OnuTelemetry]) -> list[TelemetryPoint]:
 @router.get("", response_model=list[SubscriberSummary])
 async def list_subscribers(
     q: str | None = Query(default=None),
+    status: str | None = Query(default=None, description="active|unbound|disabled"),
+    sort: str | None = Query(default=None, description="subscriber|state|bound|last_seen"),
+    order: str = Query(default="asc", description="asc|desc"),
     limit: int = Query(default=500, le=2000),
     db: AsyncSession = Depends(get_db),
 ):
-    """List subscribers (ONUs carrying a PPPoE username)."""
+    """List subscribers (ONUs carrying a PPPoE username).
+
+    status filter:
+      - omitted/all: all ONUs with a PPPoE username (backward compat)
+      - active: currently bound (Onu.bound == True)
+      - unbound: has PPPoE username but not bound
+      - disabled: subscriber marked as disabled/billing-expired
+    """
+    from ..models import Subscriber as SubscriberModel
+
     sel = (
         select(Onu)
         .options(selectinload(Onu.olt))
         .where(Onu.subscriber != "")
-        .order_by(Onu.subscriber)
-        .limit(limit)
     )
+
+    # Status filtering
+    if status == "active":
+        sel = sel.where(Onu.bound == True)  # noqa: E712
+    elif status == "unbound":
+        sel = sel.where(Onu.bound == False)  # noqa: E712
+    elif status == "disabled":
+        # Disabled subscribers: check Subscriber table
+        disabled_usernames = (
+            await db.execute(
+                select(SubscriberModel.pppoe_username).where(
+                    SubscriberModel.disabled == True,  # noqa: E712
+                    SubscriberModel.is_deleted == False,  # noqa: E712
+                )
+            )
+        ).scalars().all()
+        sel = sel.where(Onu.subscriber.in_(disabled_usernames))
+
+    # Text search
     if q:
         like = f"%{q}%"
         sel = sel.where(
@@ -113,6 +142,22 @@ async def list_subscribers(
             | Onu.pon_port.ilike(like)
             | Onu.last_mac.ilike(like)
         )
+
+    # Sorting
+    sort_col = Onu.subscriber
+    if sort == "state":
+        sort_col = Onu.state
+    elif sort == "bound":
+        sort_col = Onu.bound
+    elif sort == "last_seen":
+        sort_col = Onu.last_seen
+
+    if order == "desc":
+        sel = sel.order_by(sort_col.desc())
+    else:
+        sel = sel.order_by(sort_col.asc())
+
+    sel = sel.limit(limit)
     onus = (await db.execute(sel)).scalars().all()
 
     counts: dict[int, int] = {}
@@ -127,10 +172,27 @@ async def list_subscribers(
         counts = {onu_id: c for onu_id, c in rows}
 
     vendors = await vendor_map(db, [o.last_mac for o in onus])
+
+    # Check disabled status from subscribers table
+    disabled_set: set[str] = set()
+    if onus:
+        sub_usernames = [o.subscriber for o in onus]
+        disabled_rows = (
+            await db.execute(
+                select(SubscriberModel.pppoe_username).where(
+                    SubscriberModel.pppoe_username.in_(sub_usernames),
+                    SubscriberModel.disabled == True,  # noqa: E712
+                    SubscriberModel.is_deleted == False,  # noqa: E712
+                )
+            )
+        ).scalars().all()
+        disabled_set = set(disabled_rows)
+
     out: list[SubscriberSummary] = []
     acs_by_onu = await _acs_map(db)
     for o in onus:
         state = o.state.value if hasattr(o.state, "value") else str(o.state)
+        is_disabled = o.subscriber in disabled_set
         out.append(
             SubscriberSummary(
                 subscriber=o.subscriber,
@@ -144,7 +206,8 @@ async def list_subscribers(
                 state=state,
                 bound=o.bound,
                 down_reason=o.down_reason or "",
-                status=display_status(state, o.bound, o.down_reason or ""),
+                status=display_status(state, o.bound, o.down_reason or "", disabled=is_disabled),
+                disabled=is_disabled,
                 acs_device_id=acs_by_onu.get(o.id),
                 rx_power=o.rx_power,
                 tx_power=o.tx_power,
