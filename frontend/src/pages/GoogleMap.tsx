@@ -1253,24 +1253,81 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
               })}
             </>
           )}
-          {activeTab === "tj" && filteredTj.map((t) => (
-            <div key={t.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-xs" onClick={() => highlightObject("tj", t.id)}>
-              <div className="font-semibold text-slate-900 dark:text-white">{t.unique_id} — {t.name}</div>
-              <div className="text-slate-500">{t.tj_port}P · {t.box_type}</div>
+          {activeTab === "tj" && (
+            <>
+              <input className="input text-xs w-full mb-1 py-1" placeholder="Search TJs..." value={searchTj} onChange={(e) => setSearchTj(e.target.value)} />
+              {filteredTj.filter((t) => !searchTj || t.name.toLowerCase().includes(searchTj.toLowerCase()) || t.unique_id.toLowerCase().includes(searchTj.toLowerCase())).map((t) => (
+                <div key={t.id} className={`rounded-md border p-2 cursor-pointer transition ${highlightedObject?.type === "tj" && highlightedObject?.id === t.id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => { setSelectedTj(t); highlightObject("tj", t.id); }}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs">{t.unique_id}</span>
+                    <span className="badge text-[10px]" style={{ background: TJ_ICONS[t.box_type] || "#6b7280", color: "white" }}>{t.box_type}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{t.name} · {t.tj_port}p · {t.capacity}cap</div>
+                  {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0" onClick={(e) => { e.stopPropagation(); startEdit("tj", t); }}>Edit</button><button className="btn-ghost text-[10px] py-0 text-red-600" onClick={(e) => { e.stopPropagation(); deleteItem("tj", t.id); }}>Del</button></div>}
+                </div>
+              ))}
+            </>
+          )}
+          {activeTab === "splitters" && (
+            <>
+              <input className="input text-xs w-full mb-1 py-1" placeholder="Search splitters..." value={searchSp} onChange={(e) => setSearchSp(e.target.value)} />
+              {filteredSplitters.filter((s) => !searchSp || (s.name || "").toLowerCase().includes(searchSp.toLowerCase()) || s.unique_id.toLowerCase().includes(searchSp.toLowerCase())).map((s) => {
+                const loss = splitterLoss(s.split_ratio);
+                return (
+                  <div key={s.id} className={`rounded-md border p-2 cursor-pointer transition ${highlightedObject?.type === "splitter" && highlightedObject?.id === s.id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => { startEdit("splitter", s); highlightObject("splitter", s.id); }}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs font-semibold">{s.unique_id}</span>
+                      <span className="badge text-[10px]" style={{ background: SPLITTER_RATIO_COLORS[s.split_ratio] || "#f59e0b", color: "white" }}>1:{s.split_ratio}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{s.name || "—"} · {loss.toFixed(1)} dB · {s.tj_box_name || "no TJ"}</div>
+                    {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0" onClick={(e) => { e.stopPropagation(); startEdit("splitter", s); }}>Edit</button><button className="btn-ghost text-[10px] py-0 text-red-600" onClick={(e) => { e.stopPropagation(); deleteItem("splitter", s.id); }}>Del</button></div>}
+                  </div>
+                );
+              })}
+            </>
+          )}
+          {activeTab === "users" && (
+            <div className="flex flex-col h-full">
+              {/* Status summary */}
+              <div className="flex gap-2 px-1 py-1.5 text-[10px] font-medium border-b border-slate-200 dark:border-slate-700 shrink-0">
+                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("all")}>
+                  <span className="inline-block w-2 h-2 rounded-full bg-slate-400" />All {mapPoints.length}
+                </span>
+                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("online")}>
+                  <span className="inline-block w-2 h-2 rounded-full bg-green-500" />{userStatusSummary["pppoe"] || 0}
+                </span>
+                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("offline")}>
+                  <span className="inline-block w-2 h-2 rounded-full bg-orange-500" />{userStatusSummary["power_off"] || 0}
+                </span>
+                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("wire_down")}>
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />{userStatusSummary["wire_down"] || 0}
+                </span>
+                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("unknown")}>
+                  <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />{userStatusSummary["unknown"] || 0}
+                </span>
+                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("lost")}>
+                  <span className="inline-block w-2 h-2 rounded-full bg-purple-500" />{userStatusSummary["lost"] || 0}
+                </span>
+              </div>
+              {/* Search */}
+              <div className="px-2 pt-2 shrink-0">
+                <input className="input text-xs w-full py-1" placeholder="Search users..." value={userSidebarSearch} onChange={(e) => setUserSidebarSearch(e.target.value)} />
+              </div>
+              {/* User list */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {sidebarUsers.map((p) => (
+                  <div key={`${p.olt_id}-${p.onu_id}`} className={`rounded-md border p-2 cursor-pointer transition ${highlightedObject?.type === "user" && highlightedObject?.id === `${p.olt_id}-${p.onu_id}` ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : selectedUser?.onu_id === p.onu_id && selectedUser?.olt_id === p.olt_id ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"}`} onClick={() => { setSelectedUser(p); highlightObject("user", `${p.olt_id}-${p.onu_id}`); }}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium truncate max-w-[140px]">{p.name || "—"}</span>
+                      <StatusBadge status={p.status} />
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 truncate">{p.subscriber || "—"} · {p.serial || "—"}</div>
+                    <div className="text-[10px] text-slate-400 truncate">{p.pon_port || "—"}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-          {activeTab === "splitters" && filteredSplitters.map((s) => (
-            <div key={s.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-xs" onClick={() => highlightObject("splitter", s.id)}>
-              <div className="font-semibold text-slate-900 dark:text-white">{s.unique_id} — {s.name || "Splitter"}</div>
-              <div className="text-slate-500">1:{s.split_ratio}</div>
-            </div>
-          ))}
-          {activeTab === "users" && sidebarUsers.map((p) => (
-            <div key={`${p.olt_id}-${p.onu_id}`} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-xs" onClick={() => highlightObject("user", `${p.olt_id}-${p.onu_id}`)}>
-              <div className="font-semibold text-slate-900 dark:text-white">{p.name || p.subscriber}</div>
-              <div className="text-slate-500">{p.status} · {p.pon_port}</div>
-            </div>
-          ))}
+          )}
         </div>
       </div>
 
