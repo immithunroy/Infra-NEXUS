@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../theme";
 import { api, downloadFile } from "../api/client";
 import { useUserRole } from "../lib/role";
@@ -20,6 +20,23 @@ export default function Settings() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // API Keys state
+  const [gmapsKey, setGmapsKey] = useState("");
+  const [gmapsOrig, setGmapsOrig] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyMsg, setKeyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [showKey, setShowKey] = useState(false);
+
+  useEffect(() => {
+    api.get<any[]>("/settings").then((list) => {
+      const found = list.find((s) => s.key === "google_maps_api_key");
+      if (found) {
+        setGmapsKey(found.value);
+        setGmapsOrig(found.value);
+      }
+    }).catch(() => {});
+  }, []);
 
   const handleChangePassword = async () => {
     setPwMsg(null);
@@ -51,6 +68,21 @@ export default function Settings() {
       setPwMsg({ ok: false, text: detail });
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    setKeyMsg(null);
+    setSavingKey(true);
+    try {
+      await api.put("/settings/google_maps_api_key", { value: gmapsKey });
+      setGmapsOrig(gmapsKey);
+      setKeyMsg({ ok: true, text: "Google Maps API key saved." });
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "Failed to save";
+      setKeyMsg({ ok: false, text: detail });
+    } finally {
+      setSavingKey(false);
     }
   };
 
@@ -136,6 +168,43 @@ export default function Settings() {
               <div className="text-xs text-slate-500 dark:text-slate-400">Default map tile layer</div>
             </div>
             <span className="text-xs text-slate-500 dark:text-slate-400">Controlled via map selector</span>
+          </div>
+        </div>
+      </section>
+
+      {/* API Keys */}
+      <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">API Keys</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Google Maps API Key</label>
+            <div className="flex gap-2">
+              <input
+                type={showKey ? "text" : "password"}
+                value={gmapsKey}
+                onChange={(e) => setGmapsKey(e.target.value)}
+                className="input flex-1 font-mono text-xs"
+                placeholder="AIza..."
+              />
+              <button type="button" onClick={() => setShowKey(!showKey)} className="px-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs">{showKey ? "Hide" : "Show"}</button>
+            </div>
+            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              Required for Google Map page. Get one at{" "}
+              <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Google Cloud Console</a>.
+              Enable <strong>Maps JavaScript API</strong> and <strong>Geocoding API</strong>.
+            </div>
+            {keyMsg && (
+              <div className={`text-xs px-3 py-2 rounded mt-2 ${keyMsg.ok ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"}`}>
+                {keyMsg.text}
+              </div>
+            )}
+            <button
+              className="btn-primary text-xs py-1.5 px-3 mt-2"
+              onClick={handleSaveApiKey}
+              disabled={savingKey || gmapsKey === gmapsOrig}
+            >
+              {savingKey ? "Saving..." : "Save Key"}
+            </button>
           </div>
         </div>
       </section>

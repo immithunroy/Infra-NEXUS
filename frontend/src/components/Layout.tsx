@@ -16,6 +16,7 @@ const links = [
   { to: "/routing", label: "Routing", icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" },
   { to: "/live-downs", label: "Live Down Detection", icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
   { to: "/fiber-map", label: "Network Map", icon: "M4 4h16v4H4zM4 12h10v4H4zM4 20h6v0H4zM14 12l6 8M20 12l-6 8" },
+  { to: "/google-map", label: "Google Map", icon: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" },
   { to: "/reports", label: "Reports", icon: "M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
   { to: "/scans", label: "Scan Logs", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
   { to: "/schedule-jobs", label: "Schedule Jobs", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
@@ -30,7 +31,7 @@ export default function Layout() {
   const [navOpen, setNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const isMapPage = location.pathname === "/fiber-map";
+  const isMapPage = location.pathname === "/fiber-map" || location.pathname === "/google-map";
 
   useEffect(() => {
     api.get<UserOut>("/auth/me").then(setUser).catch(() => undefined);

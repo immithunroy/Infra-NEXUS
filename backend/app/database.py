@@ -90,3 +90,11 @@ async def init_db() -> None:
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_username ON subscribers (pppoe_username)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_mikrotik ON subscribers (mikrotik_device_id)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_deleted ON subscribers (is_deleted)"))
+        # Settings table (key-value store for runtime configuration)
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key VARCHAR(128) PRIMARY KEY,
+                value TEXT DEFAULT '',
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))

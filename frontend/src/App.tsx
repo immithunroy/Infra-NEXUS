@@ -8,6 +8,7 @@ import Bindings from "./pages/Bindings";
 import Dashboard from "./pages/Dashboard";
 import Devices from "./pages/Devices";
 import FiberMap from "./pages/FiberMap";
+import GoogleMap from "./pages/GoogleMap";
 import LiveDowns from "./pages/LiveDowns";
 import Login from "./pages/Login";
 import NocApprovals from "./pages/NocApprovals";
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="/acs" element={<Acs />} />
             <Route path="/live-downs" element={<LiveDowns />} />
             <Route path="/fiber-map" element={<FiberMap />} />
+            <Route path="/google-map" element={<GoogleMap />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/routing" element={<Routing />} />
             <Route path="/users" element={<Users />} />
