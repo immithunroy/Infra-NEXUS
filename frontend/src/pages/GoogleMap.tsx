@@ -324,8 +324,21 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     setDrawCable((d) => { if (!d.active) return d; return { ...d, mousePos: { lat, lng } }; });
   }, []);
 
-  const confirmDrawWaypoint = useCallback(() => {
-    setDrawCable((d) => { if (!d.active || !d.mousePos) return d; return { ...d, routePoints: [...d.routePoints, d.mousePos], mousePos: null }; });
+  const confirmDrawWaypoint = useCallback((lat?: number, lng?: number) => {
+    setDrawCable((d) => {
+      if (!d.active) return d;
+      let pt: { lat: number; lng: number };
+      if (lat != null && lng != null) {
+        pt = { lat, lng };
+      } else if (d.mousePos) {
+        pt = { lat: d.mousePos.lat, lng: d.mousePos.lng };
+      } else {
+        return d;
+      }
+      const last = d.routePoints[d.routePoints.length - 1];
+      if (last && last.lat === pt.lat && last.lng === pt.lng) return d;
+      return { ...d, routePoints: [...d.routePoints, pt], mousePos: null };
+    });
   }, []);
 
   const undoDrawWaypoint = useCallback(() => {
@@ -737,7 +750,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     map.addListener("click", (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
       const lat = e.latLng.lat(), lng = e.latLng.lng();
-      if (drawCable.active) { confirmDrawWaypoint(); return; }
+      if (drawCable.active) { confirmDrawWaypoint(lat, lng); return; }
       if (cableEdit) { addEditWaypoint(lat, lng); return; }
       if (planner.phase === "custom-draw") { addCustomWaypoint(lat, lng); return; }
       if (planner.phase === "draw") { addWaypoint(lat, lng); return; }
@@ -810,7 +823,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     map.addListener("click", (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
       const lat = e.latLng.lat(), lng = e.latLng.lng();
-      if (drawCable.active) { confirmDrawWaypoint(); return; }
+      if (drawCable.active) { confirmDrawWaypoint(lat, lng); return; }
       if (cableEdit) { addEditWaypoint(lat, lng); return; }
       if (planner.phase === "custom-draw") { addCustomWaypoint(lat, lng); return; }
       if (planner.phase === "draw") { addWaypoint(lat, lng); return; }
@@ -1417,7 +1430,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         {drawCable.active && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 px-4 py-2 flex items-center gap-3 text-sm">
             <span className="text-slate-600 dark:text-slate-300">Click to place points, click a TJ to finish</span>
-            <button className="btn-primary text-xs py-1" onClick={confirmDrawWaypoint}>Add Point</button>
+            <button className="btn-primary text-xs py-1" onClick={() => confirmDrawWaypoint()}>Add Point</button>
             <button className="btn-secondary text-xs py-1" onClick={undoDrawWaypoint}>Undo</button>
             <button className="text-red-500 text-xs" onClick={cancelDrawCable}>Cancel</button>
           </div>

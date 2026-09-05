@@ -279,10 +279,20 @@ export default function FiberMap() {
       return { ...d, mousePos: L.latLng(lat, lng) };
     });
   }, []);
-  const confirmDrawWaypoint = useCallback(() => {
+  const confirmDrawWaypoint = useCallback((lat?: number, lng?: number) => {
     setDrawCable((d) => {
-      if (!d.active || !d.mousePos) return d;
-      return { ...d, routePoints: [...d.routePoints, d.mousePos], mousePos: null };
+      if (!d.active) return d;
+      let pt: L.LatLng;
+      if (lat != null && lng != null) {
+        pt = L.latLng(lat, lng);
+      } else if (d.mousePos) {
+        pt = d.mousePos;
+      } else {
+        return d;
+      }
+      const last = d.routePoints[d.routePoints.length - 1];
+      if (last && last.lat === pt.lat && last.lng === pt.lng) return d;
+      return { ...d, routePoints: [...d.routePoints, pt], mousePos: null };
     });
   }, []);
   const undoDrawWaypoint = useCallback(() => {
@@ -856,7 +866,7 @@ export default function FiberMap() {
               setSelectedWaypoint(null);
               setHighlightedObject(null);
               if (drawCable.active) {
-                confirmDrawWaypoint();
+                confirmDrawWaypoint(lat, lng);
               } else if (cableEdit) addEditWaypoint(lat, lng);
               else if (planner.phase === "custom-draw") addCustomWaypoint(lat, lng);
               else if (planner.phase === "draw") addWaypoint(lat, lng);
@@ -2272,7 +2282,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
   drawCable: { active: boolean; sourceTj: TjBox | null; routePoints: L.LatLng[]; mousePos: L.LatLng | null };
   onStartDrawCable: (tj: TjBox) => void;
   onSetDrawMousePos: (lat: number, lng: number) => void;
-  onConfirmDrawWaypoint: () => void;
+  onConfirmDrawWaypoint: (lat?: number, lng?: number) => void;
   onUndoDrawWaypoint: () => void;
   onCancelDrawCable: () => void;
   onStartDragTj: (tj: TjBox, marker: L.Marker) => void;
