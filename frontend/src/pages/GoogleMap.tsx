@@ -31,6 +31,10 @@ const TJ_ICONS: Record<string, string> = {
   home_tj: "#22c55e", regular_tj: "#6366f1", enclosure: "#f59e0b", dome: "#ef4444",
 };
 
+const TJ_CAPACITY_COLORS: Record<number, string> = {
+  2: "#a855f7", 4: "#6366f1", 8: "#0ea5e9", 10: "#14b8a6", 12: "#22c55e",
+};
+
 const SPLITTER_RATIO_COLORS: Record<number, string> = {
   2: "#22c55e", 4: "#3b82f6", 8: "#f59e0b", 16: "#ef4444", 32: "#8b5cf6", 64: "#ec4899",
 };
@@ -944,11 +948,17 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     // TJ Boxes
     if (netLayers.tjBox) {
       for (const tj of tjBoxes) {
-        const color = TJ_ICONS[tj.box_type] || "#6366f1";
         const hostedSps = splitters.filter((s) => s.tj_box_id === tj.id);
+        const hasSplitters = hostedSps.length > 0;
+        const tjColor = TJ_CAPACITY_COLORS[tj.tj_port] || "#6366f1";
+        const maxRatio = hasSplitters ? Math.max(...hostedSps.map((s) => s.split_ratio)) : 0;
+        const spColor = SPLITTER_RATIO_COLORS[maxRatio] || "#f59e0b";
+        const markerIcon = hasSplitters ? splitterSvgUrl(spColor) : tjSvgUrl(tjColor);
+        const markerSize = hasSplitters ? new google.maps.Size(20, 20) : new google.maps.Size(24, 24);
+        const markerAnchor = hasSplitters ? new google.maps.Point(10, 10) : new google.maps.Point(12, 12);
         const m = new google.maps.Marker({
           position: { lat: tj.lat, lng: tj.lng }, map,
-          icon: { url: tjSvgUrl(color), scaledSize: new google.maps.Size(24, 24), anchor: new google.maps.Point(12, 12) },
+          icon: { url: markerIcon, scaledSize: markerSize, anchor: markerAnchor },
         });
         m.addListener("mouseover", () => { iw.setContent(tjTooltip(tj, hostedSps)); iw.open({ anchor: m, map }); });
         m.addListener("mouseout", () => iw.close());

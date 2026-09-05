@@ -7,6 +7,11 @@ import PhotoGallery from "./PhotoGallery";
 const CORE_COLORS_ARR = ["#3b82f6","#f97316","#22c55e","#92400e","#9ca3af","#ffffff","#ef4444","#000000","#eab308","#8b5cf6","#ec4899","#06b6d4"];
 const CORE_COLOR_NAMES = ["Blue","Orange","Green","Brown","Slate","White","Red","Black","Yellow","Violet","Rose","Aqua"];
 
+const CORE_COLORS: Record<number, string> = {
+  1: "#3b82f6", 2: "#f97316", 4: "#22c55e", 6: "#92400e",
+  8: "#ef4444", 12: "#8b5cf6",
+};
+
 export function CoreColorDot({ coreIndex, size = 8 }: { coreIndex: number; size?: number }) {
   const color = CORE_COLORS_ARR[(coreIndex - 1) % CORE_COLORS_ARR.length];
   const needsBorder = color === "#ffffff" || color === "#000000";
@@ -261,7 +266,7 @@ export default function TjDetailPanel({ tj, cables, splitters, splices, onClose,
               {connectedCables.map((c) => (
                 <div key={c.id} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="badge text-[10px]" style={{ background: CORE_COLORS_ARR[c.core_count] || "#6b7280", color: "white" }}>{c.core_count}C</span>
+                    <span className="badge text-[10px]" style={{ background: CORE_COLORS[c.core_count] || "#6b7280", color: "white" }}>{c.core_count}C</span>
                     <span className="font-mono font-bold text-sm">{c.code}</span>
                     <span className="text-xs text-slate-400">·</span>
                     <span className="text-xs text-slate-500">{c.manufacturer || "Unknown"}</span>
