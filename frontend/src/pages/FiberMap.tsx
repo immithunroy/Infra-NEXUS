@@ -2564,6 +2564,9 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           L.DomEvent.stopPropagation(e);
           onCableClickFn(cable);
         });
+        pl.on("contextmenu", (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(e);
+        });
       }
 
       for (let si = 0; si < cable.segments.length; si++) {
@@ -2854,6 +2857,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
         `Serial: ${p.serial || "—"}`,
         `Status: ${p.status}`,
         `PON: ${p.pon_port || "—"}`,
+        `Connected OLT: ${p.olt_name || "N/A"}`,
         `RX: ${p.rx_power != null ? p.rx_power + " dBm" : "—"}`,
         `Address: ${p.address || "—"}`,
       ];

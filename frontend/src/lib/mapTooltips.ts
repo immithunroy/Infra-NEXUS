@@ -96,13 +96,14 @@ export function cutTooltip(cut: CableCut): string {
   );
 }
 
-export function userTooltip(p: { subscriber?: string; name?: string; serial?: string; status: string; pon_port?: string; rx_power?: number | null; address?: string; last_seen?: string | null; bound?: boolean }, fmtTimeShort: (v: string | null | undefined) => string): string {
+export function userTooltip(p: { subscriber?: string; name?: string; serial?: string; status: string; pon_port?: string; olt_name?: string; rx_power?: number | null; address?: string; last_seen?: string | null; bound?: boolean }, fmtTimeShort: (v: string | null | undefined) => string): string {
   const parts = [
     `<b>${p.subscriber || "—"}</b>`,
     `ONU: ${p.name || "—"}`,
     `Serial: ${p.serial || "—"}`,
     `Status: ${p.status}`,
     `PON: ${p.pon_port || "—"}`,
+    `Connected OLT: ${p.olt_name || "N/A"}`,
     `RX: ${p.rx_power != null ? p.rx_power + " dBm" : "—"}`,
     `Address: ${p.address || "—"}`,
   ];

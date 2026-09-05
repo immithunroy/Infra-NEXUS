@@ -912,6 +912,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         const pl = new google.maps.Polyline({ path, map, strokeColor: color, strokeOpacity: 0.8, strokeWeight: 3 });
         pl.addListener("click", () => setSelectedCable(cable));
         pl.addListener("dblclick", () => { if (writeOk) startCableEdit(cable); });
+        pl.addListener("rightclick", (e: google.maps.MapMouseEvent) => { e.domEvent.preventDefault(); e.domEvent.stopPropagation(); });
         pl.addListener("mouseover", (e: google.maps.MapMouseEvent) => {
           if (!e.latLng) return;
           iw.setContent(cableTooltip(cable, tjBoxes, loops));
@@ -1115,7 +1116,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }
-      if (drawCable.routePoints.length >= 2) {
+      if (drawCable.routePoints.length >= 1) {
         const pts = [...drawCable.routePoints, ...(drawCable.mousePos ? [drawCable.mousePos] : [])];
         const pl = new google.maps.Polyline({ path: pts, map, strokeColor: "#22c55e", strokeOpacity: 0.6, strokeWeight: 2, geodesic: true });
         drawingPolylinesRef.current.push(pl);
