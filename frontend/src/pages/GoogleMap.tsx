@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useJsApiLoader } from "@react-google-maps/api";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
+import TjDetailPanel from "../components/TjDetailPanel";
 import { api } from "../api/client";
 import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, CutRecoveryResult, canWrite } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
@@ -1576,6 +1577,19 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                 GPS: {selectedUser.gps_lat?.toFixed(6) || "—"}, {selectedUser.gps_lng?.toFixed(6) || "—"}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TJ detail */}
+      {selectedTj && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedTj(null)}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <TjDetailPanel tj={selectedTj} cables={cables} splitters={splitters} splices={splices} onClose={() => setSelectedTj(null)} onSpliceChange={load} writeOk={writeOk}
+              onAddSplitter={() => { setSplitterForm({ split_ratio: 2, tj_box_id: selectedTj.id, lat: selectedTj.lat, lng: selectedTj.lng }); setEditingId(null); setShowForm("splitter"); }}
+              onEditSplitter={(sp) => { setEditingId(sp.id); setEditKind("splitter"); setSplitterForm(sp as any); setShowForm("splitter"); }}
+              onDelete={() => { setSelectedTj(null); deleteItem("tj", selectedTj.id); }}
+            />
           </div>
         </div>
       )}
