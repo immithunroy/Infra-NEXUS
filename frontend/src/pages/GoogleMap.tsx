@@ -962,12 +962,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         });
         m.addListener("mouseover", () => { iw.setContent(tjTooltip(tj, hostedSps)); iw.open({ anchor: m, map }); });
         m.addListener("mouseout", () => iw.close());
-        m.addListener("click", () => {
-          if (drawCable.active && drawCable.sourceTj?.id !== tj.id) { finishDrawCable(tj); return; }
-          if (planner.phase === "select-src") { setPlanner((p) => ({ ...p, srcTj: tj, phase: "select-dst" as PlanPhase })); return; }
-          if (planner.phase === "select-dst") { setPlanner((p) => ({ ...p, dstTj: tj })); fetchOsrmAlts(planner.srcTj!, tj); return; }
-          setSelectedTj(tj);
-        });
+        m.addListener("click", () => { setSelectedTj(tj); });
         m.addListener("rightclick", (e: google.maps.MapMouseEvent) => {
           e.domEvent.preventDefault();
           e.domEvent.stopPropagation();
@@ -975,24 +970,20 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           if (existing) existing.remove();
           const menu = document.createElement("div");
           menu.id = "gmap-tj-ctx";
-          menu.style.cssText = `position:fixed;z-index:9999;background:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;min-width:160px;font-size:13px;`;
-          const actions = [
-            { label: "Draw Cable", action: () => startDrawCable(tj) },
-            { label: "Drag / Move", action: () => startDragTj(tj, m) },
-            { label: "View Details", action: () => setSelectedTj(tj) },
-          ];
-          for (const a of actions) {
-            const btn = document.createElement("button");
-            btn.textContent = a.label;
-            btn.style.cssText = `display:block;width:100%;text-align:left;padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;color:#334155;`;
-            btn.onmouseenter = () => btn.style.background = "#f1f5f9";
-            btn.onmouseleave = () => btn.style.background = "none";
-            btn.onclick = () => { menu.remove(); a.action(); };
-            menu.appendChild(btn);
-          }
+          menu.style.cssText = "position:fixed;z-index:9999;background:#1e293b;border-radius:8px;padding:4px 0;box-shadow:0 4px 16px rgba(0,0,0,.4);min-width:180px;font-size:13px;";
+          menu.innerHTML = '<div style="padding:6px 12px;color:#94a3b8;font-size:11px;font-weight:600">' + tj.unique_id + " — " + tj.name + "</div>"
+            + '<div class="ctx-i" data-action="draw-cable" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M4 12h16M12 4v16"/></svg>Draw Cable</div>'
+            + '<div class="ctx-i" data-action="drag-tj" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M12 2l0 20M2 12l20 0"/></svg>Drag / Move</div>'
+            + '<div class="ctx-i" data-action="view-details" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>View Details</div>';
+          document.body.appendChild(menu);
           const px = (e.domEvent as MouseEvent).clientX, py = (e.domEvent as MouseEvent).clientY;
           menu.style.left = `${px}px`; menu.style.top = `${py}px`;
-          document.body.appendChild(menu);
+          menu.querySelector('[data-action="draw-cable"]')?.addEventListener("click", () => { menu.remove(); startDrawCable(tj); });
+          menu.querySelector('[data-action="drag-tj"]')?.addEventListener("click", () => { menu.remove(); startDragTj(tj, m); });
+          menu.querySelector('[data-action="view-details"]')?.addEventListener("click", () => { menu.remove(); setSelectedTj(tj); });
           const removeMenu = () => { menu.remove(); document.removeEventListener("click", removeMenu); };
           setTimeout(() => document.addEventListener("click", removeMenu), 0);
         });
