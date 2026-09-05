@@ -962,7 +962,20 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         });
         m.addListener("mouseover", () => { iw.setContent(tjTooltip(tj, hostedSps)); iw.open({ anchor: m, map }); });
         m.addListener("mouseout", () => iw.close());
-        m.addListener("click", () => { setSelectedTj(tj); });
+        m.addListener("click", () => {
+          if (drawCable.active) {
+            if (drawCable.sourceTj && tj.id === drawCable.sourceTj.id) return;
+            finishDrawCable(tj);
+          } else if (planner.phase === "select-src") {
+            setPlanner((p) => ({ ...p, srcTj: tj, phase: "select-dst" as PlanPhase }));
+          } else if (planner.phase === "select-dst") {
+            setPlanner((p) => ({ ...p, dstTj: tj }));
+            fetchOsrmAlts(planner.srcTj!, tj);
+          } else if (planner.phase !== "draw" && planner.phase !== "fetching") {
+            setSelectedTj(tj);
+            highlightObject("tj", tj.id);
+          }
+        });
         m.addListener("rightclick", (e: google.maps.MapMouseEvent) => {
           e.domEvent.preventDefault();
           e.domEvent.stopPropagation();
@@ -991,9 +1004,10 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       }
     }
 
-    // Splitters
+    // Splitters (only standalone — hosted splitters are represented by the TJ marker icon)
     if (netLayers.splitter) {
       for (const sp of splitters) {
+        if (sp.tj_box_id) continue;
         const color = SPLITTER_RATIO_COLORS[sp.split_ratio] || "#f59e0b";
         const m = new google.maps.Marker({
           position: { lat: sp.lat, lng: sp.lng }, map,
