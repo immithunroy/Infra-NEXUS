@@ -1344,6 +1344,18 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           ))}
         </div>
 
+        {/* Action ribbon */}
+        {writeOk && (
+          <div className="absolute top-[40px] right-2 z-10 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 p-1 flex gap-1">
+            <button className="px-2 py-1 text-[10px] rounded font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
+            <button className="px-2 py-1 text-[10px] rounded font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
+            <button className="px-2 py-1 text-[10px] rounded font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>Feasibility</button>
+            <button className={`px-2 py-1 text-[10px] rounded font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
+              {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
+            </button>
+          </div>
+        )}
+
         {/* Layer toggles */}
         <div className="absolute top-14 right-2 z-10 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
           {([
