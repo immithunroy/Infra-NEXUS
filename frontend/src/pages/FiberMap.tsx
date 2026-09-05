@@ -18,9 +18,9 @@ interface TempSegment {
 import { useUserRole } from "../lib/role";
 
 const STATUS_COLOR: Record<string, string> = {
-  pppoe: "#22c55e", up: "#22c55e", power_off: "#f97316", wire_down: "#ef4444",
-  inactive: "#f97316", offline: "#f97316", unknown: "#6b7280", lost: "#a855f7",
-  llid_admin_down: "#3b82f6",
+  pppoe: "#22c55e", up: "#eab308", power_off: "#ef4444", wire_down: "#ef4444",
+  inactive: "#ef4444", offline: "#ef4444", disabled: "#9ca3af", unknown: "#9ca3af",
+  lost: "#a855f7", llid_admin_down: "#9ca3af",
 };
 
 const CORE_COLORS: Record<number, string> = {
@@ -394,7 +394,7 @@ export default function FiberMap() {
 
   const load = useCallback(async () => {
     try {
-      const [c, t, s, l, ct, sp, np, mp] = await Promise.all([
+      const [c, t, s, l, ct, sp, np, mp] = await Promise.allSettled([
         api.get<Cable[]>("/fiber/cables"),
         api.get<TjBox[]>("/fiber/tj-boxes"),
         api.get<Splitter[]>("/fiber/splitters"),
@@ -404,14 +404,16 @@ export default function FiberMap() {
         api.get<{ nocs: any[]; pops: any[] }>("/fiber/noc-pop-map"),
         api.get<MapPointResponse>("/map/points"),
       ]);
-      setCables(c);
-      setTjBoxes(t);
-      setSplitters(s);
-      setLoops(l);
-      setCuts(ct);
-      setSplices(sp);
-      setNocPopData(np);
-      setMapPoints(mp.points || []);
+      if (c.status === "fulfilled") setCables(c.value);
+      if (t.status === "fulfilled") setTjBoxes(t.value);
+      if (s.status === "fulfilled") setSplitters(s.value);
+      if (l.status === "fulfilled") setLoops(l.value);
+      if (ct.status === "fulfilled") setCuts(ct.value);
+      if (sp.status === "fulfilled") setSplices(sp.value);
+      if (np.status === "fulfilled") setNocPopData(np.value);
+      if (mp.status === "fulfilled") setMapPoints(mp.value.points || []);
+      const failed = [c, t, s, l, ct, sp, np, mp].filter(r => r.status === "rejected");
+      if (failed.length > 0) setError(`Some data failed to load (${failed.length} endpoints)`);
     } catch (e) {
       setError(String(e));
     }
@@ -533,12 +535,19 @@ export default function FiberMap() {
     } catch (e) { setError(String(e)); }
   };
 
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const flash = (text: string, ok = true) => { setNotice({ text, ok }); setTimeout(() => setNotice(null), 5000); };
+
   const saveTj = async () => {
+    if (!tjForm.name?.trim()) { setError("TJ Name is required"); return; }
+    if (!tjForm.lat || !tjForm.lng) { setError("Latitude and Longitude are required"); return; }
     try {
       if (editingId && editKind === "tj") {
         await api.put(`/fiber/tj-boxes/${editingId}`, tjForm);
+        flash("TJ updated");
       } else {
         await api.post("/fiber/tj-boxes", tjForm);
+        flash("TJ created");
       }
       setShowForm(null); setEditingId(null); setTjForm({});
       await load();
@@ -1101,6 +1110,7 @@ export default function FiberMap() {
       </div>
 
       {error && <ActionResultBanner ok={false} message={error} onDismiss={() => setError("")} className="shrink-0" />}
+      {notice && <ActionResultBanner ok={notice.ok} message={notice.text} onDismiss={() => setNotice(null)} className="shrink-0" />}
 
       {selectedTj && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedTj(null)}>

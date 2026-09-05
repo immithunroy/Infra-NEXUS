@@ -208,7 +208,8 @@ async def list_tj_boxes(db: AsyncSession = Depends(get_db)):
 async def create_tj_box(body: TjBoxCreate, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
     data = body.model_dump()
     data["capacity"] = data.get("tray_count", 1) * data.get("splice_per_tray", 12)
-    unique_id = await _next_tj_id(db)
+    data.pop("unique_id", None)
+    unique_id = body.unique_id or await _next_tj_id(db)
     box = TjBox(unique_id=unique_id, **data)
     db.add(box)
     await db.commit()

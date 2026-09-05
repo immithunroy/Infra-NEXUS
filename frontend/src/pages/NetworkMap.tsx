@@ -11,23 +11,25 @@ import { canWrite } from "../api/types";
 
 const statusColor: Record<string, string> = {
   pppoe: "#22c55e",
-  up: "#22c55e",
-  power_off: "#f97316",
+  up: "#eab308",
+  power_off: "#ef4444",
   wire_down: "#ef4444",
-  inactive: "#f97316",
-  offline: "#f97316",
-  unknown: "#6b7280",
+  inactive: "#ef4444",
+  offline: "#ef4444",
+  disabled: "#9ca3af",
+  unknown: "#9ca3af",
   lost: "#a855f7",
-  llid_admin_down: "#3b82f6",
+  llid_admin_down: "#9ca3af",
 };
 
 const statusLabel: Record<string, string> = {
   pppoe: "Online",
-  up: "Online",
+  up: "UP (No PPPoE)",
   power_off: "Offline",
   wire_down: "Wire Down",
   inactive: "Offline",
   offline: "Offline",
+  disabled: "Disabled",
   unknown: "Unknown",
   lost: "Lost",
   llid_admin_down: "LLID Admin Down",

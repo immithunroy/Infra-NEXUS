@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api/client";
-import { ROLE_LABELS, ROLE_OPTIONS, UserOut } from "../api/types";
+import { ROLE_LABELS, ROLE_OPTIONS, UserOut, canManageUsers } from "../api/types";
+import { useUserRole } from "../lib/role";
 import ActionResultBanner from "../components/ActionResultBanner";
 import WarningBanner from "../components/WarningBanner";
 
@@ -30,6 +31,7 @@ const roleDesc: Record<string, string> = {
 };
 
 export default function Users() {
+  const { role } = useUserRole();
   const [users, setUsers] = useState<UserOut[]>([]);
   const [modal, setModal] = useState<FormState | null>(null);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
@@ -91,7 +93,7 @@ export default function Users() {
             Role-based access: admin, global write, global read, NOC, field team.
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setModal({ ...emptyForm })}>+ Add user</button>
+        {canManageUsers(role) && <button className="btn-primary" onClick={() => setModal({ ...emptyForm })}>+ Add user</button>}
       </header>
 
       {notice && (

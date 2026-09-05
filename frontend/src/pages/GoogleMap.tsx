@@ -17,9 +17,9 @@ interface TempSegment {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  pppoe: "#22c55e", up: "#22c55e", power_off: "#f97316", wire_down: "#ef4444",
-  inactive: "#f97316", offline: "#f97316", unknown: "#6b7280", lost: "#a855f7",
-  llid_admin_down: "#3b82f6",
+  pppoe: "#22c55e", up: "#eab308", power_off: "#ef4444", wire_down: "#ef4444",
+  inactive: "#ef4444", offline: "#ef4444", disabled: "#9ca3af", unknown: "#9ca3af",
+  lost: "#a855f7", llid_admin_down: "#9ca3af",
 };
 
 const CORE_COLORS: Record<number, string> = {
@@ -441,7 +441,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
 
   const load = useCallback(async () => {
     try {
-      const [c, t, s, l, ct, sp, np, mp] = await Promise.all([
+      const [c, t, s, l, ct, sp, np, mp] = await Promise.allSettled([
         api.get<Cable[]>("/fiber/cables"),
         api.get<TjBox[]>("/fiber/tj-boxes"),
         api.get<Splitter[]>("/fiber/splitters"),
@@ -451,14 +451,16 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         api.get<{ nocs: any[]; pops: any[] }>("/fiber/noc-pop-map"),
         api.get<MapPointResponse>("/map/points"),
       ]);
-      setCables(c);
-      setTjBoxes(t);
-      setSplitters(s);
-      setLoops(l);
-      setCuts(ct);
-      setSplices(sp);
-      setNocPopData(np);
-      setMapPoints(mp.points || []);
+      if (c.status === "fulfilled") setCables(c.value);
+      if (t.status === "fulfilled") setTjBoxes(t.value);
+      if (s.status === "fulfilled") setSplitters(s.value);
+      if (l.status === "fulfilled") setLoops(l.value);
+      if (ct.status === "fulfilled") setCuts(ct.value);
+      if (sp.status === "fulfilled") setSplices(sp.value);
+      if (np.status === "fulfilled") setNocPopData(np.value);
+      if (mp.status === "fulfilled") setMapPoints(mp.value.points || []);
+      const failed = [c, t, s, l, ct, sp, np, mp].filter(r => r.status === "rejected");
+      if (failed.length > 0) setError(`Some data failed to load (${failed.length} endpoints)`);
     } catch (e) {
       setError(String(e));
     }
@@ -582,12 +584,19 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     } catch (e) { setError(String(e)); }
   };
 
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const flash = (text: string, ok = true) => { setNotice({ text, ok }); setTimeout(() => setNotice(null), 5000); };
+
   const saveTj = async () => {
+    if (!tjForm.name?.trim()) { setError("TJ Name is required"); return; }
+    if (!tjForm.lat || !tjForm.lng) { setError("Latitude and Longitude are required"); return; }
     try {
       if (editingId && editKind === "tj") {
         await api.put(`/fiber/tj-boxes/${editingId}`, tjForm);
+        flash("TJ updated");
       } else {
         await api.post("/fiber/tj-boxes", tjForm);
+        flash("TJ created");
       }
       setShowForm(null); setEditingId(null); setTjForm({});
       await load();
@@ -788,7 +797,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         btn.onclick = () => {
           menu.remove();
           if (item.kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); }
-          else if (item.kind === "tj") { setTjForm({ lat, lng }); setShowForm("tj"); }
+          else if (item.kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
           else if (item.kind === "cable") { setShowForm("cable"); }
           else if (item.kind === "loop") { setLoopForm({ lat, lng }); setShowForm("loop"); }
           else if (item.kind === "cut") { setCutForm({ lat, lng }); setShowForm("cut"); }
@@ -861,7 +870,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         btn.onclick = () => {
           menu.remove();
           if (item.kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); }
-          else if (item.kind === "tj") { setTjForm({ lat, lng }); setShowForm("tj"); }
+          else if (item.kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
           else if (item.kind === "cable") { setShowForm("cable"); }
           else if (item.kind === "loop") { setLoopForm({ lat, lng }); setShowForm("loop"); }
           else if (item.kind === "cut") { setCutForm({ lat, lng }); setShowForm("cut"); }
@@ -1212,6 +1221,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   return (
     <div className={`flex h-full ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
       {error && <ActionResultBanner ok={false} message={error} onDismiss={() => setError("")} />}
+      {notice && <ActionResultBanner ok={notice.ok} message={notice.text} onDismiss={() => setNotice(null)} />}
 
       {/* Left sidebar */}
       <div className="w-80 shrink-0 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-col overflow-hidden">
@@ -1246,12 +1256,11 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           {filterType === "customers" && (
             <select className="input text-xs" value={filterUserStatus} onChange={(e) => setFilterUserStatus(e.target.value)}>
               <option value="all">All Status</option>
-              <option value="online">Online</option>
-              <option value="offline">Offline</option>
+              <option value="online">Connected (PPPoE)</option>
+              <option value="up">UP (No PPPoE)</option>
+              <option value="offline">Disconnected</option>
               <option value="wire_down">Wire Down</option>
-              <option value="unknown">Unknown</option>
-              <option value="lost">Lost</option>
-              <option value="llid_admin_down">LLID Admin Down</option>
+              <option value="disabled">Disabled</option>
             </select>
           )}
           <input className="input text-xs" placeholder="Search..." value={filterText} onChange={(e) => setFilterText(e.target.value)} />
@@ -1328,17 +1337,17 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                 <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("online")}>
                   <span className="inline-block w-2 h-2 rounded-full bg-green-500" />{userStatusSummary["pppoe"] || 0}
                 </span>
+                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("up")}>
+                  <span className="inline-block w-2 h-2 rounded-full bg-yellow-500" />{userStatusSummary["up"] || 0}
+                </span>
                 <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("offline")}>
-                  <span className="inline-block w-2 h-2 rounded-full bg-orange-500" />{userStatusSummary["power_off"] || 0}
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />{(userStatusSummary["power_off"] || 0) + (userStatusSummary["offline"] || 0) + (userStatusSummary["inactive"] || 0)}
                 </span>
                 <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("wire_down")}>
                   <span className="inline-block w-2 h-2 rounded-full bg-red-500" />{userStatusSummary["wire_down"] || 0}
                 </span>
-                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("unknown")}>
-                  <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />{userStatusSummary["unknown"] || 0}
-                </span>
-                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("lost")}>
-                  <span className="inline-block w-2 h-2 rounded-full bg-purple-500" />{userStatusSummary["lost"] || 0}
+                <span className="flex items-center gap-1 cursor-pointer" onClick={() => setFilterUserStatus("disabled")}>
+                  <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />{userStatusSummary["disabled"] || 0}
                 </span>
               </div>
               {/* Search */}
@@ -1380,7 +1389,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         {writeOk && (
           <div className="absolute top-[44px] right-2 z-10 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 p-1 flex gap-1">
             <button className="px-2 py-1 text-[10px] rounded font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
-            <button className="px-2 py-1 text-[10px] rounded font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
+            <button className="px-2 py-1 text-[10px] rounded font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ name: "", box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
             <button className="px-2 py-1 text-[10px] rounded font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>Feasibility</button>
             <button className={`px-2 py-1 text-[10px] rounded font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
               {planner.phase !== "idle" ? "Planning..." : "Plan Link"}

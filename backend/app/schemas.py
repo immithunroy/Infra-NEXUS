@@ -1137,7 +1137,7 @@ class TjBoxBase(BaseModel):
 
 
 class TjBoxCreate(TjBoxBase):
-    pass
+    unique_id: str | None = None
 
 
 class TjBoxUpdate(BaseModel):
