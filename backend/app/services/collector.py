@@ -281,7 +281,7 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
         from .subscriber_sync import sync_subscribers
         await sync_subscribers(session, device_id, secrets)
     except Exception as sync_exc:
-        _log.warning("Subscriber sync failed for device %d: %s", device_id, sync_exc)
+        logger.warning("Subscriber sync failed for device %d: %s", device_id, sync_exc)
 
     # Collect BGP data (best-effort, non-fatal if unsupported)
     bgp_msg = ""
@@ -356,7 +356,7 @@ async def scan_mikrotik(session: AsyncSession, device_id: int) -> ScanLog:
         logger.debug("BGP collection skipped for %s: %s", device.name, exc)
 
     device.last_message = (
-        f"{len(entries)} PPPoE active / {secret_count} PPP secrets{bgp_msg}"
+        f"{len(entries)} PPPoE active / {len(secrets)} PPP secrets{bgp_msg}"
     )
     await _finish_log(session, log, ScanStatus.success, device.last_message)
     await session.commit()
