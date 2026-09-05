@@ -922,7 +922,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         if (!cable.segments?.length) continue;
         const path = cable.segments.flatMap((s) => [{ lat: s.start_lat, lng: s.start_lng }, { lat: s.end_lat, lng: s.end_lng }]);
         const color = CORE_COLORS[cable.core_count] || "#6b7280";
-        const pl = new google.maps.Polyline({ path, map, strokeColor: color, strokeOpacity: 0.8, strokeWeight: 3 });
+        const pl = new google.maps.Polyline({ path, map, strokeColor: color, strokeOpacity: 0.8, strokeWeight: 3, clickable: !drawCable.active });
         pl.addListener("click", () => setSelectedCable(cable));
         pl.addListener("dblclick", () => { if (writeOk) startCableEdit(cable); });
         pl.addListener("rightclick", (e: google.maps.MapMouseEvent) => { e.domEvent.preventDefault(); e.domEvent.stopPropagation(); });
@@ -1131,20 +1131,20 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       }
       if (drawCable.routePoints.length >= 1) {
         const pts = [...drawCable.routePoints, ...(drawCable.mousePos ? [drawCable.mousePos] : [])];
-        const pl = new google.maps.Polyline({ path: pts, map, strokeColor: "#22c55e", strokeOpacity: 0.85, strokeWeight: 4, geodesic: true, icons: [{ icon: { path: "M 0,-1 0,1", strokeColor: "#22c55e", strokeWeight: 4 }, offset: "0", repeat: "12px" }] });
+        const pl = new google.maps.Polyline({ path: pts, map, strokeColor: "#22c55e", strokeOpacity: 0.85, strokeWeight: 4, geodesic: true, clickable: false });
         drawingPolylinesRef.current.push(pl);
       }
       drawCable.routePoints.forEach((wp, i) => {
         if (i === 0) return; // Skip source
         const m = new google.maps.Marker({
-          position: wp, map,
+          position: wp, map, clickable: false,
           icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="4" fill="#f59e0b" stroke="white" stroke-width="1"/></svg>`)}`, scaledSize: new google.maps.Size(10, 10), anchor: new google.maps.Point(5, 5) },
         });
         drawingOverlaysRef.current.push(m);
       });
       if (drawCable.mousePos) {
         const m = new google.maps.Marker({
-          position: drawCable.mousePos, map,
+          position: drawCable.mousePos, map, clickable: false,
           icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="4" fill="#22c55e" fill-opacity="0.5" stroke="#22c55e" stroke-width="1"/></svg>`)}`, scaledSize: new google.maps.Size(10, 10), anchor: new google.maps.Point(5, 5) },
         });
         m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("Click to place")); iw.open({ anchor: m, map }); } });
