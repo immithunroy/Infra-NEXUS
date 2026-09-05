@@ -1227,7 +1227,15 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       <div className="w-80 shrink-0 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-col overflow-hidden">
         <div className="p-3 border-b border-slate-200 dark:border-slate-700 space-y-2">
           <div className="flex items-center gap-2">
-            <select className="input text-xs flex-1" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <select className="input text-xs flex-1" value={filterType} onChange={(e) => {
+              const v = e.target.value;
+              setFilterType(v);
+              setFilterCore("all"); setFilterPort("all"); setFilterRatio("all");
+              if (v === "cable") setActiveTab("links");
+              else if (v === "tj") setActiveTab("tj");
+              else if (v === "splitter") setActiveTab("splitters");
+              else if (v === "customers") setActiveTab("users");
+            }}>
               <option value="all">All Layers</option>
               <option value="cable">Links</option>
               <option value="tj">TJ Boxes</option>
@@ -1504,8 +1512,8 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 mb-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selectedCable.code}</h2>
-                <p className="text-sm text-slate-500">{selectedCable.link_id} · {selectedCable.core_count} cores · {selectedCable.cable_type}</p>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selectedCable.link_id || selectedCable.code} | {selectedCable.manufacturer || "?"} | {selectedCable.code}</h2>
+                <p className="text-sm text-slate-500">{selectedCable.link_name || ""}</p>
               </div>
               <button onClick={() => setSelectedCable(null)} className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>

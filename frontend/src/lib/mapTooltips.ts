@@ -54,9 +54,8 @@ export function cableTooltip(cable: Cable, tjBoxes: TjBox[], loops: FiberLoop[])
   const straightM = dstTj && cable.segments.length ? haversine(cable.segments[0].start_lat, cable.segments[0].start_lng, dstTj.lat, dstTj.lng) : 0;
 
   const tipParts = [
-    cable.link_id ? cable.link_id + " | " + (cable.link_name || cable.code) : `<b>${cable.code}</b>`,
-    (cable.manufacturer || "?") + " | " + cable.code,
-    cable.core_count + " cores",
+    `<b>${cable.link_id || cable.code}</b> | ${cable.manufacturer || "?"} | ${cable.code}`,
+    cable.link_name || "",
   ];
   if (straightM > 0) tipParts.push("Straight: " + (straightM / 1000).toFixed(2) + " km");
   tipParts.push("Link: " + lenKm + " km");
