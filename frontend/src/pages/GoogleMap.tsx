@@ -802,15 +802,15 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       setDrawMousePos(e.latLng.lat(), e.latLng.lng());
     });
 
-    // Keyboard handler
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (drawCable.active) undoDrawWaypoint();
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
   }, [isLoaded]);
+
+  // Dedicated Esc key handler for draw cable (updates when drawCable.active changes)
+  useEffect(() => {
+    if (!drawCable.active) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); undoDrawWaypoint(); } };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [drawCable.active]);
 
   // Re-attach click handlers when modes change
   useEffect(() => {
@@ -1131,7 +1131,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       }
       if (drawCable.routePoints.length >= 1) {
         const pts = [...drawCable.routePoints, ...(drawCable.mousePos ? [drawCable.mousePos] : [])];
-        const pl = new google.maps.Polyline({ path: pts, map, strokeColor: "#22c55e", strokeOpacity: 0.6, strokeWeight: 2, geodesic: true });
+        const pl = new google.maps.Polyline({ path: pts, map, strokeColor: "#22c55e", strokeOpacity: 0.85, strokeWeight: 4, geodesic: true, icons: [{ icon: { path: "M 0,-1 0,1", strokeColor: "#22c55e", strokeWeight: 4 }, offset: "0", repeat: "12px" }] });
         drawingPolylinesRef.current.push(pl);
       }
       drawCable.routePoints.forEach((wp, i) => {
@@ -1147,6 +1147,8 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           position: drawCable.mousePos, map,
           icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="4" fill="#22c55e" fill-opacity="0.5" stroke="#22c55e" stroke-width="1"/></svg>`)}`, scaledSize: new google.maps.Size(10, 10), anchor: new google.maps.Point(5, 5) },
         });
+        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("Click to place")); iw.open({ anchor: m, map }); } });
+        m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }
     }
@@ -1428,11 +1430,23 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
 
         {/* Draw cable toolbar */}
         {drawCable.active && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 px-4 py-2 flex items-center gap-3 text-sm">
-            <span className="text-slate-600 dark:text-slate-300">Click to place points, click a TJ to finish</span>
-            <button className="btn-primary text-xs py-1" onClick={() => confirmDrawWaypoint()}>Add Point</button>
-            <button className="btn-secondary text-xs py-1" onClick={undoDrawWaypoint}>Undo</button>
-            <button className="text-red-500 text-xs" onClick={cancelDrawCable}>Cancel</button>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 rounded-xl bg-white/95 dark:bg-slate-900/95 px-4 py-2.5 shadow-2xl border border-emerald-300 dark:border-emerald-700 backdrop-blur-sm">
+            <span className="text-xs font-semibold text-emerald-600">Drawing Cable</span>
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+            <div className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-xs font-medium">{drawCable.sourceTj?.unique_id}</span>
+            </div>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            <span className="text-xs font-semibold text-emerald-600">Move mouse · Click to place · Click TJ to finish</span>
+            {drawCable.routePoints.length > 1 && (
+              <>
+                <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+                <span className="text-[10px] text-slate-500 font-mono">{calcWaypointDistKm(drawCable.routePoints).toFixed(2)} km · {drawCable.routePoints.length - 1} pts</span>
+              </>
+            )}
+            <span className="text-[10px] text-slate-400">ESC=undo</span>
+            <button className="rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition" onClick={cancelDrawCable}>Cancel</button>
           </div>
         )}
 
