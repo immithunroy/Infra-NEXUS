@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..models import Setting
-from ..security import require_admin
+from ..security import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -17,6 +17,13 @@ class SettingOut(BaseModel):
 
 class SettingUpdate(BaseModel):
     value: str
+
+
+@router.get("/maps-key")
+async def get_maps_key(_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Setting).where(Setting.key == "google_maps_api_key"))
+    s = result.scalar_one_or_none()
+    return {"key": "google_maps_api_key", "value": s.value if s else ""}
 
 
 @router.get("", response_model=list[SettingOut])
