@@ -1354,7 +1354,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                       <StatusBadge status={p.status} />
                     </div>
                     <div className="text-[10px] text-slate-400 mt-0.5 truncate">{p.subscriber || "—"} · {p.serial || "—"}</div>
-                    <div className="text-[10px] text-slate-400 truncate">{p.pon_port || "—"}</div>
+                    <div className="text-[10px] text-slate-400 truncate">{p.olt_name} · {p.pon_port || "—"}</div>
                   </div>
                 ))}
               </div>

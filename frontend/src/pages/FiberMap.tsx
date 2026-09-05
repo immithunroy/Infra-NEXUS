@@ -1055,7 +1055,7 @@ export default function FiberMap() {
                         <StatusBadge status={p.status} />
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5 truncate">{p.subscriber || "—"} · {p.serial || "—"}</div>
-                      <div className="text-[10px] text-slate-400 truncate">{p.pon_port || "—"}</div>
+                      <div className="text-[10px] text-slate-400 truncate">{p.olt_name} · {p.pon_port || "—"}</div>
                     </div>
                   ))}
                   {sidebarUsers.length === 0 && <div className="text-xs text-slate-400 text-center py-4">No users found</div>}
