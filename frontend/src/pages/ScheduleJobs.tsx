@@ -149,7 +149,7 @@ export default function ScheduleJobs() {
                 </tr>
               ))}
               {logs.length === 0 && (
-                <tr><td className="td" colSpan={6}>No config save logs yet. First run at 01:00 AM.</td></tr>
+                <tr><td className="td" colSpan={6}>No config save logs yet. First run at 03:00 AM.</td></tr>
               )}
             </tbody>
           </table>

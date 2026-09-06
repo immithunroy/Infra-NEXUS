@@ -237,7 +237,6 @@ async def _sync_mac_vendors_retry() -> None:
 async def _write_all_olts() -> None:
     """Connect to each enabled OLT and run ``write all`` to persist config."""
     _track_job("olt_write_all")
-    from datetime import datetime as _dt
 
     from ..drivers.bdcom import BdcomCliDriver
     from ..models import OLTDevice, OltWriteLog
@@ -257,10 +256,7 @@ async def _write_all_olts() -> None:
             driver = BdcomCliDriver(device)
             try:
                 await driver.connect()
-                await driver._exec("enable", timeout=10)
-                await driver._sendline("write all")
-                await asyncio.sleep(15)
-                await driver._read_until_prompt(timeout=30)
+                await driver._exec("write all", timeout=30)
                 finished = utcnow()
                 async with SessionLocal() as session:
                     row = await session.get(OltWriteLog, log_id)
@@ -406,10 +402,10 @@ def start_scheduler() -> AsyncIOScheduler:
             misfire_grace_time=300,
         )
 
-    # OLT config save — daily at 01:00 (with retry at 02:00 handled inside)
+    # OLT config save — daily at 03:00 (with retry at 04:00 handled inside)
     scheduler.add_job(
         _write_all_olts,
-        CronTrigger(hour=1, minute=0),
+        CronTrigger(hour=3, minute=0),
         id="olt_write_all",
         replace_existing=True,
         misfire_grace_time=300,
@@ -439,7 +435,7 @@ def start_scheduler() -> AsyncIOScheduler:
         )
 
     logger.info(
-        "Scheduler started (olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@04:00, olt_write_all=daily@01:00)",
+        "Scheduler started (olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@04:00, olt_write_all=daily@03:00)",
         settings.scan_olt_interval,
         settings.scan_mikrotik_interval,
         settings.bind_interval,

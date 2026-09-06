@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, downloadFile } from "../api/client";
-import { BrandBucket, DashboardSummary, MassDownPort, NetworkSummary, OpticalAverages, OltUsage, PendingCount, PortUsage, WeakOnu, WeakSignalReport } from "../api/types";
+import { BrandBucket, DashboardSummary, MassDownPort, NetworkSummary, OpticalAverages, OltUsage, PortUsage, WeakOnu, WeakSignalReport } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
 import { fmtTime } from "../lib/time";
 
@@ -528,8 +528,8 @@ export default function Dashboard() {
   const [liveMassDowns, setLiveMassDowns] = useState<MassDownPort[]>([]);
   const [massDownsUpdated, setMassDownsUpdated] = useState<Date | null>(null);
   const [optAvg, setOptAvg] = useState<OpticalAverages | null>(null);
-  const [pendingApprovals, setPendingApprovals] = useState<PendingCount | null>(null);
   const [netSummary, setNetSummary] = useState<NetworkSummary | null>(null);
+  const [dailyMap, setDailyMap] = useState<{ today: { cable_count: number; cable_km: number; tj_count: number; splitter_count: number; user_count: number }; yesterday: { cable_count: number; tj_count: number; splitter_count: number; user_count: number } } | null>(null);
 
   const load = useCallback(() => {
     api.get<DashboardSummary>("/dashboard").then(setData).catch((e) => setError(String(e)));
@@ -545,27 +545,27 @@ export default function Dashboard() {
     api.get<OpticalAverages>("/dashboard/optical-averages").then(setOptAvg).catch(() => undefined);
   }, []);
 
-  const loadPendingApprovals = useCallback(() => {
-    api.get<PendingCount>("/approvals/pending-count").then(setPendingApprovals).catch(() => undefined);
-  }, []);
-
   const loadNetSummary = useCallback(() => {
     api.get<NetworkSummary>("/dashboard/network-summary").then(setNetSummary).catch(() => undefined);
+  }, []);
+
+  const loadDailyMap = useCallback(() => {
+    api.get<{ today: { cable_count: number; cable_km: number; tj_count: number; splitter_count: number; user_count: number }; yesterday: { cable_count: number; tj_count: number; splitter_count: number; user_count: number } }>("/dashboard/daily-map-stats").then(setDailyMap).catch(() => undefined);
   }, []);
 
   useEffect(() => {
     load();
     loadMassDowns();
     loadOptAvg();
-    loadPendingApprovals();
     loadNetSummary();
+    loadDailyMap();
     const dashId = setInterval(load, 60000);
     const massId = setInterval(loadMassDowns, 300000);
     const optId = setInterval(loadOptAvg, 300000);
-    const appId = setInterval(loadPendingApprovals, 60000);
     const netId = setInterval(loadNetSummary, 300000);
-    return () => { clearInterval(dashId); clearInterval(massId); clearInterval(optId); clearInterval(appId); clearInterval(netId); };
-  }, [load, loadMassDowns, loadOptAvg, loadPendingApprovals, loadNetSummary]);
+    const dailyId = setInterval(loadDailyMap, 300000);
+    return () => { clearInterval(dashId); clearInterval(massId); clearInterval(optId); clearInterval(netId); clearInterval(dailyId); };
+  }, [load, loadMassDowns, loadOptAvg, loadNetSummary, loadDailyMap]);
 
   const stateSegments = useMemo(() => {
     if (!data) return [];
@@ -647,18 +647,32 @@ export default function Dashboard() {
             <Kpi label="Users on Map" value={netSummary.user_total} hint={`${netSummary.user_with_gps} GPS · ${netSummary.gps_coverage_pct}% coverage`} accent="from-emerald-400 to-cyan-400" />
           </>
         )}
-        {pendingApprovals && pendingApprovals.total > 0 && (
-          <button
-            onClick={() => navigate("/approvals")}
-            className="card relative overflow-hidden p-5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-          >
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-rose-500 to-orange-500" />
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending Approvals</div>
-            <div className="mt-2 text-3xl font-bold text-rose-600 dark:text-rose-400">{pendingApprovals.total}</div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Click to review →
+        {dailyMap && (
+          <div className="card relative overflow-hidden p-5">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 to-cyan-500" />
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Today&apos;s Map Activity</div>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{dailyMap.today.cable_km} km</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">{dailyMap.today.cable_count} cable{dailyMap.today.cable_count !== 1 ? "s" : ""} added</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{dailyMap.today.user_count}</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">users added</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-violet-600 dark:text-violet-400">{dailyMap.today.tj_count}</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">TJ boxes added</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{dailyMap.today.splitter_count}</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">splitters added</div>
+              </div>
             </div>
-          </button>
+            <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500">
+              <span>Yesterday: {dailyMap.yesterday.cable_count} cables · {dailyMap.yesterday.user_count} users · {dailyMap.yesterday.tj_count} TJs · {dailyMap.yesterday.splitter_count} splitters</span>
+            </div>
+          </div>
         )}
       </div>
 

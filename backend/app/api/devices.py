@@ -102,6 +102,36 @@ async def scan_olt(olt_id: int, user: User = Depends(require_ops), db: AsyncSess
         return ScanResult(success=False, message=str(exc))
 
 
+@router.post("/olts/{olt_id}/save-config", response_model=TestResult)
+async def save_olt_config(olt_id: int, user: User = Depends(require_ops), db: AsyncSession = Depends(get_db)):
+    """On-demand: connect to OLT and run ``write all`` to persist running config."""
+    from ..models import OltWriteLog
+    device = await db.get(OLTDevice, olt_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="OLT not found")
+    started = utcnow()
+    log = OltWriteLog(olt_id=device.id, olt_name=device.name, status="running", started_at=started)
+    db.add(log)
+    await db.commit()
+    await db.refresh(log)
+    try:
+        driver = BdcomCliDriver(device)
+        await driver.connect()
+        await driver._exec("write all", timeout=30)
+        driver.close()
+        log.status = "success"
+        log.message = "Config saved successfully"
+        log.finished_at = utcnow()
+        await db.commit()
+        return TestResult(success=True, message=f"Config saved on {device.name}")
+    except Exception as exc:
+        log.status = "failed"
+        log.message = str(exc)[:500]
+        log.finished_at = utcnow()
+        await db.commit()
+        return TestResult(success=False, message=str(exc))
+
+
 # ------------------------------------------------------------- Mikrotiks
 @router.get("/mikrotiks", response_model=list[MikrotikOut])
 async def list_mikrotiks(db: AsyncSession = Depends(get_db)):

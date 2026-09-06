@@ -384,3 +384,97 @@ async def network_summary(db: AsyncSession = Depends(get_db)):
         gps_coverage_pct=gps_coverage_pct,
         splitter_total=splitter_total,
     )
+
+
+@router.get("/dashboard/daily-map-stats")
+async def daily_map_stats(db: AsyncSession = Depends(get_db)):
+    """Return today's map additions: cables, users, TJ boxes, splitters."""
+    from datetime import timedelta
+    from ..models import Cable, TjBox, Splitter
+
+    today_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = today_start - timedelta(days=1)
+
+    # Cables added today (count + km)
+    new_cables = (
+        await db.execute(
+            select(Cable).where(Cable.created_at >= today_start)
+        )
+    ).scalars().all()
+
+    # Cable segments for today's cables → calculate km
+    cable_km = 0.0
+    if new_cables:
+        cable_ids = [c.id for c in new_cables]
+        segs = (
+            await db.execute(
+                select(CableSegment).where(CableSegment.cable_id.in_(cable_ids))
+            )
+        ).scalars().all()
+        seg_by_cable: dict[int, list[CableSegment]] = {}
+        for s in segs:
+            seg_by_cable.setdefault(s.cable_id, []).append(s)
+        for c in new_cables:
+            c_segs = sorted(seg_by_cable.get(c.id, []), key=lambda s: s.order_index)
+            for seg in c_segs:
+                cable_km += _haversine(seg.start_lat, seg.start_lng, seg.end_lat, seg.end_lng)
+    cable_km = round(cable_km / 1000, 2)
+
+    # TJ boxes added today
+    new_tj = (
+        await db.execute(
+            select(func.count(TjBox.id)).where(TjBox.created_at >= today_start)
+        )
+    ).scalar() or 0
+
+    # Splitters added today
+    new_splitters = (
+        await db.execute(
+            select(func.count(Splitter.id)).where(Splitter.created_at >= today_start)
+        )
+    ).scalar() or 0
+
+    # Users (ONUs) added today
+    new_users = (
+        await db.execute(
+            select(func.count(Onu.id)).where(Onu.created_at >= today_start)
+        )
+    ).scalar() or 0
+
+    # Previous day totals (for comparison)
+    prev_cables = (
+        await db.execute(
+            select(func.count(Cable.id)).where(Cable.created_at >= yesterday_start, Cable.created_at < today_start)
+        )
+    ).scalar() or 0
+    prev_tj = (
+        await db.execute(
+            select(func.count(TjBox.id)).where(TjBox.created_at >= yesterday_start, TjBox.created_at < today_start)
+        )
+    ).scalar() or 0
+    prev_splitters = (
+        await db.execute(
+            select(func.count(Splitter.id)).where(Splitter.created_at >= yesterday_start, Splitter.created_at < today_start)
+        )
+    ).scalar() or 0
+    prev_users = (
+        await db.execute(
+            select(func.count(Onu.id)).where(Onu.created_at >= yesterday_start, Onu.created_at < today_start)
+        )
+    ).scalar() or 0
+
+    return {
+        "today": {
+            "cable_count": len(new_cables),
+            "cable_km": cable_km,
+            "tj_count": new_tj,
+            "splitter_count": new_splitters,
+            "user_count": new_users,
+        },
+        "yesterday": {
+            "cable_count": prev_cables,
+            "tj_count": prev_tj,
+            "splitter_count": prev_splitters,
+            "user_count": prev_users,
+        },
+    }

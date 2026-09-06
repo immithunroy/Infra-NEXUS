@@ -272,6 +272,18 @@ export default function Devices() {
     }
   };
 
+  const saveConfig = async (id: number) => {
+    setBusyId(`save-config-${id}`);
+    try {
+      const res = await api.post<TestResult>(`/devices/olts/${id}/save-config`);
+      flash(res.success ? `Config saved: ${res.message}` : `Save failed: ${res.message}`, res.success);
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Save config failed", false);
+    } finally {
+      setBusyId("");
+    }
+  };
+
 
   const saveNoc = async () => {
     if (!nocModal) return;
@@ -627,6 +639,9 @@ export default function Devices() {
                           </button>
                           <button className="btn-ghost" disabled={!!busyId} onClick={() => scan("olt", d.id)}>
                             {busyId === `scan-olt-${d.id}` ? "..." : "Scan"}
+                          </button>
+                          <button className="btn-ghost text-emerald-600 dark:text-emerald-400" disabled={!!busyId} onClick={() => saveConfig(d.id)}>
+                            {busyId === `save-config-${d.id}` ? "..." : "Save Config"}
                           </button>
                         </>
                       )}
