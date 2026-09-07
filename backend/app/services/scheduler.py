@@ -18,6 +18,8 @@ from . import collector
 from .mac_binding import run_bindings
 from .mac_vendor import sync_all_vendors
 
+TZ_BD = "Asia/Dhaka"
+
 logger = logging.getLogger("olt_commander.scheduler")
 
 _scheduler: AsyncIOScheduler | None = None
@@ -196,11 +198,11 @@ async def _bind() -> None:
 
 
 # ---------------------------------------------------------------------------
-# MAC vendor sync — daily at 04:00, retry at 05:00 on failure
+# MAC vendor sync — daily at 10:00 BDT, retry at 11:00 BDT on failure
 # ---------------------------------------------------------------------------
 
 async def _sync_mac_vendors() -> None:
-    """Sync MAC vendor data from external API.  Runs daily at 04:00."""
+    """Sync MAC vendor data from external API.  Runs daily at 10:00 BDT."""
     _track_job("mac_vendor_sync")
     try:
         async with SessionLocal() as session:
@@ -208,30 +210,30 @@ async def _sync_mac_vendors() -> None:
         _finish_job("mac_vendor_sync", True)
     except Exception as exc:  # noqa: BLE001
         _finish_job("mac_vendor_sync", False, str(exc)[:500])
-        logger.exception("MAC vendor sync failed at 04:00: %s", exc)
+        logger.exception("MAC vendor sync failed at 10:00 BDT: %s", exc)
         if _scheduler is not None:
                 _scheduler.add_job(
                     _sync_mac_vendors_retry,
-                    CronTrigger(hour=5, minute=0),
+                    CronTrigger(hour=11, minute=0),
                     id="mac_vendor_sync_retry",
                     replace_existing=True,
                     misfire_grace_time=300,
                 )
-                logger.info("MAC vendor sync retry scheduled for 05:00")
+                logger.info("MAC vendor sync retry scheduled for 11:00 BDT")
 
 
 async def _sync_mac_vendors_retry() -> None:
-    """Retry MAC vendor sync at 05:00 (only if primary at 04:00 failed)."""
+    """Retry MAC vendor sync at 11:00 BDT (only if primary at 10:00 BDT failed)."""
     async with SessionLocal() as session:
         try:
             await sync_all_vendors(session)
-            logger.info("MAC vendor sync retry at 05:00 succeeded")
+            logger.info("MAC vendor sync retry at 11:00 BDT succeeded")
         except Exception as exc:  # noqa: BLE001
-            logger.exception("MAC vendor sync retry at 05:00 also failed: %s", exc)
+            logger.exception("MAC vendor sync retry at 11:00 BDT also failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
-# OLT config save — daily at 01:00, retry at 02:00 on failure
+# OLT config save — daily at 03:00 BDT, retry at 04:00 BDT on failure
 # ---------------------------------------------------------------------------
 
 async def _write_all_olts() -> None:
@@ -283,13 +285,27 @@ async def _write_all_olts() -> None:
             finally:
                 driver.close()
         _finish_job("olt_write_all", all_ok)
+        if not all_ok and _scheduler is not None:
+            _scheduler.add_job(
+                _write_all_olts_retry,
+                CronTrigger(hour=4, minute=0),
+                id="olt_write_all_retry",
+                replace_existing=True,
+                misfire_grace_time=300,
+            )
+            logger.info("OLT write all retry scheduled for 04:00 BDT")
     except Exception as exc:
         _finish_job("olt_write_all", False, str(exc)[:500])
 
 
 async def _write_all_olts_retry() -> None:
-    """Retry OLT config save at 02:00 (only if primary at 01:00 failed)."""
+    """Retry OLT config save at 04:00 BDT (only if primary at 03:00 BDT failed)."""
     from ..models import OltWriteLog
+    from datetime import timedelta
+
+    # Check for failures since today's midnight BDT = 18:00 UTC yesterday
+    now_utc = utcnow()
+    today_midnight_bdt_utc = now_utc.replace(hour=18, minute=0, second=0, microsecond=0) - timedelta(days=1)
 
     async with SessionLocal() as session:
         from sqlalchemy import func, select as _sel
@@ -298,13 +314,13 @@ async def _write_all_olts_retry() -> None:
             await session.execute(
                 _sel(func.count(OltWriteLog.id)).where(
                     OltWriteLog.status == "failed",
-                    OltWriteLog.started_at >= utcnow().replace(hour=1, minute=0, second=0, microsecond=0),
+                    OltWriteLog.started_at >= today_midnight_bdt_utc,
                 )
             )
         ).scalar() or 0
 
     if failed_count > 0:
-        logger.info("Retrying OLT write all (%d failures from 01:00)", failed_count)
+        logger.info("Retrying OLT write all (%d failures from 03:00 BDT)", failed_count)
         await _write_all_olts()
     else:
         logger.info("OLT write all retry skipped — no failures at 01:00")
@@ -348,7 +364,7 @@ def start_scheduler() -> AsyncIOScheduler:
         return _scheduler
 
     settings = get_settings()
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(timezone=TZ_BD)
     if settings.scan_olt_interval > 0:
         scheduler.add_job(
             _scan_all_olts,
@@ -395,17 +411,17 @@ def start_scheduler() -> AsyncIOScheduler:
             next_run_time=utcnow() + timedelta(seconds=120),
         )
 
-    # MAC vendor sync — daily at 04:00 (with retry at 05:00 handled inside)
+    # MAC vendor sync — daily at 10:00 BDT (with retry at 11:00 BDT handled inside)
     if settings.mac_vendor_sync_interval > 0:
         scheduler.add_job(
             _sync_mac_vendors,
-            CronTrigger(hour=4, minute=0),
+            CronTrigger(hour=10, minute=0),
             id="mac_vendor_sync",
             replace_existing=True,
             misfire_grace_time=300,
         )
 
-    # OLT config save — daily at 03:00 (with retry at 04:00 handled inside)
+    # OLT config save — daily at 03:00 BDT (with retry at 04:00 BDT handled inside)
     scheduler.add_job(
         _write_all_olts,
         CronTrigger(hour=3, minute=0),
@@ -438,7 +454,8 @@ def start_scheduler() -> AsyncIOScheduler:
         )
 
     logger.info(
-        "Scheduler started (olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@04:00, olt_write_all=daily@03:00)",
+        "Scheduler started (tz=%s, olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@10:00 BDT, olt_write_all=daily@03:00 BDT)",
+        TZ_BD,
         settings.scan_olt_interval,
         settings.scan_mikrotik_interval,
         settings.bind_interval,
