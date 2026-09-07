@@ -223,8 +223,16 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   const [routeAlts, setRouteAlts] = useState<{ coords: [number, number][]; distance: number; duration: number }[]>([]);
   const [customWaypoints, setCustomWaypoints] = useState<LatLng[]>([]);
   const [routing, setRouting] = useState(false);
+  const [allowancePct, setAllowancePct] = useState(10);
+  const [selectedRouteIdx, setSelectedRouteIdx] = useState<number | null>(null);
 
   const calcWaypointDistKm = useCallback((wp: LatLng[]): number => { let d = 0; for (let i = 0; i < wp.length - 1; i++) d += haversine(wp[i].lat, wp[i].lng, wp[i + 1].lat, wp[i + 1].lng); return d / 1000; }, []);
+
+  const calcRouteLengthM = useCallback((wp: LatLng[]): number => {
+    let d = 0;
+    for (let i = 0; i < wp.length - 1; i++) d += haversine(wp[i].lat, wp[i].lng, wp[i + 1].lat, wp[i + 1].lng);
+    return d;
+  }, []);
 
   const fetchOsrmAlts = useCallback(async (src: TjBox, dst: TjBox) => {
     setRouting(true); setPlanner((p) => ({ ...p, phase: "fetching" as PlanPhase }));
@@ -242,9 +250,16 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   const selectRoute = useCallback((idx: number) => {
     const alt = routeAlts[idx]; if (!alt) return;
     const waypoints = alt.coords.map((c) => ({ lat: c[0], lng: c[1] }));
+    setSelectedRouteIdx(idx);
     setPlanner((p) => ({ ...p, phase: "draw" as PlanPhase, waypoints }));
     setRouteAlts([]);
   }, [routeAlts]);
+
+  const recalculateRoutes = useCallback(() => {
+    if (planner.srcTj && planner.dstTj) {
+      fetchOsrmAlts(planner.srcTj, planner.dstTj);
+    }
+  }, [planner.srcTj, planner.dstTj, fetchOsrmAlts]);
 
   const addWaypoint = useCallback((lat: number, lng: number) => {
     setPlanner((p) => { if (p.phase !== "draw" || p.waypoints.length < 2) return p;
@@ -266,16 +281,19 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     setPlanner((p) => { if (!p.srcTj || !p.dstTj || p.waypoints.length < 2) return p;
       const segments: TempSegment[] = p.waypoints.map((ll, i) => { const next = p.waypoints[i + 1]; return next ? { start_lat: ll.lat, start_lng: ll.lng, end_lat: next.lat, end_lng: next.lng, order_index: i } : null; }).filter(Boolean) as TempSegment[];
       const code = (p.srcTj as TjBox).unique_id + ">" + (p.dstTj as TjBox).unique_id;
+      const routeLenM = calcRouteLengthM(p.waypoints);
+      const cableReqM = Math.round(routeLenM * (1 + allowancePct / 100));
       setCableForm({
         code, cable_type: "round", core_count: 12, route_type: "driving",
         src_tj_id: (p.srcTj as TjBox).id, dst_tj_id: (p.dstTj as TjBox).id,
         manufacturer: "PLANNED", manufacturing_year: new Date().getFullYear(),
+        notes: `Route: ${Math.round(routeLenM)}m | Allowance: +${allowancePct}% | Cable required: ${cableReqM.toLocaleString()}m`,
         segments: segments as any[],
       });
       setShowForm("cable");
       return { phase: "idle" as PlanPhase, srcTj: null, dstTj: null, waypoints: [] };
     });
-  }, []);
+  }, [allowancePct, calcRouteLengthM]);
 
   const cancelPlan = useCallback(() => {
     setPlanner((p) => {
@@ -914,8 +932,16 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     }
     const iw = infoWindowRef.current;
 
+    // Determine which layers to show based on filter
+    const showAll = filterType === "all";
+    const showCable = showAll || filterType === "cable";
+    const showTj = showAll || filterType === "tj";
+    const showSplitter = showAll || filterType === "splitter";
+    const showCustomer = showAll || filterType === "customers";
+    const showOther = showAll; // NOC/POP, Loops, Cuts only in "All" mode
+
     // NOC/POP
-    if (netLayers.pop) {
+    if (showOther && netLayers.pop) {
       for (const noc of nocPopData.nocs) {
         const m = new google.maps.Marker({ position: { lat: noc.lat, lng: noc.lng }, map, icon: { url: nocSvgUrl(), scaledSize: new google.maps.Size(28, 28) } });
         m.addListener("mouseover", () => { iw.setContent(nocTooltip(noc)); iw.open({ anchor: m, map }); });
@@ -931,9 +957,10 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     }
 
     // Cables — polyline hover tooltip
-    if (netLayers.fiberCable) {
+    if (showCable && netLayers.fiberCable) {
       for (const cable of cables) {
         if (!cable.segments?.length) continue;
+        if (filterCore !== "all" && cable.core_count !== Number(filterCore)) continue;
         const path = cable.segments.flatMap((s) => [{ lat: s.start_lat, lng: s.start_lng }, { lat: s.end_lat, lng: s.end_lng }]);
         const color = CORE_COLORS[cable.core_count] || "#6b7280";
         const pl = new google.maps.Polyline({ path, map, strokeColor: color, strokeOpacity: 0.8, strokeWeight: 3, clickable: !drawCable.active });
@@ -955,7 +982,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     }
 
     // TJ Boxes
-    if (netLayers.tjBox) {
+    if (showTj && netLayers.tjBox) {
       for (const tj of tjBoxes) {
         const hostedSps = splitters.filter((s) => s.tj_box_id === tj.id);
         const hasSplitters = hostedSps.length > 0;
@@ -1014,7 +1041,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     }
 
     // Splitters (only standalone — hosted splitters are represented by the TJ marker icon)
-    if (netLayers.splitter) {
+    if (showSplitter && netLayers.splitter) {
       for (const sp of splitters) {
         if (sp.tj_box_id) continue;
         const color = SPLITTER_RATIO_COLORS[sp.split_ratio] || "#f59e0b";
@@ -1033,7 +1060,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     }
 
     // Loops
-    for (const loop of loops) {
+    if (showOther) for (const loop of loops) {
       const m = new google.maps.Marker({
         position: { lat: loop.lat, lng: loop.lng }, map,
         icon: { url: loopSvgUrl(), scaledSize: new google.maps.Size(24, 24), anchor: new google.maps.Point(12, 12) },
@@ -1045,7 +1072,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     }
 
     // Cuts
-    for (const cut of cuts) {
+    if (showOther) for (const cut of cuts) {
       const color = cut.status === "repaired" ? "#22c55e" : "#ef4444";
       const m = new google.maps.Marker({
         position: { lat: cut.lat, lng: cut.lng }, map,
@@ -1058,7 +1085,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     }
 
     // Users
-    if (netLayers.customer) {
+    if (showCustomer && netLayers.customer) {
       for (const p of mapPoints) {
         if (!p.gps_lat || !p.gps_lng) continue;
         const color = STATUS_COLOR[p.status] || "#6b7280";
@@ -1073,7 +1100,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         markersRef.current.set(`user-${p.olt_id}-${p.onu_id}`, m);
       }
     }
-  }, [cables, tjBoxes, splitters, loops, cuts, mapPoints, nocPopData, netLayers, drawCable.active, planner.phase]);
+  }, [cables, tjBoxes, splitters, loops, cuts, mapPoints, nocPopData, netLayers, drawCable.active, planner.phase, filterType, filterCore]);
 
   // ── Highlight overlay ──
   useEffect(() => {
@@ -1114,6 +1141,29 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         m.addListener("dblclick", () => removeWaypoint(i));
         drawingOverlaysRef.current.push(m);
       });
+    }
+
+    // Route alternatives preview (select-route phase)
+    if (planner.phase === "select-route" && routeAlts.length > 0) {
+      const altColors = ["#22c55e", "#f59e0b", "#8b5cf6"];
+      routeAlts.forEach((alt, i) => {
+        const path = alt.coords.map((c) => ({ lat: c[0], lng: c[1] }));
+        const pl = new google.maps.Polyline({
+          path, map, strokeColor: altColors[i] || "#6b7280",
+          strokeOpacity: 0.7, strokeWeight: i === 0 ? 4 : 2,
+          geodesic: true, clickable: false,
+        });
+        drawingPolylinesRef.current.push(pl);
+      });
+      // Show source and destination markers
+      if (planner.srcTj) {
+        const m = new google.maps.Marker({ position: { lat: planner.srcTj.lat, lng: planner.srcTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="#22c55e" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(16, 16) } });
+        drawingOverlaysRef.current.push(m);
+      }
+      if (planner.dstTj) {
+        const m = new google.maps.Marker({ position: { lat: planner.dstTj.lat, lng: planner.dstTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="#3b82f6" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(16, 16) } });
+        drawingOverlaysRef.current.push(m);
+      }
     }
 
     // Custom draw waypoints
@@ -1195,7 +1245,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         drawingOverlaysRef.current.push(m);
       });
     }
-  }, [planner.waypoints, planner.phase, planner.srcTj, planner.dstTj, customWaypoints, drawCable, cableEdit, selectedWaypoint]);
+  }, [planner.waypoints, planner.phase, planner.srcTj, planner.dstTj, customWaypoints, drawCable, cableEdit, selectedWaypoint, routeAlts]);
 
   const formatDistance = (m: number) => m >= 1000 ? (m / 1000).toFixed(2) + " km" : Math.round(m) + " m";
 
@@ -1436,17 +1486,19 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
             {planner.phase === "fetching" && <span className="text-blue-600">Fetching routes...</span>}
             {planner.phase === "select-route" && (
               <div className="flex items-center gap-2">
-                <span className="text-slate-600 dark:text-slate-300">Select a route:</span>
-                {routeAlts.map((alt, i) => (
-                  <button key={i} className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs" onClick={() => selectRoute(i)}>
-                    {(alt.distance / 1000).toFixed(1)}km
-                  </button>
-                ))}
+                <span className="text-slate-600 dark:text-slate-300">{planner.srcTj?.unique_id} → {planner.dstTj?.unique_id}</span>
+                <span className="text-[10px] text-slate-400">— Select a route below</span>
               </div>
             )}
             {planner.phase === "draw" && (
               <div className="flex items-center gap-2">
-                <span className="text-slate-600 dark:text-slate-300">{planner.waypoints.length} pts · {calcWaypointDistKm(planner.waypoints).toFixed(2)}km</span>
+                <span className="text-slate-600 dark:text-slate-300">{planner.waypoints.length} pts</span>
+                <span className="text-[10px] text-slate-400">|</span>
+                <span className="text-[10px] font-mono text-slate-500">{calcWaypointDistKm(planner.waypoints).toFixed(2)} km</span>
+                <span className="text-[10px] text-slate-400">|</span>
+                <span className="text-[10px] text-slate-500">+{allowancePct}%: {Math.round(calcRouteLengthM(planner.waypoints) * (1 + allowancePct / 100)).toLocaleString()} m</span>
+                <span className="text-[10px] text-slate-400">|</span>
+                <button className="text-[10px] text-blue-500 hover:text-blue-700" onClick={recalculateRoutes}>Recalculate</button>
                 <button className="btn-primary text-xs py-1" onClick={confirmRoute}>Confirm</button>
               </div>
             )}
@@ -1458,6 +1510,47 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
               </div>
             )}
             <button className="text-slate-400 hover:text-slate-600 text-xs" onClick={cancelPlan}>Cancel</button>
+          </div>
+        )}
+
+        {/* Route Comparison Panel */}
+        {planner.phase === "select-route" && routeAlts.length > 0 && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[999] rounded-xl bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm p-4 max-w-lg w-[90vw]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                Select Route — {planner.srcTj?.unique_id} → {planner.dstTj?.unique_id}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] text-slate-500">Allowance:</label>
+                <select className="input text-[10px] py-0.5 px-1 w-16" value={allowancePct} onChange={(e) => setAllowancePct(Number(e.target.value))}>
+                  {[0, 5, 10, 15, 20].map((p) => <option key={p} value={p}>{p}%</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {routeAlts.map((alt, i) => {
+                const distM = Math.round(alt.distance);
+                const distKm = (alt.distance / 1000).toFixed(2);
+                const cableReq = Math.round(distM * (1 + allowancePct / 100));
+                const wpCount = alt.coords.length;
+                const colors = ["bg-emerald-500", "bg-amber-500", "bg-violet-500"];
+                const borderColors = ["border-emerald-500", "border-amber-500", "border-violet-500"];
+                return (
+                  <button key={i} className={`w-full flex items-center gap-3 rounded-lg border-2 ${borderColors[i] || "border-slate-300"} bg-white dark:bg-slate-800 p-3 hover:shadow-md transition text-left`} onClick={() => selectRoute(i)}>
+                    <div className={`w-8 h-8 rounded-full ${colors[i] || "bg-slate-400"} text-white flex items-center justify-center text-sm font-bold`}>{i + 1}</div>
+                    <div className="flex-1">
+                      <div className="text-xs font-bold text-slate-800 dark:text-white">Route {i + 1}</div>
+                      <div className="text-[10px] text-slate-500">{wpCount} waypoints · {i === 0 ? "Shortest" : "Alternative"}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">{distKm} km</div>
+                      <div className="text-[10px] text-slate-400">+{allowancePct}%: {cableReq.toLocaleString()} m</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <button className="w-full mt-2 text-[10px] text-slate-400 hover:text-slate-600" onClick={cancelPlan}>Cancel</button>
           </div>
         )}
 
