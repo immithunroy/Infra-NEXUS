@@ -5,7 +5,7 @@ import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
 import TjDetailPanel from "../components/TjDetailPanel";
 import { api } from "../api/client";
-import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, CutRecoveryResult, canWrite } from "../api/types";
+import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, CutRecoveryResult, canWrite, canEditMap, canDeleteMap, canManageLayers, canApprove, canSubmit } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
 import StatusBadge from "../components/StatusBadge";
 import { fmtTimeShort } from "../lib/time";
@@ -142,14 +142,13 @@ export default function GoogleMap() {
   const [apiKeyError, setApiKeyError] = useState("");
 
   useEffect(() => {
-    api.get<any[]>("/settings").then((list) => {
-      const found = list.find((s: any) => s.key === "google_maps_api_key");
-      if (found?.value) {
-        setApiKey(found.value);
+    api.get<{ google_maps_api_key: string }>("/map/config").then((res) => {
+      if (res?.google_maps_api_key) {
+        setApiKey(res.google_maps_api_key);
       } else {
-        setApiKeyError("Google Maps API key not configured. Go to Settings → API Keys.");
+        setApiKeyError("Google Maps API key not configured. Contact an administrator.");
       }
-    }).catch(() => setApiKeyError("Failed to load API key settings."))
+    }).catch(() => setApiKeyError("Failed to load Google Maps configuration."))
       .finally(() => setApiKeyLoading(false));
   }, []);
 
@@ -169,8 +168,7 @@ export default function GoogleMap() {
       <div className="flex h-full items-center justify-center p-8">
         <div className="text-center space-y-3 max-w-md">
           <div className="text-red-500 text-lg font-semibold">Google Maps Not Configured</div>
-          <div className="text-sm text-slate-500">{apiKeyError || "No API key found."}</div>
-          <a href="/settings" className="btn-primary inline-block text-sm">Go to Settings</a>
+          <div className="text-sm text-slate-500">{apiKeyError || "No API key found. Contact an administrator."}</div>
         </div>
       </div>
     );

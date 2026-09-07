@@ -44,6 +44,22 @@ export function canManageUsers(role?: string): boolean {
   return role === "admin";
 }
 
+export function canViewMap(role?: string): boolean {
+  return !!role && role !== "none";
+}
+
+export function canEditMap(role?: string): boolean {
+  return role === "admin" || role === "global_write";
+}
+
+export function canDeleteMap(role?: string): boolean {
+  return role === "admin" || role === "global_write";
+}
+
+export function canManageLayers(role?: string): boolean {
+  return role === "admin" || role === "global_write";
+}
+
 export interface OLTDevice {
   id: number;
   name: string;

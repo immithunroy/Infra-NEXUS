@@ -46,6 +46,7 @@ export default function Layout() {
   };
 
   const roleLabel = user ? ROLE_LABELS[user.role] || user.role : "";
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -83,7 +84,7 @@ export default function Layout() {
           </button>
         </div>
         <nav className="mt-2 flex-1 space-y-1 overflow-y-auto px-2">
-          {links.map((link) => (
+          {links.filter((link) => link.to !== "/settings" || isAdmin).map((link) => (
             <NavLink
               key={link.to}
               to={link.to}

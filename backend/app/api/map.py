@@ -2,16 +2,21 @@ import hashlib
 import math
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import OLTDevice, Onu, User
+from ..models import OLTDevice, Onu, Setting, User
 from ..schemas import MapPoint, MapPointResponse
 from ..security import get_current_user
 from ..utils.status import display_status
 
 router = APIRouter(prefix="/api/map", tags=["map"], dependencies=[Depends(get_current_user)])
+
+
+class MapConfig(BaseModel):
+    google_maps_api_key: str
 
 # Default center for ONUs without GPS: scatter around this point.
 CITY_LAT = 22.80117038571286
@@ -28,6 +33,14 @@ def _scatterGPS(lat: float, lng: float, onu_id: int) -> tuple[float, float]:
     dlat = r * math.cos(math.radians(angle)) / 111320
     dlng = r * math.sin(math.radians(angle)) / (111320 * math.cos(math.radians(lat)))
     return round(lat + dlat, 6), round(lng + dlng, 6)
+
+
+@router.get("/config", response_model=MapConfig)
+async def map_config(db: AsyncSession = Depends(get_db)):
+    """Return the Google Maps API key for any authenticated user."""
+    result = await db.execute(select(Setting).where(Setting.key == "google_maps_api_key"))
+    s = result.scalar_one_or_none()
+    return MapConfig(google_maps_api_key=s.value if s else "")
 
 
 @router.get("/points", response_model=MapPointResponse)
