@@ -203,7 +203,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   const [showForm, setShowForm] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const [baseMap, setBaseMap] = useState<"street" | "satellite" | "terrain" | "hybrid">("street");
+  const [baseMap, setBaseMap] = useState<"street" | "satellite" | "terrain" | "hybrid">("hybrid");
   const [netLayers, setNetLayers] = useState({ olt: true, pop: true, tjBox: true, splitter: true, customer: true, fiberCable: true, cableRoute: true });
 
   const [cableForm, setCableForm] = useState<Partial<Cable>>({});
@@ -751,6 +751,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     const map = new google.maps.Map(mapContainerRef.current, {
       center: CITY_CENTER,
       zoom: 13,
+      mapTypeId: "hybrid",
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
@@ -892,7 +893,8 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setMapTypeId(baseMap === "satellite" ? "satellite" : baseMap === "terrain" ? "terrain" : "roadmap");
+    const typeMap: Record<string, string> = { street: "roadmap", satellite: "satellite", terrain: "terrain", hybrid: "hybrid" };
+    map.setMapTypeId(typeMap[baseMap] || "hybrid");
   }, [baseMap]);
 
   // ── Render markers & polylines ──
