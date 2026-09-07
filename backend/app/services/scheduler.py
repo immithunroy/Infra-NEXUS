@@ -269,14 +269,6 @@ async def _write_all_olts() -> None:
                         row.finished_at = finished
                         await session.commit()
                 logger.info("OLT write all succeeded for %s", device.name)
-                async with SessionLocal() as session:
-                    row = await session.get(OltWriteLog, log_id)
-                    if row:
-                        row.status = "success"
-                        row.message = "Config saved successfully"
-                        row.finished_at = finished
-                        await session.commit()
-                logger.info("OLT write all succeeded for %s", device.name)
             except Exception as exc:  # noqa: BLE001
                 all_ok = False
                 finished = utcnow()
