@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+import asyncio
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,7 @@ from ..schemas import (
 )
 from ..security import get_current_user, require_ops, require_write
 from ..services import collector
+from ..utils.time import utcnow
 
 router = APIRouter(prefix="/api/devices", tags=["devices"], dependencies=[Depends(get_current_user)])
 
@@ -117,7 +119,10 @@ async def save_olt_config(olt_id: int, user: User = Depends(require_ops), db: As
     try:
         driver = BdcomCliDriver(device)
         await driver.connect()
-        await driver._exec("write all", timeout=30)
+        await driver._exec("enable", timeout=10)
+        await driver._sendline("write all")
+        await asyncio.sleep(20)
+        await driver._read_until_prompt(timeout=30)
         driver.close()
         log.status = "success"
         log.message = "Config saved successfully"

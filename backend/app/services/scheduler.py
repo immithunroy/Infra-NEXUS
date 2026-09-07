@@ -256,8 +256,19 @@ async def _write_all_olts() -> None:
             driver = BdcomCliDriver(device)
             try:
                 await driver.connect()
-                await driver._exec("write all", timeout=30)
+                await driver._exec("enable", timeout=10)
+                await driver._sendline("write all")
+                await asyncio.sleep(20)
+                await driver._read_until_prompt(timeout=30)
                 finished = utcnow()
+                async with SessionLocal() as session:
+                    row = await session.get(OltWriteLog, log_id)
+                    if row:
+                        row.status = "success"
+                        row.message = "Config saved successfully"
+                        row.finished_at = finished
+                        await session.commit()
+                logger.info("OLT write all succeeded for %s", device.name)
                 async with SessionLocal() as session:
                     row = await session.get(OltWriteLog, log_id)
                     if row:
