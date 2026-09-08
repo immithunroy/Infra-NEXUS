@@ -54,6 +54,10 @@ DEREG_REASON_MAP = {
     "11": "reboot", "12": "ranging-failed",
 }
 
+# ONU vendor/software (GPON only — EPON doesn't expose via SNMP)
+GPON_ONU_VENDOR_OID = "1.3.6.1.4.1.3320.10.3.1.1.2"
+GPON_ONU_SW_VERSION_OID = "1.3.6.1.4.1.3320.10.3.1.1.20"
+
 # IF-MIB interface counters (per-ONU ports appear in ifDescr).
 IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
 IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"
@@ -745,6 +749,41 @@ class BdcomCliDriver(BaseDriver):
                         for info in onus.values():
                             if info.pon_port.upper().replace(" ", "") == pon_key and info.state != "active":
                                 info.dereg_reason = reason
+                except DriverError:
+                    pass
+
+            # ONU vendor/software (GPON only)
+            if self.device.snmp_enabled and self.device.pon_type.lower() == "gpon":
+                try:
+                    ip = self.device.ip
+                    community = self.device.snmp_community or "public"
+                    snmp_port = self.device.snmp_port or 161
+                    vendor_rows = await snmp_walk(ip, community, GPON_ONU_VENDOR_OID, snmp_port, timeout=OPTICAL_SNMP_TIMEOUT)
+                    sw_rows = await snmp_walk(ip, community, GPON_ONU_SW_VERSION_OID, snmp_port, timeout=OPTICAL_SNMP_TIMEOUT)
+                    ifnames = {}
+                    try:
+                        if_rows = await snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.2", snmp_port, timeout=OPTICAL_SNMP_TIMEOUT)
+                        ifnames = {int(oid_str.split(".")[-1]): name for oid_str, name in if_rows}
+                    except DriverError:
+                        pass
+                    for oid_str, val in vendor_rows:
+                        idx = int(oid_str.split(".")[-1])
+                        name = ifnames.get(idx, "")
+                        if not name or ":" not in name:
+                            continue
+                        pon_key = name.upper().replace(" ", "")
+                        for info in onus.values():
+                            if info.pon_port.upper().replace(" ", "") == pon_key:
+                                info.extra["vendor"] = val.strip()
+                    for oid_str, val in sw_rows:
+                        idx = int(oid_str.split(".")[-1])
+                        name = ifnames.get(idx, "")
+                        if not name or ":" not in name:
+                            continue
+                        pon_key = name.upper().replace(" ", "")
+                        for info in onus.values():
+                            if info.pon_port.upper().replace(" ", "") == pon_key:
+                                info.extra["sw_version"] = val.strip()
                 except DriverError:
                     pass
 

@@ -163,6 +163,8 @@ export interface Onu {
   rx_power: number | null;
   tx_power: number | null;
   distance: number | null;
+  vendor: string;
+  sw_version: string;
   last_mac: string;
   mac_vendor: string;
   mikrotik_ip: string;

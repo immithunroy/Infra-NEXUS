@@ -304,6 +304,8 @@ class OnuOut(BaseModel):
     rx_power: float | None
     tx_power: float | None
     distance: float | None = None
+    vendor: str = ""
+    sw_version: str = ""
     last_mac: str
     mac_vendor: str = ""
     mikrotik_ip: str

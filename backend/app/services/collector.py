@@ -86,6 +86,8 @@ async def _upsert_onu(
     down_reason: str = "",
     mac: str = "",
     distance: float | None = None,
+    vendor: str = "",
+    sw_version: str = "",
 ) -> Onu:
     key = (_normalize_port(pon_port), onu_id)
     res = await session.execute(
@@ -110,6 +112,10 @@ async def _upsert_onu(
         onu.mac = mac
     if distance is not None:
         onu.distance = distance
+    if vendor:
+        onu.vendor = vendor
+    if sw_version:
+        onu.sw_version = sw_version
     # Clear down_reason when ONU is active; otherwise keep the latest reason.
     if state == OnuState.active:
         onu.down_reason = ""
@@ -183,6 +189,8 @@ async def scan_olt(session: AsyncSession, olt_id: int) -> ScanLog:
             onu_info.dereg_reason,
             mac=onu_info.extra.get("mac", ""),
             distance=onu_info.extra.get("distance"),
+            vendor=onu_info.extra.get("vendor", ""),
+            sw_version=onu_info.extra.get("sw_version", ""),
         )
     for mac_info in macs:
         seen_macs.add(mac_info.mac)

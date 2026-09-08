@@ -237,6 +237,8 @@ export default function OnuProfile() {
           <InfoBox label="RX Power" value={onu.rx_power != null ? `${onu.rx_power} dBm` : "—"} danger={onu.rx_power != null && onu.rx_power < -25} />
           <InfoBox label="TX Power" value={onu.tx_power != null ? `${onu.tx_power} dBm` : "—"} />
           <InfoBox label="Distance" value={onu.distance != null ? `${onu.distance} km` : "—"} />
+          <InfoBox label="Vendor" value={onu.vendor || "—"} />
+          <InfoBox label="Software" value={onu.sw_version || "—"} />
           <InfoBox label="Source" value={onu.source} />
           <InfoBox label="Subscriber" value={<SubscriberLink subscriber={onu.subscriber} />} />
           <InfoBox label="Mikrotik IP" value={onu.mikrotik_ip || "—"} />

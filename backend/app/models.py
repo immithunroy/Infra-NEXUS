@@ -200,6 +200,8 @@ class Onu(Base):
     rx_power: Mapped[float | None] = mapped_column(nullable=True)
     tx_power: Mapped[float | None] = mapped_column(nullable=True)
     distance: Mapped[float | None] = mapped_column(nullable=True)  # km
+    vendor: Mapped[str] = mapped_column(String(128), default="")  # ONU vendor from SNMP
+    sw_version: Mapped[str] = mapped_column(String(128), default="")  # ONU firmware from SNMP
 
     last_mac: Mapped[str] = mapped_column(String(32), default="")
     mikrotik_ip: Mapped[str] = mapped_column(String(64), default="")
