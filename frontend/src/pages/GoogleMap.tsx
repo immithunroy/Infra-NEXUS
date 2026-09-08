@@ -458,6 +458,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  const blinkingUsersRef = useRef<google.maps.Marker[]>([]);
   const polylinesRef = useRef<Map<number, google.maps.Polyline>>(new Map());
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
 
@@ -1098,22 +1099,35 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
 
     // Users
     if (showCustomer && netLayers.customer) {
-      for (const p of mapPoints) {
+      for (const p of filteredUsers) {
         if (!p.gps_lat || !p.gps_lng) continue;
         const color = STATUS_COLOR[p.status] || "#6b7280";
         const isBlinking = p.status === "wire_down" || p.status === "offline" || p.status === "disabled" || p.status === "llid_admin_down";
-        const blinkSvg = isBlinking ? `<animate attributeName="opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite"/>` : "";
         const m = new google.maps.Marker({
           position: { lat: p.gps_lat, lng: p.gps_lng }, map,
-          icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="${color}" stroke="white" stroke-width="1.5">${blinkSvg}</circle></svg>`)}`, scaledSize: new google.maps.Size(12, 12), anchor: new google.maps.Point(6, 6) },
+          icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="${color}" stroke="white" stroke-width="1.5"/></svg>`)}`, scaledSize: new google.maps.Size(12, 12), anchor: new google.maps.Point(6, 6) },
+          opacity: isBlinking ? 0.4 : 1.0,
         });
+        if (isBlinking) blinkingUsersRef.current.push(m);
         m.addListener("mouseover", () => { iw.setContent(userTooltip(p, fmtTimeShort)); iw.open({ anchor: m, map }); });
         m.addListener("mouseout", () => iw.close());
         m.addListener("click", () => setSelectedUser(p));
         markersRef.current.set(`user-${p.olt_id}-${p.onu_id}`, m);
       }
     }
-  }, [cables, tjBoxes, splitters, loops, cuts, mapPoints, nocPopData, netLayers, drawCable.active, planner.phase, filterType, filterCore]);
+  }, [cables, tjBoxes, splitters, loops, cuts, filteredUsers, nocPopData, netLayers, drawCable.active, planner.phase, filterType, filterCore]);
+
+  // Blink effect for Google Maps markers (SVG animate doesn't work in data URIs)
+  useEffect(() => {
+    const markers = blinkingUsersRef.current;
+    if (markers.length === 0) return;
+    let visible = true;
+    const iv = setInterval(() => {
+      visible = !visible;
+      markers.forEach((m) => m.setOpacity(visible ? 1.0 : 0.3));
+    }, 600);
+    return () => { clearInterval(iv); markers.forEach((m) => m.setOpacity(1.0)); blinkingUsersRef.current = []; };
+  }, [filteredUsers]);
 
   // ── Drawing overlays (waypoints, routes) ──
   const drawingOverlaysRef = useRef<google.maps.Marker[]>([]);
