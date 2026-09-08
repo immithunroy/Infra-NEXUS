@@ -996,8 +996,8 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         const maxRatio = hasSplitters ? Math.max(...hostedSps.map((s) => s.split_ratio)) : 0;
         const spColor = SPLITTER_RATIO_COLORS[maxRatio] || "#f59e0b";
         const markerIcon = hasSplitters ? splitterSvgUrl(spColor) : tjSvgUrl(tjColor);
-        const markerSize = hasSplitters ? new google.maps.Size(20, 20) : new google.maps.Size(24, 24);
-        const markerAnchor = hasSplitters ? new google.maps.Point(10, 10) : new google.maps.Point(12, 12);
+        const markerSize = new google.maps.Size(24, 24);
+        const markerAnchor = new google.maps.Point(12, 12);
         const m = new google.maps.Marker({
           position: { lat: tj.lat, lng: tj.lng }, map,
           icon: { url: markerIcon, scaledSize: markerSize, anchor: markerAnchor },
