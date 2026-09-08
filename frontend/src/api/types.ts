@@ -86,6 +86,17 @@ export interface OLTDevice {
   ports: string[];
 }
 
+export interface OltHealth {
+  id: number;
+  olt_id: number;
+  cpu_pct: number | null;
+  memory_pct: number | null;
+  temp_celsius: number | null;
+  pon_sfp_tx: number | null;
+  pon_sfp_rx: number | null;
+  sampled_at: string;
+}
+
 export interface MikrotikDevice {
   id: number;
   name: string;

@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import OLTDevice, Onu, User, MikrotikDevice, SwitchDevice, BgpSession, BgpRoute, BgpPrefixSnapshot
+from ..models import OLTDevice, OltHealth, Onu, User, MikrotikDevice, SwitchDevice, BgpSession, BgpRoute, BgpPrefixSnapshot
 from ..schemas import (
     BgpSessionOut,
     BgpPrefixSnapshotOut,
@@ -14,6 +14,7 @@ from ..schemas import (
     OLTDeviceCreate,
     OLTDeviceOut,
     OLTDeviceUpdate,
+    OltHealthOut,
     OnuBandwidthRequest,
     SwitchCreate,
     SwitchOut,
@@ -135,6 +136,22 @@ async def save_olt_config(olt_id: int, user: User = Depends(require_ops), db: As
         log.finished_at = utcnow()
         await db.commit()
         return TestResult(success=False, message=str(exc))
+
+
+@router.get("/olts/{olt_id}/health", response_model=list[OltHealthOut])
+async def get_olt_health(olt_id: int, hours: int = 24, db: AsyncSession = Depends(get_db)):
+    """OLT system health history (CPU, memory, temperature, SFP power)."""
+    from datetime import timedelta
+    device = await db.get(OLTDevice, olt_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="OLT not found")
+    since = utcnow() - timedelta(hours=hours)
+    res = await db.execute(
+        select(OltHealth)
+        .where(OltHealth.olt_id == olt_id, OltHealth.sampled_at >= since)
+        .order_by(OltHealth.sampled_at)
+    )
+    return res.scalars().all()
 
 
 # ------------------------------------------------------------- Mikrotiks

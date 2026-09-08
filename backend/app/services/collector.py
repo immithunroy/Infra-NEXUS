@@ -11,7 +11,7 @@ from datetime import timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..drivers.bdcom import build_driver
+from ..drivers.bdcom import build_driver, _snmp_olt_health
 from ..drivers.base import DriverError
 from ..drivers.mikrotik import MikrotikDriver
 from ..utils.time import utcnow
@@ -21,6 +21,7 @@ from ..models import (
     MacEntry,
     MikrotikDevice,
     OLTDevice,
+    OltHealth,
     Onu,
     OnuSource,
     OnuState,
@@ -412,6 +413,27 @@ async def collect_telemetry(session: AsyncSession, olt_id: int) -> int:
         await session.execute(
             delete(OnuTelemetry).where(OnuTelemetry.sampled_at < utcnow() - timedelta(days=90))
         )
+
+    # Collect OLT system health (CPU, memory, temp, SFP)
+    if device.snmp_enabled:
+        try:
+            health = await _snmp_olt_health(device)
+            session.add(
+                OltHealth(
+                    olt_id=olt_id,
+                    cpu_pct=health.cpu_pct,
+                    memory_pct=health.memory_pct,
+                    temp_celsius=health.temp_celsius,
+                    pon_sfp_tx=health.pon_sfp_tx,
+                    pon_sfp_rx=health.pon_sfp_rx,
+                    sampled_at=now,
+                )
+            )
+            await session.execute(
+                delete(OltHealth).where(OltHealth.sampled_at < utcnow() - timedelta(days=90))
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     device.status = "reachable"
     device.last_scan_at = now

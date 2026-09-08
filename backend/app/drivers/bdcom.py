@@ -21,7 +21,7 @@ from ..config import get_settings
 from ..models import OLTDevice
 from ..utils.mac import find_mac, normalize_mac
 from ..utils.telnet import TelnetClient, TelnetError
-from .base import BaseDriver, DriverError, MacInfo, OnuInfo
+from .base import BaseDriver, DriverError, MacInfo, OnuInfo, OltHealthSample
 from .snmp import snmp_walk
 
 # GPON MIB (1.3.6.1.4.1.3320.10.x)
@@ -32,6 +32,16 @@ GPON_ONU_DISTANCE_OID = "1.3.6.1.4.1.3320.10.3.1.1.33"  # decameters (÷10 = met
 
 # EPON MIB (1.3.6.1.4.1.3320.101.x)
 EPON_ONU_DISTANCE_OID = "1.3.6.1.4.1.3320.101.10.1.1.27"  # meters
+
+# OLT system health OIDs (shared by EPON and GPON)
+OLT_CPU_OID = "1.3.6.1.4.1.3320.9.109.1.1.1.1"
+OLT_MEMORY_OID = "1.3.6.1.4.1.3320.9.48.1"
+OLT_CHASSIS_TEMP_OID = "1.3.6.1.4.1.3320.9.181.1.1.7"
+# PON SFP power (OLT-side transceiver)
+EPON_OLT_SFP_TX_OID = "1.3.6.1.4.1.3320.101.107.1.3"
+EPON_OLT_SFP_RX_OID = "1.3.6.1.4.1.3320.101.108.1.3"
+GPON_OLT_SFP_TX_OID = "1.3.6.1.4.1.3320.10.2.2.1.5"
+GPON_OLT_SFP_RX_OID = "1.3.6.1.4.1.3320.10.2.3.1.3"
 
 # IF-MIB interface counters (per-ONU ports appear in ifDescr).
 IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
@@ -231,6 +241,61 @@ async def _snmp_distance(device: OLTDevice) -> dict[str, float]:
         if ifindex in dist_by_idx:
             result[name.upper().replace(" ", "")] = dist_by_idx[ifindex]
     return result
+
+
+async def _snmp_olt_health(device: OLTDevice) -> OltHealthSample:
+    """OLT system health via SNMP: CPU, memory, temperature, PON SFP power."""
+    community = device.snmp_community or ""
+    if not community:
+        return OltHealthSample()
+    port = device.snmp_port or 161
+    ip = device.ip
+    is_gpon = device.pon_type.lower() == "gpon"
+
+    def _first_val(rows: list[tuple[str, str]]) -> float | None:
+        if not rows:
+            return None
+        try:
+            return float(rows[0][1])
+        except (ValueError, TypeError):
+            return None
+
+    cpu = memory = temp = sfp_tx = sfp_rx = None
+    try:
+        rows = await snmp_walk(ip, community, OLT_CPU_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        cpu = _first_val(rows)
+    except DriverError:
+        pass
+    try:
+        rows = await snmp_walk(ip, community, OLT_MEMORY_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        memory = _first_val(rows)
+    except DriverError:
+        pass
+    try:
+        rows = await snmp_walk(ip, community, OLT_CHASSIS_TEMP_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        temp = _first_val(rows)
+    except DriverError:
+        pass
+    try:
+        tx_oid = GPON_OLT_SFP_TX_OID if is_gpon else EPON_OLT_SFP_TX_OID
+        rows = await snmp_walk(ip, community, tx_oid, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        sfp_tx = _dbm(str(int(rows[0][1]))) if rows else None
+    except DriverError:
+        pass
+    try:
+        rx_oid = GPON_OLT_SFP_RX_OID if is_gpon else EPON_OLT_SFP_RX_OID
+        rows = await snmp_walk(ip, community, rx_oid, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        sfp_rx = _dbm(str(int(rows[0][1]))) if rows else None
+    except DriverError:
+        pass
+
+    return OltHealthSample(
+        cpu_pct=cpu,
+        memory_pct=memory,
+        temp_celsius=temp,
+        pon_sfp_tx=sfp_tx,
+        pon_sfp_rx=sfp_rx,
+    )
 
 
 class BdcomCliDriver(BaseDriver):

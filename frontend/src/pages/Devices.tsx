@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useState } from "react";
 import { api } from "../api/client";
-import { canOps, canWrite, MikrotikDevice, OLTDevice, SwitchDevice, TestResult } from "../api/types";
+import { canOps, canWrite, MikrotikDevice, OLTDevice, OltHealth, SwitchDevice, TestResult } from "../api/types";
 import { Pagination, usePagination } from "../components/Pagination";
 import { useUserRole } from "../lib/role";
 import { fmtTime } from "../lib/time";
@@ -111,7 +111,7 @@ export default function Devices() {
   const [expandedNoc, setExpandedNoc] = useState<number | null>(null);
   const [expandedPop, setExpandedPop] = useState<number | null>(null);
   const [nocPopTab, setNocPopTab] = useState<"noc" | "pop">("noc");
-
+  const [oltHealth, setOltHealth] = useState<Record<number, OltHealth>>({});
 
   const load = async () => {
     setOlts(await api.get<OLTDevice[]>("/devices/olts"));
@@ -124,6 +124,16 @@ export default function Devices() {
   useEffect(() => {
     load().catch((e) => setNotice({ text: String(e), ok: false }));
   }, []);
+
+  useEffect(() => {
+    if (olts.length === 0) return;
+    for (const olt of olts) {
+      if (!olt.snmp_enabled) continue;
+      api.get<OltHealth[]>(`/devices/olts/${olt.id}/health?hours=1`).then((rows) => {
+        if (rows.length > 0) setOltHealth((prev) => ({ ...prev, [olt.id]: rows[rows.length - 1] }));
+      }).catch(() => {});
+    }
+  }, [olts]);
 
   const flash = (text: string, ok = true) => {
     setNotice({ text, ok });
@@ -612,6 +622,7 @@ export default function Devices() {
                 <th className="th">NOC</th>
                 <th className="th">POP</th>
                 <th className="th">ONUs</th>
+                <th className="th">Health</th>
                 <th className="th">Status</th>
                 <th className="th">Last scan</th>
                 <th className="th">Actions</th>
@@ -628,6 +639,32 @@ export default function Devices() {
                   <td className="td text-xs">{nocs.find((n) => n.id === d.noc_id)?.name || "—"}</td>
                   <td className="td text-xs">{pops.find((p) => p.id === d.pop_id)?.name || "—"}</td>
                   <td className="td">{d.onu_count}</td>
+                  <td className="td text-xs">
+                    {oltHealth[d.id] ? (
+                      <div className="flex flex-col gap-0.5">
+                        {oltHealth[d.id].cpu_pct != null && (
+                          <span className={oltHealth[d.id].cpu_pct! > 80 ? "text-red-600 font-semibold" : oltHealth[d.id].cpu_pct! > 60 ? "text-amber-600" : "text-emerald-600"}>
+                            CPU {Math.round(oltHealth[d.id].cpu_pct!)}%
+                          </span>
+                        )}
+                        {oltHealth[d.id].memory_pct != null && (
+                          <span className={oltHealth[d.id].memory_pct! > 80 ? "text-red-600 font-semibold" : oltHealth[d.id].memory_pct! > 60 ? "text-amber-600" : "text-emerald-600"}>
+                            MEM {Math.round(oltHealth[d.id].memory_pct!)}%
+                          </span>
+                        )}
+                        {oltHealth[d.id].temp_celsius != null && (
+                          <span className={oltHealth[d.id].temp_celsius! > 55 ? "text-red-600 font-semibold" : oltHealth[d.id].temp_celsius! > 45 ? "text-amber-600" : "text-emerald-600"}>
+                            {oltHealth[d.id].temp_celsius!.toFixed(0)}°C
+                          </span>
+                        )}
+                        {oltHealth[d.id].pon_sfp_rx != null && (
+                          <span className="text-slate-500">SFP {oltHealth[d.id].pon_sfp_rx!.toFixed(1)} dBm</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
                   <td className="td"><StatusBadge status={d.status} /></td>
                   <td className="td text-xs">{d.last_scan_at ? fmtTime(d.last_scan_at) : "—"}</td>
                   <td className="td">

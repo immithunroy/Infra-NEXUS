@@ -507,6 +507,21 @@ class OnuTelemetry(Base):
     sampled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, default=utcnow)
 
 
+class OltHealth(Base):
+    """OLT system health: CPU, memory, temperature, SFP power (SNMP samples)."""
+
+    __tablename__ = "olt_health"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    olt_id: Mapped[int] = mapped_column(ForeignKey("olt_devices.id", ondelete="CASCADE"), index=True)
+    cpu_pct: Mapped[float | None] = mapped_column(nullable=True)
+    memory_pct: Mapped[float | None] = mapped_column(nullable=True)
+    temp_celsius: Mapped[float | None] = mapped_column(nullable=True)
+    pon_sfp_tx: Mapped[float | None] = mapped_column(nullable=True)  # dBm
+    pon_sfp_rx: Mapped[float | None] = mapped_column(nullable=True)  # dBm
+    sampled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, default=utcnow)
+
+
 class OnuMacHistory(Base):
     """Previous MACs a subscriber used before switching to a new CPE/router."""
 

@@ -28,6 +28,16 @@ class DriverError(Exception):
     pass
 
 
+@dataclass
+class OltHealthSample:
+    """OLT system health via SNMP."""
+    cpu_pct: float | None = None
+    memory_pct: float | None = None
+    temp_celsius: float | None = None
+    pon_sfp_tx: float | None = None
+    pon_sfp_rx: float | None = None
+
+
 class BaseDriver(ABC):
     @abstractmethod
     async def test(self) -> str:

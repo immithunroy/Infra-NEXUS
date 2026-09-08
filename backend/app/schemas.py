@@ -113,6 +113,19 @@ class OLTDeviceOut(BaseModel):
     ports: list[str] = []
 
 
+class OltHealthOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    olt_id: int
+    cpu_pct: float | None = None
+    memory_pct: float | None = None
+    temp_celsius: float | None = None
+    pon_sfp_tx: float | None = None
+    pon_sfp_rx: float | None = None
+    sampled_at: datetime
+
+
 class SwitchBase(BaseModel):
     name: str
     ip: str
