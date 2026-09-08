@@ -223,7 +223,7 @@ export default function FiberMap() {
       const segments: TempSegment[] = p.waypoints.map((ll, i) => { const next = p.waypoints[i + 1]; return next ? { start_lat: ll.lat, start_lng: ll.lng, end_lat: next.lat, end_lng: next.lng, order_index: i } : null; }).filter(Boolean) as TempSegment[];
       const code = (p.srcTj as TjBox).unique_id + ">" + (p.dstTj as TjBox).unique_id;
       setCableForm({
-        code, cable_type: "round", core_count: 12, route_type: "driving",
+        code, cable_type: "round", core_count: 4, route_type: "driving",
         src_tj_id: (p.srcTj as TjBox).id, dst_tj_id: (p.dstTj as TjBox).id,
         manufacturer: "PLANNED", manufacturing_year: new Date().getFullYear(),
         segments: segments as any[],
@@ -311,7 +311,7 @@ export default function FiberMap() {
       const segments: TempSegment[] = allPoints.map((ll, i) => { const next = allPoints[i + 1]; return next ? { start_lat: ll.lat, start_lng: ll.lng, end_lat: next.lat, end_lng: next.lng, order_index: i } : null; }).filter(Boolean) as TempSegment[];
       const code = d.sourceTj.unique_id + ">" + dstTj.unique_id;
       setCableForm({
-        code, cable_type: "round", core_count: 12, route_type: "driving",
+        code, cable_type: "round", core_count: 4, route_type: "driving",
         src_tj_id: d.sourceTj.id, dst_tj_id: dstTj.id,
         manufacturer: "PLANNED", manufacturing_year: new Date().getFullYear(),
         segments: segments as any[],
@@ -720,9 +720,9 @@ export default function FiberMap() {
 
   const handleRightClickAdd = (kind: string, lat: number, lng: number) => {
     if (kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); }
-    else if (kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
+    else if (kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 8, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
     else if (kind === "splitter") { setSplitterForm({ name: "", split_ratio: 2, lat, lng }); setShowForm("splitter"); }
-    else if (kind === "cable") { setCableForm({ code: "", cable_type: "round", core_count: 12, segments: [] }); setShowForm("cable"); }
+    else if (kind === "cable") { setCableForm({ code: "", cable_type: "round", core_count: 4, segments: [] }); setShowForm("cable"); }
     else if (kind === "loop") { setLoopForm({ lat, lng, loop_length_m: 30 }); setShowForm("loop"); }
     else if (kind === "cut") { setCutForm({ lat, lng }); setShowForm("cut"); }
   };
@@ -735,7 +735,7 @@ export default function FiberMap() {
       return next ? { start_lat: ll.lat, start_lng: ll.lng, end_lat: next.lat, end_lng: next.lng, order_index: i } : null;
     }).filter(Boolean) as TempSegment[];
     if (segments.length) {
-      setCableForm({ ...cableForm, cable_type: "round", core_count: 12, segments: segments as any[] });
+      setCableForm({ ...cableForm, cable_type: "round", core_count: 4, segments: segments as any[] });
       setShowForm("cable");
     }
     mapRef.current?.removeLayer(layer);
@@ -809,8 +809,8 @@ export default function FiberMap() {
           <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
           {writeOk && (
             <>
-              <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 12, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
-              <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 4, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
+              <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50" onClick={() => { setShowForm("cable"); setEditingId(null); setCableForm({ cable_type: "round", core_count: 4, route_type: "driving", src_tj_id: null, dst_tj_id: null }); }}>+ Link</button>
+              <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50" onClick={() => { setShowForm("tj"); setEditingId(null); setTjForm({ box_type: "regular_tj", tj_port: 8, capacity: 4, tray_count: 1 }); }}>+ TJ</button>
               <button className="text-xs py-1 px-2 rounded-md transition font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50" onClick={() => { setFeasCheckOpen(true); setFeasChecked(false); setFeasResults([]); setFeasLat(""); setFeasLng(""); }}>Feasibility</button>
               <button className={`text-xs py-1 px-2 rounded-md transition font-medium ${planner.phase !== "idle" ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"}`} onClick={() => setPlanner({ phase: "select-src", srcTj: null, dstTj: null, waypoints: [] })}>
                 {planner.phase !== "idle" ? "Planning..." : "Plan Link"}
@@ -1250,7 +1250,7 @@ export default function FiberMap() {
                 <div><label className="label">Type</label><select className="input" value={cableForm.cable_type || "round"} onChange={(e) => setCableForm({ ...cableForm, cable_type: e.target.value })}>
                   <option value="round">Round Fiber</option><option value="figure8">Figure 8 Messenger</option>
                 </select></div>
-                <div><label className="label">Core Count</label><select className="input" value={cableForm.core_count || 12} onChange={(e) => setCableForm({ ...cableForm, core_count: Number(e.target.value) })}>
+                <div><label className="label">Core Count</label><select className="input" value={cableForm.core_count || 4} onChange={(e) => setCableForm({ ...cableForm, core_count: Number(e.target.value) })}>
                   {[2, 4, 8, 12, 24, 36, 48, 144].map((n) => <option key={n} value={n}>{n} cores</option>)}
                 </select></div>
               </div>
@@ -1288,7 +1288,7 @@ export default function FiberMap() {
                 }}>
                   <option value="home_tj">Home TJ</option><option value="regular_tj">Regular TJ</option><option value="enclosure">Enclosure</option><option value="dome">Dome / Bamboo</option>
                 </select></div>
-                <div><label className="label">TJ Port</label><select className="input" value={tjForm.tj_port || 4} onChange={(e) => setTjForm({ ...tjForm, tj_port: Number(e.target.value) })}>
+                <div><label className="label">TJ Port</label><select className="input" value={tjForm.tj_port || 8} onChange={(e) => setTjForm({ ...tjForm, tj_port: Number(e.target.value) })}>
                   {[2, 4, 8, 10, 12].map((n) => <option key={n} value={n}>{n} ports</option>)}
                 </select></div>
               </div>
