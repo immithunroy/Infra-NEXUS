@@ -2005,13 +2005,27 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                   <div><span className="font-medium">Capacity:</span> {recoveryResult.tj_capacity} Port</div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">Connected</div>
-                <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs">
-                  <div className="font-mono font-semibold">{recoveryResult.cable_code}</div>
-                  <div className="text-slate-500">{recoveryResult.core_count} cores → {recoveryResult.tj_unique_id}</div>
+              {recoveryResult.cable_a_link_id && recoveryResult.cable_b_link_id && (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">Cable Split</div>
+                  <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                      <div>
+                        <div className="font-mono font-semibold">{recoveryResult.cable_a_link_id}</div>
+                        <div className="text-slate-500">{recoveryResult.cable_a_link_name}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-orange-500" />
+                      <div>
+                        <div className="font-mono font-semibold">{recoveryResult.cable_b_link_id}</div>
+                        <div className="text-slate-500">{recoveryResult.cable_b_link_name}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">Splices Created: {recoveryResult.splices_created}</div>
                 <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 max-h-32 overflow-y-auto space-y-0.5">
@@ -2022,11 +2036,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                   ))}
                 </div>
               </div>
-              {recoveryResult.unmatched_cores.length > 0 && (
-                <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3">
-                  <div className="text-xs font-medium text-amber-800 dark:text-amber-300">Unmatched Cores: {recoveryResult.unmatched_cores.join(", ")}</div>
-                </div>
-              )}
               <div className="flex justify-end pt-2">
                 <button className="btn-primary" onClick={() => setRecoveryResult(null)}>Done</button>
               </div>

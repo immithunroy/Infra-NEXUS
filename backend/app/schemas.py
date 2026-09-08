@@ -1351,6 +1351,12 @@ class CutRecoveryResult(BaseModel):
     splices_created: int
     splices: list[CutRecoverySplice]
     unmatched_cores: list[int]
+    cable_a_id: int | None = None
+    cable_a_link_id: str | None = None
+    cable_a_link_name: str | None = None
+    cable_b_id: int | None = None
+    cable_b_link_id: str | None = None
+    cable_b_link_name: str | None = None
 
 
 # ---------------------------------------------------------------- approval queue

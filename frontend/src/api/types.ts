@@ -970,6 +970,12 @@ export interface CutRecoveryResult {
   splices_created: number;
   splices: CutRecoverySplice[];
   unmatched_cores: number[];
+  cable_a_id: number | null;
+  cable_a_link_id: string | null;
+  cable_a_link_name: string | null;
+  cable_b_id: number | null;
+  cable_b_link_id: string | null;
+  cable_b_link_name: string | null;
 }
 
 // ---------------------------------------------------------------- approval queue

@@ -492,8 +492,16 @@ def _select_tj_capacity(core_count: int) -> int:
 
 @router.post("/cuts/{cut_id}/recover", response_model=CutRecoveryResult)
 async def recover_cut(cut_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
-    """Automatically recover a cable cut: create TJ, connect cables, splice same-color cores."""
+    """Automatically recover a cable cut: create TJ, split cable into two segments, splice same-color cores."""
     from datetime import datetime, timezone
+    import math
+
+    def haversine(lat1, lng1, lat2, lng2):
+        R = 6371000
+        dLat = math.radians(lat2 - lat1)
+        dLng = math.radians(lng2 - lng1)
+        a = math.sin(dLat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLng/2)**2
+        return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
     # 1. Look up the cut
     cut = await db.get(CableCut, cut_id)
@@ -511,13 +519,62 @@ async def recover_cut(cut_id: int, user: User = Depends(require_write), db: Asyn
     if core_count <= 0:
         raise HTTPException(400, "Cable has no cores to splice")
 
-    # 3. Determine TJ capacity
+    # 3. Get all segments sorted by order_index
+    segs_result = await db.execute(
+        select(CableSegment).where(CableSegment.cable_id == cable.id).order_by(CableSegment.order_index)
+    )
+    segments = segs_result.scalars().all()
+    if not segments:
+        raise HTTPException(400, "Cable has no segments")
+
+    # 4. Find which segment contains the cut point and split
+    cut_lat, cut_lng = cut.lat, cut.lng
+    seg_before = []  # segments fully before cut
+    seg_after = []   # segments fully after cut
+    split_done = False
+
+    for seg in segments:
+        # Calculate distance from segment start to cut point
+        d_to_cut = haversine(seg.start_lat, seg.start_lng, cut_lat, cut_lng)
+        d_seg_total = haversine(seg.start_lat, seg.start_lng, seg.end_lat, seg.end_lng)
+
+        if split_done:
+            seg_after.append(seg)
+        elif d_to_cut < 0.5:  # Cut is at segment start (within 0.5m)
+            seg_after.append(seg)
+        elif d_seg_total - d_to_cut < 0.5:  # Cut is at segment end (within 0.5m)
+            seg_before.append(seg)
+        elif d_to_cut < d_seg_total:  # Cut is in the middle of this segment
+            # Split segment: create two new segments
+            seg_a = CableSegment(
+                cable_id=cable.id,  # temporary, will be updated
+                start_lat=seg.start_lat, start_lng=seg.start_lng,
+                end_lat=cut_lat, end_lng=cut_lng,
+                order_index=seg.order_index,
+            )
+            seg_b = CableSegment(
+                cable_id=cable.id,  # temporary, will be updated
+                start_lat=cut_lat, start_lng=cut_lng,
+                end_lat=seg.end_lat, end_lng=seg.end_lng,
+                order_index=seg.order_index,
+            )
+            seg_before.append(seg_a)
+            seg_after.append(seg_b)
+            split_done = True
+        else:
+            seg_before.append(seg)
+
+    # If cut is beyond all segments, add all to before
+    if not split_done and not seg_after:
+        seg_after = []  # edge case: cut at end
+
+    # 5. Determine TJ capacity
     tj_capacity = _select_tj_capacity(core_count)
 
-    # 4. Generate unique TJ ID
+    # 6. Generate unique TJ ID
     tj_unique_id = await _next_tj_id(db)
 
-    # 5. Create new TJ at cut location
+    # 7. Create new TJ at cut location
     new_tj = TjBox(
         unique_id=tj_unique_id,
         name=f"Recovery {tj_unique_id}",
@@ -532,43 +589,99 @@ async def recover_cut(cut_id: int, user: User = Depends(require_write), db: Asyn
         notes=f"Auto-created for cut recovery on {cable.code}",
     )
     db.add(new_tj)
-    await db.flush()  # Get the new TJ's ID
+    await db.flush()
 
-    # 6. Create splices for each core (same-color matching)
+    # 8. Create Cable A (segment A) - from original start to cut point
+    max_res = await db.execute(select(Cable.id).order_by(Cable.id.desc()).limit(1))
+    max_id = max_res.scalar() or 0
+    link_id_a = f"LINK-{max_id + 1001}"
+    link_id_b = f"LINK-{max_id + 1002}"
+
+    cable_a = Cable(
+        link_id=link_id_a,
+        link_name=f"{cable.link_name or cable.code} Segment A",
+        code=cable.code,
+        core_count=cable.core_count,
+        manufacturer=cable.manufacturer,
+        manufacturing_year=cable.manufacturing_year,
+        cable_type=cable.cable_type,
+        route_type=cable.route_type,
+        src_tj_id=cable.src_tj_id,
+        dst_tj_id=new_tj.id,
+        notes=f"Auto-split from {cable.link_id} during cut recovery",
+    )
+    db.add(cable_a)
+    await db.flush()
+
+    # 9. Create Cable B (segment B) - from cut point to original end
+    cable_b = Cable(
+        link_id=link_id_b,
+        link_name=f"{cable.link_name or cable.code} Segment B",
+        code=cable.code,
+        core_count=cable.core_count,
+        manufacturer=cable.manufacturer,
+        manufacturing_year=cable.manufacturing_year,
+        cable_type=cable.cable_type,
+        route_type=cable.route_type,
+        src_tj_id=new_tj.id,
+        dst_tj_id=cable.dst_tj_id,
+        notes=f"Auto-split from {cable.link_id} during cut recovery",
+    )
+    db.add(cable_b)
+    await db.flush()
+
+    # 10. Assign segments to new cables
+    for i, seg in enumerate(seg_before):
+        seg.cable_id = cable_a.id
+        seg.order_index = i
+        db.add(seg)
+
+    for i, seg in enumerate(seg_after):
+        seg.cable_id = cable_b.id
+        seg.order_index = i
+        db.add(seg)
+
+    # 11. Move loops to appropriate cables
+    loops_result = await db.execute(
+        select(FiberLoop).where(FiberLoop.cable_id == cable.id)
+    )
+    loops = loops_result.scalars().all()
+    for loop in loops:
+        # Determine which cable the loop belongs to based on segment_index
+        if loop.segment_index < len(seg_before):
+            loop.cable_id = cable_a.id
+        else:
+            loop.cable_id = cable_b.id
+            loop.segment_index = loop.segment_index - len(seg_before)
+        db.add(loop)
+
+    # 12. Update existing splices that reference the original cable
+    existing_splices_result = await db.execute(
+        select(Splice).where(
+            (Splice.cable_a_id == cable.id) | (Splice.cable_b_id == cable.id)
+        )
+    )
+    existing_splices = existing_splices_result.scalars().all()
+    for splice in existing_splices:
+        if splice.cable_a_id == cable.id:
+            splice.cable_a_id = cable_a.id
+        if splice.cable_b_id == cable.id:
+            splice.cable_b_id = cable_a.id
+        db.add(splice)
+
+    # 13. Create splices for each core at the new TJ (connecting Cable A to Cable B)
     splices_created = 0
     splice_details = []
-    unmatched_cores = []
 
     for core_idx in range(1, core_count + 1):
         color_name = CORE_COLOR_NAMES[(core_idx - 1) % len(CORE_COLOR_NAMES)]
 
-        # Check for duplicate splice (idempotency)
-        existing = (await db.execute(
-            select(Splice).where(
-                Splice.tj_id == new_tj.id,
-                Splice.status.in_(["active", "spare"]),
-                Splice.cable_a_id == cable.id,
-                Splice.core_a == core_idx,
-                Splice.cable_b_id == cable.id,
-                Splice.core_b == core_idx,
-            )
-        )).scalars().first()
-
-        if existing:
-            # Already spliced (idempotent)
-            splices_created += 1
-            splice_details.append(CutRecoverySplice(
-                core_index=core_idx, color=color_name,
-                cable_a_id=cable.id, cable_b_id=cable.id,
-            ))
-            continue
-
-        # Create splice: same cable, same core (pass-through at recovery TJ)
+        # Create splice: Cable A core -> Cable B core at new TJ
         splice = Splice(
             tj_id=new_tj.id,
-            cable_a_id=cable.id,
+            cable_a_id=cable_a.id,
             core_a=core_idx,
-            cable_b_id=cable.id,
+            cable_b_id=cable_b.id,
             core_b=core_idx,
             tray_id=1,
             status="active",
@@ -578,17 +691,19 @@ async def recover_cut(cut_id: int, user: User = Depends(require_write), db: Asyn
         splices_created += 1
         splice_details.append(CutRecoverySplice(
             core_index=core_idx, color=color_name,
-            cable_a_id=cable.id, cable_b_id=cable.id,
+            cable_a_id=cable_a.id, cable_b_id=cable_b.id,
         ))
 
-    # 7. Update cut status
+    # 14. Update cut status
     cut.status = "repaired"
     cut.repair_date = datetime.now(timezone.utc)
     cut.splice_tj_id = new_tj.id
-    cut.notes = (cut.notes + "\n" if cut.notes else "") + f"Auto-recovered: {tj_unique_id} with {splices_created} splices"
+    cut.notes = (cut.notes + "\n" if cut.notes else "") + f"Auto-recovered: {tj_unique_id} with {splices_created} splices. Cable split into {link_id_a} and {link_id_b}"
 
     await db.commit()
     await db.refresh(new_tj)
+    await db.refresh(cable_a)
+    await db.refresh(cable_b)
 
     return CutRecoveryResult(
         tj_id=new_tj.id,
@@ -600,7 +715,13 @@ async def recover_cut(cut_id: int, user: User = Depends(require_write), db: Asyn
         core_count=core_count,
         splices_created=splices_created,
         splices=splice_details,
-        unmatched_cores=unmatched_cores,
+        unmatched_cores=[],
+        cable_a_id=cable_a.id,
+        cable_a_link_id=cable_a.link_id,
+        cable_a_link_name=cable_a.link_name,
+        cable_b_id=cable_b.id,
+        cable_b_link_id=cable_b.link_id,
+        cable_b_link_name=cable_b.link_name,
     )
 
 
