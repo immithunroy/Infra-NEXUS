@@ -85,6 +85,25 @@ class MikrotikDriver:
             kwargs.pop("login_method", None)
             return connect(**kwargs)
 
+    def _connect_and_monitor(self, interface: str) -> dict:
+        api = self._connect()
+        try:
+            result = list(api.path("/interface/monitor-traffic", interface=interface, once=True))
+            if result:
+                row = result[0]
+                return {
+                    "rx_rate": row.get("rx-rate", "0 bps"),
+                    "tx_rate": row.get("tx-rate", "0 bps"),
+                    "rx_byte": row.get("rx-byte", 0),
+                    "tx_byte": row.get("tx-byte", 0),
+                }
+            return {}
+        finally:
+            try:
+                api.close()
+            except Exception:
+                pass
+
     def _collect(self) -> tuple[list[dict], list[dict]]:
         api = self._connect()
         try:
@@ -106,6 +125,13 @@ class MikrotikDriver:
             )
         except Exception as exc:
             raise DriverError(f"Mikrotik connection failed: {exc}") from exc
+
+    async def monitor_traffic_once(self, interface: str) -> dict:
+        """Get current rx/tx rates for a PPPoE interface."""
+        try:
+            return await asyncio.to_thread(self._connect_and_monitor, interface)
+        except Exception as exc:
+            raise DriverError(f"Traffic monitor failed: {exc}") from exc
 
     async def collect(self) -> tuple[list[ActiveSession], list[SecretInfo], int]:
         """Return (PPPoE active sessions, PPP secrets, active count).

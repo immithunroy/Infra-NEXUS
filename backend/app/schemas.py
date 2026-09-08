@@ -635,6 +635,24 @@ class DownStartRequest(BaseModel):
     mass_threshold: int = 5
 
 
+class TrafficSample(BaseModel):
+    timestamp: float
+    rx_rate: int = 0
+    tx_rate: int = 0
+
+
+class TrafficSession(BaseModel):
+    subscriber: str
+    interface: str = ""
+    mikrotik_name: str = ""
+    mikrotik_ip: str = ""
+    status: str = "running"
+    samples: list[TrafficSample] = []
+    elapsed: float = 0
+    remaining: float = 120
+    error: str = ""
+
+
 class PortAreaOut(BaseModel):
     olt_id: int
     port: str

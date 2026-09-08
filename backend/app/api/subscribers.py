@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import AcsDevice, AcsParameter, Onu, OnuMacHistory, OnuTelemetry, Ticket, TicketStatus, User
+from ..models import AcsDevice, AcsParameter, MikrotikDevice, Onu, OnuMacHistory, OnuTelemetry, PppActiveEntry, Ticket, TicketStatus, User
 from ..utils.time import utcnow
 from ..security import get_current_user, user_role
 from ..services.mac_vendor import vendor_map
@@ -24,6 +24,8 @@ from ..schemas import (
     SubscriberProfile,
     SubscriberSummary,
     TelemetryPoint,
+    TrafficSample,
+    TrafficSession,
 )
 from pydantic import BaseModel
 
@@ -646,3 +648,191 @@ async def subscriber_profile(
         ],
         last_seen=onu.last_seen,
     )
+
+
+# ---------------------------------------------------------------------------
+# Live Traffic Monitoring
+# ---------------------------------------------------------------------------
+
+import asyncio
+import time
+
+from ..drivers.mikrotik import MikrotikDriver
+
+
+def _parse_rate(rate_str: str) -> int:
+    """Convert MikroTik rate string like '45.2 Mbps' to bytes/sec."""
+    parts = rate_str.strip().split()
+    if len(parts) != 2:
+        return 0
+    try:
+        value = float(parts[0])
+    except ValueError:
+        return 0
+    unit = parts[1].lower()
+    multipliers = {"bps": 1, "kbps": 1024, "mbps": 1024**2, "gbps": 1024**3}
+    return int(value * multipliers.get(unit, 1))
+
+
+# In-memory store: subscriber_name -> session data
+_traffic_sessions: dict[str, dict] = {}
+
+
+async def _traffic_monitor_task(
+    subscriber: str,
+    device_id: int,
+    interface: str,
+    mikrotik_name: str,
+    mikrotik_ip: str,
+):
+    """Background task that polls MikroTik traffic every 2 seconds for 2 minutes."""
+    session = _traffic_sessions.get(subscriber)
+    if not session:
+        return
+
+    device = None
+    try:
+        from sqlalchemy import select as sa_select
+        from ..database import SessionLocal
+
+        async with SessionLocal() as db:
+            device = (await db.execute(sa_select(MikrotikDevice).where(MikrotikDevice.id == device_id))).scalar_one_or_none()
+
+        if not device:
+            session["status"] = "error"
+            session["error"] = "MikroTik device not found"
+            return
+
+        driver = MikrotikDriver(device)
+        start = time.time()
+
+        while time.time() - start < 120:
+            if session.get("stop_requested"):
+                session["status"] = "completed"
+                break
+
+            try:
+                data = await driver.monitor_traffic_once(interface)
+                sample = TrafficSample(
+                    timestamp=time.time(),
+                    rx_rate=_parse_rate(data.get("rx_rate", "0 bps")),
+                    tx_rate=_parse_rate(data.get("tx_rate", "0 bps")),
+                )
+                session["samples"].append(sample)
+                session["elapsed"] = round(time.time() - start, 1)
+                session["remaining"] = max(0, round(120 - (time.time() - start), 1))
+            except Exception as e:
+                session["error"] = str(e)
+
+            await asyncio.sleep(2)
+
+        if session["status"] == "running":
+            session["status"] = "completed"
+
+    except Exception as e:
+        if session:
+            session["status"] = "error"
+            session["error"] = str(e)
+
+
+@router.post("/{subscriber}/traffic/start", response_model=TrafficSession)
+async def start_traffic_monitor(
+    subscriber: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Start live traffic monitoring for a PPPoE subscriber (2 minutes)."""
+    # Stop any existing session for this subscriber
+    if subscriber in _traffic_sessions:
+        _traffic_sessions[subscriber]["stop_requested"] = True
+        await asyncio.sleep(0.5)
+
+    # Find the subscriber's ONU to get mikrotik_ip (which is actually the PPPoE IP)
+    onu = (await db.execute(select(Onu).where(Onu.subscriber == subscriber))).scalars().first()
+    if not onu:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+
+    # Find the active PPPoE session to get MikroTik device_id and interface
+    ppp_entry = (
+        await db.execute(
+            select(PppActiveEntry).where(PppActiveEntry.subscriber == subscriber)
+        )
+    ).scalars().first()
+
+    if not ppp_entry:
+        raise HTTPException(status_code=404, detail="Subscriber not currently active on any MikroTik")
+
+    # Get MikroTik device info
+    mkt_device = await db.get(MikrotikDevice, ppp_entry.device_id)
+    if not mkt_device:
+        raise HTTPException(status_code=404, detail="MikroTik device not found")
+
+    # Create session
+    session_data = {
+        "subscriber": subscriber,
+        "interface": ppp_entry.interface,
+        "mikrotik_name": mkt_device.name,
+        "mikrotik_ip": mkt_device.ip,
+        "status": "running",
+        "samples": [],
+        "elapsed": 0,
+        "remaining": 120,
+        "error": "",
+        "stop_requested": False,
+        "task": None,
+    }
+    _traffic_sessions[subscriber] = session_data
+
+    # Start background task
+    task = asyncio.create_task(
+        _traffic_monitor_task(subscriber, ppp_entry.device_id, ppp_entry.interface, mkt_device.name, mkt_device.ip)
+    )
+    session_data["task"] = task
+
+    return TrafficSession(
+        subscriber=subscriber,
+        interface=ppp_entry.interface,
+        mikrotik_name=mkt_device.name,
+        mikrotik_ip=mkt_device.ip,
+        status="running",
+        samples=[],
+        elapsed=0,
+        remaining=120,
+    )
+
+
+@router.get("/{subscriber}/traffic/samples", response_model=TrafficSession)
+async def get_traffic_samples(
+    subscriber: str,
+    user: User = Depends(get_current_user),
+):
+    """Get current traffic monitoring samples."""
+    session = _traffic_sessions.get(subscriber)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active traffic session")
+
+    return TrafficSession(
+        subscriber=session["subscriber"],
+        interface=session["interface"],
+        mikrotik_name=session["mikrotik_name"],
+        mikrotik_ip=session["mikrotik_ip"],
+        status=session["status"],
+        samples=session["samples"],
+        elapsed=session["elapsed"],
+        remaining=session["remaining"],
+        error=session.get("error", ""),
+    )
+
+
+@router.delete("/{subscriber}/traffic/stop")
+async def stop_traffic_monitor(
+    subscriber: str,
+    user: User = Depends(get_current_user),
+):
+    """Stop traffic monitoring early."""
+    session = _traffic_sessions.get(subscriber)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active traffic session")
+
+    session["stop_requested"] = True
+    return {"message": "Traffic monitoring stopped"}
