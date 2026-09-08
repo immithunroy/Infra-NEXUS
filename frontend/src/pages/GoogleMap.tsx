@@ -1170,13 +1170,13 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     if (planner.phase === "custom-draw" && customWaypoints.length > 0) {
       if (planner.srcTj) {
         const m = new google.maps.Marker({ position: { lat: planner.srcTj.lat, lng: planner.srcTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#22c55e" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) } });
-        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("<b>Source TJ</b><br>" + planner.srcTj!.name)); iw.open({ anchor: m, map }); } });
+        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap(planner.srcTj!.name, "Source TJ")); iw.open({ anchor: m, map }); } });
         m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }
       if (planner.dstTj) {
         const m = new google.maps.Marker({ position: { lat: planner.dstTj.lat, lng: planner.dstTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#3b82f6" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) } });
-        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("<b>Destination TJ</b><br>" + planner.dstTj!.name)); iw.open({ anchor: m, map }); } });
+        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap(planner.dstTj!.name, "Destination TJ")); iw.open({ anchor: m, map }); } });
         m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }
@@ -1200,7 +1200,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     if (drawCable.active) {
       if (drawCable.sourceTj) {
         const m = new google.maps.Marker({ position: { lat: drawCable.sourceTj.lat, lng: drawCable.sourceTj.lng }, map, icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="6" fill="#22c55e" stroke="white" stroke-width="2"/></svg>`)}`, scaledSize: new google.maps.Size(14, 14) } });
-        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("<b>Source TJ</b><br>" + drawCable.sourceTj!.name)); iw.open({ anchor: m, map }); } });
+        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap(drawCable.sourceTj!.name, "Source TJ")); iw.open({ anchor: m, map }); } });
         m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }
@@ -1222,7 +1222,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           position: drawCable.mousePos, map, clickable: false,
           icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="4" fill="#22c55e" fill-opacity="0.5" stroke="#22c55e" stroke-width="1"/></svg>`)}`, scaledSize: new google.maps.Size(10, 10), anchor: new google.maps.Point(5, 5) },
         });
-        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("Click to place")); iw.open({ anchor: m, map }); } });
+        m.addListener("mouseover", () => { const iw = infoWindowRef.current; if (iw) { iw.setContent(tooltipWrap("Click to place", "Waypoint")); iw.open({ anchor: m, map }); } });
         m.addListener("mouseout", () => { const iw = infoWindowRef.current; if (iw) iw.close(); });
         drawingOverlaysRef.current.push(m);
       }

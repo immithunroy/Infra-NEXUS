@@ -18,31 +18,54 @@ function cableLengthM(cable: Cable): number {
   return total;
 }
 
-// Shared tooltip wrapper — matches Leaflet's default .leaflet-tooltip styling
-export function tooltipWrap(inner: string): string {
-  return `<div style="background:#fff;color:#334155;padding:4px 10px;border-radius:3px;box-shadow:0 1px 6px rgba(0,0,0,0.35);font-size:12px;line-height:1.45;max-width:280px;white-space:nowrap;pointer-events:none;font-family:system-ui,-apple-system,sans-serif;">${inner}</div>`;
+function rxPowerStyle(rx: number | null | undefined): string {
+  if (rx == null) return "color:#94a3b8;font-weight:600;";
+  if (rx >= -18) return "color:#16a34a;font-weight:700;";
+  if (rx >= -22) return "color:#22c55e;font-weight:600;";
+  if (rx >= -26) return "color:#eab308;font-weight:600;";
+  if (rx >= -28) return "color:#f97316;font-weight:700;";
+  return "color:#ef4444;font-weight:700;";
+}
+
+function rxPowerLabel(rx: number | null | undefined): string {
+  if (rx == null) return "—";
+  if (rx >= -18) return "Strong";
+  if (rx >= -22) return "Good";
+  if (rx >= -26) return "Fair";
+  if (rx >= -28) return "Weak";
+  return "Critical";
+}
+
+// Shared tooltip wrapper with optional title bar — Open Sans font
+const FONT = 'font-family:"Open Sans",system-ui,-apple-system,sans-serif;';
+
+export function tooltipWrap(inner: string, title?: string): string {
+  const header = title
+    ? `<div style="background:#1e293b;color:#f1f5f9;padding:6px 10px;font-size:12px;font-weight:600;${FONT}border-bottom:1px solid #334155;">${title}</div>`
+    : '';
+  return `<div style="background:#fff;color:#334155;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-size:12px;line-height:1.5;max-width:300px;white-space:nowrap;pointer-events:none;${FONT}overflow:hidden;">${header}<div style="padding:6px 10px;">${inner}</div></div>`;
 }
 
 export function tjTooltip(tj: TjBox, hostedSplitters: Splitter[]): string {
   let tip = `<b>${tj.unique_id}</b> · ${tj.name}`
     + `<br>${tj.box_type} · ${tj.tj_port} ports`
     + ((tj.box_type === "enclosure" || tj.box_type === "dome") ? ` · ${tj.capacity} cap · ${tj.tray_count} trays` : "")
-    + (tj.address ? `<br>${tj.address}` : "");
+    + (tj.address ? `<br><span style="color:#64748b">${tj.address}</span>` : "");
   if (hostedSplitters.length > 0) {
-    tip += `<br><hr style="margin:4px 0;border-color:#475569">`;
+    tip += `<br><hr style="margin:4px 0;border-color:#e2e8f0">`;
     for (const sp of hostedSplitters) {
       const loss = splitterLoss(sp.split_ratio);
       const outCount = sp.output_cores ? sp.output_cores.split(',').length : sp.split_ratio;
       tip += `<span style="color:#f59e0b">▲</span> <b>${sp.unique_id}</b> 1:${sp.split_ratio}`;
       tip += ` · In: core ${sp.input_core || "—"}`;
       tip += ` · Out: ${outCount} ports`;
-      tip += ` (${loss.toFixed(1)} dB)`;
+      tip += ` <span style="color:#64748b">(${loss.toFixed(1)} dB)</span>`;
       if (sp.name) tip += ` · ${sp.name}`;
       tip += `<br>`;
     }
   }
-  tip += `<br><i>click for details</i>`;
-  return tooltipWrap(tip);
+  tip += `<br><i style="color:#94a3b8">click for details</i>`;
+  return tooltipWrap(tip, `${tj.unique_id} — TJ Box`);
 }
 
 export function cableTooltip(cable: Cable, tjBoxes: TjBox[], loops: FiberLoop[]): string {
@@ -54,16 +77,16 @@ export function cableTooltip(cable: Cable, tjBoxes: TjBox[], loops: FiberLoop[])
   const straightM = dstTj && cable.segments.length ? haversine(cable.segments[0].start_lat, cable.segments[0].start_lng, dstTj.lat, dstTj.lng) : 0;
 
   const tipParts = [
-    `<b>${cable.link_id || cable.code}</b> | ${cable.manufacturer || "?"} | ${cable.code}`,
+    `<b>${cable.link_id || cable.code}</b> <span style="color:#64748b">| ${cable.manufacturer || "?"} | ${cable.code}</span>`,
     cable.link_name || "",
   ];
-  if (straightM > 0) tipParts.push("Straight: " + (straightM / 1000).toFixed(2) + " km");
-  tipParts.push("Link: " + lenKm + " km");
-  if (loopSum > 0) tipParts.push("Loop: " + (loopSum / 1000).toFixed(2) + " km");
-  tipParts.push("Total: " + (totalM / 1000).toFixed(2) + " km");
-  tipParts.push("<i>click for details</i>");
+  if (straightM > 0) tipParts.push(`<span style="color:#64748b">Straight:</span> ${(straightM / 1000).toFixed(2)} km`);
+  tipParts.push(`<span style="color:#64748b">Link:</span> ${lenKm} km`);
+  if (loopSum > 0) tipParts.push(`<span style="color:#64748b">Loop:</span> ${(loopSum / 1000).toFixed(2)} km`);
+  tipParts.push(`<b>Total:</b> ${(totalM / 1000).toFixed(2)} km`);
+  tipParts.push(`<br><i style="color:#94a3b8">click for details</i>`);
 
-  return tooltipWrap(tipParts.join("<br>"));
+  return tooltipWrap(tipParts.join("<br>"), `${cable.link_id || cable.code} — Link`);
 }
 
 export function splitterTooltip(sp: Splitter): string {
@@ -73,55 +96,69 @@ export function splitterTooltip(sp: Splitter): string {
   tip += `<br>1:${sp.split_ratio} · Loss: ${loss.toFixed(1)} dB`;
   tip += `<br>In: core ${sp.input_core || "—"}`;
   tip += ` · Out: ${outCount} ports`;
-  tip += `<br><i>click for details</i>`;
-  return tooltipWrap(tip);
+  tip += `<br><i style="color:#94a3b8">click for details</i>`;
+  return tooltipWrap(tip, `${sp.unique_id} — Splitter`);
 }
 
 export function loopTooltip(loop: FiberLoop): string {
-  return tooltipWrap(
-    "<b>Fiber Loop</b>"
-    + (loop.loop_length_m ? `<br>${loop.loop_length_m}m slack` : "")
-    + (loop.notes ? `<br>${loop.notes}` : "")
-    + "<br><i>click for details</i>"
-  );
+  let tip = "";
+  if (loop.loop_length_m) tip += `${loop.loop_length_m}m slack`;
+  if (loop.notes) tip += (tip ? "<br>" : "") + `<span style="color:#64748b">${loop.notes}</span>`;
+  tip += (tip ? "<br><br>" : "") + `<i style="color:#94a3b8">click for details</i>`;
+  return tooltipWrap(tip, "Fiber Loop");
 }
 
 export function cutTooltip(cut: CableCut): string {
-  return tooltipWrap(
-    "<b>" + (cut.status === "repaired" ? "Repaired" : "CABLE CUT") + "</b>"
-    + (cut.splice_tj_name ? `<br>Splice at: ${cut.splice_tj_name}` : "")
-    + (cut.notes ? `<br>${cut.notes}` : "")
-    + "<br><i>click for details</i>"
-  );
+  const isRepaired = cut.status === "repaired";
+  let tip = "";
+  if (cut.splice_tj_name) tip += `Splice at: ${cut.splice_tj_name}`;
+  if (cut.notes) tip += (tip ? "<br>" : "") + `<span style="color:#64748b">${cut.notes}</span>`;
+  tip += (tip ? "<br><br>" : "") + `<i style="color:#94a3b8">click for details</i>`;
+  return tooltipWrap(tip, isRepaired ? "Repaired" : "Cable Cut");
 }
 
 export function userTooltip(p: { subscriber?: string; name?: string; serial?: string; status: string; pon_port?: string; olt_name?: string; rx_power?: number | null; address?: string; last_seen?: string | null; bound?: boolean }, fmtTimeShort: (v: string | null | undefined) => string): string {
+  const rxStyle = rxPowerStyle(p.rx_power);
+  const rxLabel = rxPowerLabel(p.rx_power);
+  const rxStr = p.rx_power != null ? `${p.rx_power} dBm` : "—";
+
   const parts = [
-    `<b>${p.subscriber || "—"}</b>`,
-    `ONU: ${p.name || "—"}`,
+    `ONU: <b>${p.name || "—"}</b>`,
     `Serial: ${p.serial || "—"}`,
     `Status: ${p.status}`,
     `PON: ${p.pon_port || "—"}`,
-    `Connected OLT: ${p.olt_name || "N/A"}`,
-    `RX: ${p.rx_power != null ? p.rx_power + " dBm" : "—"}`,
-    `Address: ${p.address || "—"}`,
+    `OLT: ${p.olt_name || "N/A"}`,
+    `RX: <span style="${rxStyle}">${rxStr} ${rxLabel}</span>`,
+    `Address: <span style="color:#64748b">${p.address || "—"}</span>`,
   ];
   if (p.last_seen) parts.push(`Last: ${fmtTimeShort(p.last_seen)}`);
-  if (!p.bound) parts.push(`<span style="color:#f97316">⚠ Unbound</span>`);
-  parts.push("<br><i>click for details</i>");
-  return tooltipWrap(parts.join("<br>"));
+  if (!p.bound) parts.push(`<span style="color:#ef4444;font-weight:600">⚠ Unbound</span>`);
+  parts.push(`<br><i style="color:#94a3b8">click for details</i>`);
+
+  let title: string;
+  if (!p.bound) {
+    title = "User — Unbound";
+  } else if (p.subscriber) {
+    title = `User — ${p.subscriber}`;
+  } else if (p.name) {
+    title = `User — ${p.name}`;
+  } else {
+    title = "User";
+  }
+
+  return tooltipWrap(parts.join("<br>"), title);
 }
 
 export function nocTooltip(noc: any): string {
   const deviceList = (noc.devices || []).map((d: any) =>
-    `<div style="font-size:11px">${d.name} <span style="color:${d.status === "reachable" ? "#22c55e" : "#ef4444"}">${d.status}</span></div>`
+    `<div style="font-size:11px">${d.name} <span style="color:${d.status === "reachable" ? "#16a34a" : "#ef4444"};font-weight:600">${d.status}</span></div>`
   ).join("");
-  return tooltipWrap(`<b>${noc.name}</b><br>${noc.address || ""}<br>${noc.device_count || 0} device(s)<br>${deviceList}`);
+  return tooltipWrap(`${noc.address || ""}<br>${noc.device_count || 0} device(s)<br>${deviceList}`, `${noc.name} — NOC`);
 }
 
 export function popTooltip(pop: any): string {
   const deviceList = (pop.devices || []).map((d: any) =>
-    `<div style="font-size:11px">${d.name} <span style="color:${d.status === "reachable" ? "#22c55e" : "#ef4444"}">${d.status}</span></div>`
+    `<div style="font-size:11px">${d.name} <span style="color:${d.status === "reachable" ? "#16a34a" : "#ef4444"};font-weight:600">${d.status}</span></div>`
   ).join("");
-  return tooltipWrap(`<b>${pop.name}</b><br>${pop.address || ""}<br>${pop.device_count || 0} device(s)<br>${deviceList}`);
+  return tooltipWrap(`${pop.address || ""}<br>${pop.device_count || 0} device(s)<br>${deviceList}`, `${pop.name} — POP`);
 }
