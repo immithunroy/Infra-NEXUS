@@ -126,8 +126,8 @@ export function userTooltip(p: { subscriber?: string; name?: string; serial?: st
     `ONU: <b>${p.name || "—"}</b>`,
     `Serial: ${p.serial || "—"}`,
     `Status: ${p.status}`,
-    `PON: ${p.pon_port || "—"}`,
     `OLT: ${p.olt_name || "N/A"}`,
+    `PON: ${p.pon_port || "—"}`,
     `RX: <span style="${rxStyle}">${rxStr} ${rxLabel}</span>`,
     `Address: <span style="color:#64748b">${p.address || "—"}</span>`,
   ];
