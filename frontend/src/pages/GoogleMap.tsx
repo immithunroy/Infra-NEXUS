@@ -928,7 +928,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
 
     // Initialize shared InfoWindow for hover tooltips
     if (!infoWindowRef.current) {
-      infoWindowRef.current = new google.maps.InfoWindow({ content: "", pixelOffset: new google.maps.Size(0, -10) });
+      infoWindowRef.current = new google.maps.InfoWindow({ content: "", pixelOffset: new google.maps.Size(0, -10), closeButton: false });
     }
     const iw = infoWindowRef.current;
 
