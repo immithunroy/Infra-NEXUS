@@ -117,10 +117,11 @@ export function cutTooltip(cut: CableCut): string {
   return tooltipWrap(tip, isRepaired ? "Repaired" : "Cable Cut");
 }
 
-export function userTooltip(p: { subscriber?: string; name?: string; serial?: string; status: string; pon_port?: string; olt_name?: string; rx_power?: number | null; address?: string; last_seen?: string | null; bound?: boolean }, fmtTimeShort: (v: string | null | undefined) => string): string {
+export function userTooltip(p: { subscriber?: string; name?: string; serial?: string; status: string; pon_port?: string; olt_name?: string; rx_power?: number | null; distance?: number | null; address?: string; last_seen?: string | null; bound?: boolean }, fmtTimeShort: (v: string | null | undefined) => string): string {
   const rxStyle = rxPowerStyle(p.rx_power);
   const rxLabel = rxPowerLabel(p.rx_power);
   const rxStr = p.rx_power != null ? `${p.rx_power} dBm` : "—";
+  const distStr = p.distance != null ? `${p.distance} km` : "—";
 
   const parts = [
     `ONU: <b>${p.name || "—"}</b>`,
@@ -129,6 +130,7 @@ export function userTooltip(p: { subscriber?: string; name?: string; serial?: st
     `OLT: ${p.olt_name || "N/A"}`,
     `PON: ${p.pon_port || "—"}`,
     `RX: <span style="${rxStyle}">${rxStr} ${rxLabel}</span>`,
+    `Distance: ${distStr}`,
     `Address: <span style="color:#64748b">${p.address || "—"}</span>`,
   ];
   if (p.last_seen) parts.push(`Last: ${fmtTimeShort(p.last_seen)}`);

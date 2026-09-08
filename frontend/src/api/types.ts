@@ -579,6 +579,7 @@ export interface MapPoint {
   down_reason: string;
   bound: boolean;
   rx_power: number | null;
+  distance: number | null;
   address: string;
   last_seen: string | null;
 }

@@ -28,6 +28,10 @@ from .snmp import snmp_walk
 GPON_ONU_STATUS_OID = "1.3.6.1.4.1.3320.10.3.3.1.4"
 GPON_ONU_RX_OID = "1.3.6.1.4.1.3320.10.3.4.1.2"
 GPON_ONU_TX_OID = "1.3.6.1.4.1.3320.10.3.4.1.3"
+GPON_ONU_DISTANCE_OID = "1.3.6.1.4.1.3320.10.3.1.1.33"  # decameters (÷10 = meters)
+
+# EPON MIB (1.3.6.1.4.1.3320.101.x)
+EPON_ONU_DISTANCE_OID = "1.3.6.1.4.1.3320.101.10.1.1.27"  # meters
 
 # IF-MIB interface counters (per-ONU ports appear in ifDescr).
 IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
@@ -183,6 +187,50 @@ async def _snmp_optical_epon(device: OLTDevice) -> dict[str, OpticalSample]:
 
 async def _snmp_optical_gpon(device: OLTDevice) -> dict[str, OpticalSample]:
     return await _snmp_optical(device, GPON_ONU_RX_OID, GPON_ONU_TX_OID)
+
+
+async def _snmp_distance(device: OLTDevice) -> dict[str, float]:
+    """Per-ONU distance via SNMP. Returns {PON_PORT_UPPER: distance_km}."""
+    community = device.snmp_community or ""
+    if not community:
+        return {}
+    port = device.snmp_port or 161
+    ip = device.ip
+    is_gpon = device.pon_type.lower() == "gpon"
+    oid = GPON_ONU_DISTANCE_OID if is_gpon else EPON_ONU_DISTANCE_OID
+    divisor = 10.0 if is_gpon else 1.0  # GPON: decameters, EPON: meters
+
+    try:
+        ifnames = {
+            int(oid_str.split(".")[-1]): name
+            for oid_str, name in await snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.2", port, timeout=OPTICAL_SNMP_TIMEOUT)
+        }
+    except DriverError:
+        ifnames = {}
+    try:
+        dist_rows = await snmp_walk(ip, community, oid, port, timeout=OPTICAL_SNMP_TIMEOUT)
+    except DriverError:
+        dist_rows = []
+    if not ifnames or not dist_rows:
+        return {}
+
+    dist_by_idx: dict[int, float] = {}
+    for oid_str, val in dist_rows:
+        idx = int(oid_str.split(".")[-1])
+        try:
+            meters = float(val) / divisor
+            dist_by_idx[idx] = round(meters / 1000, 2)
+        except (ValueError, TypeError):
+            continue
+
+    result: dict[str, float] = {}
+    for ifindex, name in ifnames.items():
+        low = name.lower()
+        if ("epon" not in low and "gpon" not in low) or ":" not in name:
+            continue
+        if ifindex in dist_by_idx:
+            result[name.upper().replace(" ", "")] = dist_by_idx[ifindex]
+    return result
 
 
 class BdcomCliDriver(BaseDriver):
@@ -574,8 +622,18 @@ class BdcomCliDriver(BaseDriver):
                 except (TelnetError, DriverError):
                     continue
 
-            # GPON distance
-            if self.device.pon_type.lower() != "epon":
+            # Distance (SNGP for both EPON and GPON)
+            if self.device.snmp_enabled:
+                try:
+                    snmp_dist = await _snmp_distance(self.device)
+                    for info in onus.values():
+                        key = info.pon_port.upper().replace(" ", "")
+                        if key in snmp_dist:
+                            info.extra["distance"] = snmp_dist[key]
+                except DriverError:
+                    pass
+            # CLI fallback for GPON (only if SNMP didn't provide distance)
+            if self.device.pon_type.lower() == "gpon" and not any("distance" in u.extra for u in onus.values()):
                 try:
                     dist_out = await self._exec("show gpon onu-distance", timeout=30)
                     for (base, onu_id), dist in self._parse_distance(dist_out).items():

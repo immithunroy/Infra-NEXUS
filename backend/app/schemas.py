@@ -445,6 +445,7 @@ class MapPoint(BaseModel):
     down_reason: str = ""
     bound: bool = False
     rx_power: float | None = None
+    distance: float | None = None
     address: str = ""
     last_seen: datetime | None = None
 

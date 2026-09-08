@@ -82,6 +82,7 @@ async def map_points(db: AsyncSession = Depends(get_db)):
                 down_reason=o.down_reason or "",
                 bound=o.bound,
                 rx_power=o.rx_power,
+                distance=o.distance,
                 address=o.address,
                 last_seen=o.last_seen,
             )
