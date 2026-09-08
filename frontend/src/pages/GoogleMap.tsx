@@ -553,19 +553,25 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       if (c && c.segments.length > 0) {
         const mid = c.segments[Math.floor(c.segments.length / 2)];
         map.panTo({ lat: mid.start_lat, lng: mid.start_lng });
-        map.setZoom(16);
+        map.setZoom(19);
       }
     } else if (type === "tj") {
       const t = tjBoxes.find((x) => x.id === id);
-      if (t) { map.panTo({ lat: t.lat, lng: t.lng }); map.setZoom(16); }
+      if (t) { map.panTo({ lat: t.lat, lng: t.lng }); map.setZoom(19); }
     } else if (type === "splitter") {
       const s = splitters.find((x) => x.id === id);
-      if (s) { map.panTo({ lat: s.lat, lng: s.lng }); map.setZoom(17); }
+      if (s) { map.panTo({ lat: s.lat, lng: s.lng }); map.setZoom(20); }
     } else if (type === "user") {
       const p = filteredUsers.find((x) => `${x.olt_id}-${x.onu_id}` === id);
-      if (p && p.gps_lat && p.gps_lng) { map.panTo({ lat: p.gps_lat, lng: p.gps_lng }); map.setZoom(17); }
+      if (p && p.gps_lat && p.gps_lng) { map.panTo({ lat: p.gps_lat, lng: p.gps_lng }); map.setZoom(20); }
+    } else if (type === "noc") {
+      const n = nocPopData.nocs.find((x: any) => x.id === id);
+      if (n && n.gps_lat && n.gps_lng) { map.panTo({ lat: n.gps_lat, lng: n.gps_lng }); map.setZoom(19); }
+    } else if (type === "pop") {
+      const pp = nocPopData.pops.find((x: any) => x.id === id);
+      if (pp && pp.gps_lat && pp.gps_lng) { map.panTo({ lat: pp.gps_lat, lng: pp.gps_lng }); map.setZoom(19); }
     }
-  }, [cables, tjBoxes, splitters, filteredUsers]);
+  }, [cables, tjBoxes, splitters, filteredUsers, nocPopData]);
 
   const sidebarUsers = useMemo(() => {
     if (!userSidebarSearch) return filteredUsers;
@@ -1101,17 +1107,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       }
     }
   }, [cables, tjBoxes, splitters, loops, cuts, mapPoints, nocPopData, netLayers, drawCable.active, planner.phase, filterType, filterCore]);
-
-  // ── Highlight overlay ──
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !highlightedObject) return;
-    // Simple highlight via panTo
-    if (highlightedObject.type === "tj") {
-      const t = tjBoxes.find((x) => x.id === highlightedObject.id);
-      if (t) { map.panTo({ lat: t.lat, lng: t.lng }); map.setZoom(16); }
-    }
-  }, [highlightedObject, tjBoxes]);
 
   // ── Drawing overlays (waypoints, routes) ──
   const drawingOverlaysRef = useRef<google.maps.Marker[]>([]);
