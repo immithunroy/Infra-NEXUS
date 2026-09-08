@@ -45,7 +45,7 @@ function tjSvgUrl(color: string): string {
 }
 
 function splitterSvgUrl(color: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><polygon points="10,2 18,18 2,18" fill="${color}" stroke="white" stroke-width="2"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="${color}" stroke="white" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="10" fill="white" font-weight="bold">SP</text></svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
@@ -1053,7 +1053,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         const color = SPLITTER_RATIO_COLORS[sp.split_ratio] || "#f59e0b";
         const m = new google.maps.Marker({
           position: { lat: sp.lat, lng: sp.lng }, map,
-          icon: { url: splitterSvgUrl(color), scaledSize: new google.maps.Size(20, 20), anchor: new google.maps.Point(10, 10) },
+          icon: { url: splitterSvgUrl(color), scaledSize: new google.maps.Size(24, 24), anchor: new google.maps.Point(12, 12) },
         });
         m.addListener("mouseover", () => { iw.setContent(splitterTooltip(sp)); iw.open({ anchor: m, map }); });
         m.addListener("mouseout", () => iw.close());

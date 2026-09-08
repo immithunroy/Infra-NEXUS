@@ -59,7 +59,7 @@ export function tjTooltip(tj: TjBox, hostedSplitters: Splitter[]): string {
     for (const sp of hostedSplitters) {
       const loss = splitterLoss(sp.split_ratio);
       const outCount = sp.output_cores ? sp.output_cores.split(',').length : sp.split_ratio;
-      tip += `<span style="color:#f59e0b">▲</span> <b>${sp.unique_id}</b> 1:${sp.split_ratio}`;
+      tip += `<span style="color:#f59e0b">⬡</span> <b>${sp.unique_id}</b> 1:${sp.split_ratio}`;
       tip += ` · In: core ${sp.input_core || "—"}`;
       tip += ` · Out: ${outCount} ports`;
       tip += ` <span style="color:#64748b">(${loss.toFixed(1)} dB)</span>`;

@@ -51,8 +51,8 @@ function tjIcon(color: string) {
 function splitterIcon(color: string) {
   return L.divIcon({
     className: "",
-    html: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><polygon points="10,2 18,18 2,18" fill="' + color + '" stroke="white" stroke-width="2"/></svg>',
-    iconSize: [20, 20], iconAnchor: [10, 10],
+    html: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="' + color + '" stroke="white" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="10" fill="white" font-weight="bold">SP</text></svg>',
+    iconSize: [24, 24], iconAnchor: [12, 12],
   });
 }
 
