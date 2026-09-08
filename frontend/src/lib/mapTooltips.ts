@@ -1,5 +1,8 @@
 import { Cable, TjBox, Splitter, FiberLoop, CableCut } from "../api/types";
 
+export function fmtM(m: number): string { return Math.round(m).toLocaleString() + " m"; }
+export function kmToM(km: number | null): number | null { return km != null ? Math.round(km * 1000) : null; }
+
 const SPLITTER_LOSS_DB: Record<number, number> = { 2: 3.5, 4: 7.0, 8: 10.5, 16: 14.0, 32: 17.5, 64: 20.5 };
 function splitterLoss(ratio: number): number { return SPLITTER_LOSS_DB[ratio] ?? 10 * Math.log10(ratio) + 0.5; }
 
@@ -70,7 +73,6 @@ export function tjTooltip(tj: TjBox, hostedSplitters: Splitter[]): string {
 
 export function cableTooltip(cable: Cable, tjBoxes: TjBox[], loops: FiberLoop[]): string {
   const lenM = cableLengthM(cable);
-  const lenKm = (lenM / 1000).toFixed(2);
   const loopSum = loops.filter((l) => l.cable_id === cable.id).reduce((a, l) => a + l.loop_length_m, 0);
   const totalM = lenM + loopSum;
   const dstTj = cable.dst_tj_id ? tjBoxes.find((t) => t.id === cable.dst_tj_id) : null;
@@ -80,10 +82,10 @@ export function cableTooltip(cable: Cable, tjBoxes: TjBox[], loops: FiberLoop[])
     `<b>${cable.link_id || cable.code}</b> <span style="color:#64748b">| ${cable.manufacturer || "?"} | ${cable.code}</span>`,
     cable.link_name || "",
   ];
-  if (straightM > 0) tipParts.push(`<span style="color:#64748b">Straight:</span> ${(straightM / 1000).toFixed(2)} km`);
-  tipParts.push(`<span style="color:#64748b">Link:</span> ${lenKm} km`);
-  if (loopSum > 0) tipParts.push(`<span style="color:#64748b">Loop:</span> ${(loopSum / 1000).toFixed(2)} km`);
-  tipParts.push(`<b>Total:</b> ${(totalM / 1000).toFixed(2)} km`);
+  if (straightM > 0) tipParts.push(`<span style="color:#64748b">Straight:</span> ${fmtM(straightM)}`);
+  tipParts.push(`<span style="color:#64748b">Link:</span> ${fmtM(lenM)}`);
+  if (loopSum > 0) tipParts.push(`<span style="color:#64748b">Loop:</span> ${fmtM(loopSum)}`);
+  tipParts.push(`<b>Total:</b> ${fmtM(totalM)}`);
   tipParts.push(`<br><i style="color:#94a3b8">click for details</i>`);
 
   return tooltipWrap(tipParts.join("<br>"), `${cable.link_id || cable.code} — Link`);
@@ -121,7 +123,7 @@ export function userTooltip(p: { subscriber?: string; name?: string; serial?: st
   const rxStyle = rxPowerStyle(p.rx_power);
   const rxLabel = rxPowerLabel(p.rx_power);
   const rxStr = p.rx_power != null ? `${p.rx_power} dBm` : "—";
-  const distStr = p.distance != null ? `${p.distance} km` : "—";
+  const distStr = p.distance != null ? fmtM(p.distance * 1000) : "—";
 
   const parts = [
     `ONU: <b>${p.name || "—"}</b>`,

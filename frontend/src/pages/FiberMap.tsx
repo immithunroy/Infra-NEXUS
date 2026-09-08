@@ -186,7 +186,7 @@ export default function FiberMap() {
   const [customWaypoints, setCustomWaypoints] = useState<L.LatLng[]>([]);
   const [routing, setRouting] = useState(false);
 
-  const calcWaypointDistKm = useCallback((wp: L.LatLng[]): number => { let d = 0; for (let i = 0; i < wp.length - 1; i++) d += haversine(wp[i].lat, wp[i].lng, wp[i + 1].lat, wp[i + 1].lng); return d / 1000; }, []);
+  const calcWaypointDistKm = useCallback((wp: L.LatLng[]): number => { let d = 0; for (let i = 0; i < wp.length - 1; i++) d += haversine(wp[i].lat, wp[i].lng, wp[i + 1].lat, wp[i + 1].lng); return d; }, []);
   const fetchOsrmAlts = useCallback(async (src: TjBox, dst: TjBox) => {
     setRouting(true); setPlanner((p) => ({ ...p, phase: "fetching" as PlanPhase }));
     try {
@@ -954,7 +954,7 @@ export default function FiberMap() {
                           <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">{c.link_id || "?"} | {c.link_name || c.code}</span>
                           <span className="badge text-[10px] ml-1 shrink-0" style={{ background: CORE_COLORS[c.core_count] || "#6b7280", color: "white" }}>{c.core_count}C</span>
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{c.manufacturer || "?"} | {c.code} · {(lenM / 1000).toFixed(2)} km · +10%: {Math.round(lenM * 1.10).toLocaleString()} m</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{c.manufacturer || "?"} | {c.code} · {Math.round(lenM).toLocaleString()} m · +10%: {Math.round(lenM * 1.10).toLocaleString()} m</div>
                         {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0" onClick={(e) => { e.stopPropagation(); startEdit("cable", c); }}>Edit</button><button className="btn-ghost text-[10px] py-0 text-red-600" onClick={(e) => { e.stopPropagation(); deleteItem("cable", c.id); }}>Del</button></div>}
                       </div>
                     );
@@ -1147,12 +1147,12 @@ export default function FiberMap() {
                 return (
                   <>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Straight Distance</div><div className="text-lg font-bold">{straightM > 0 ? (straightM / 1000).toFixed(2) + " km" : "—"}</div></div>
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Link Length</div><div className="text-lg font-bold">{(lenM / 1000).toFixed(2)} km</div></div>
+                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Straight Distance</div><div className="text-lg font-bold">{straightM > 0 ? Math.round(straightM).toLocaleString() + " m" : "—"}</div></div>
+                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Link Length</div><div className="text-lg font-bold">{Math.round(lenM).toLocaleString()} m</div></div>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg bg-cyan-50 dark:bg-cyan-900/20 p-3"><div className="text-xs text-cyan-600">Loop Slack</div><div className="text-lg font-bold text-cyan-700">{totalLoopM > 0 ? totalLoopM + "m (" + loopSum.length + " loops)" : "None"}</div></div>
-                      <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3"><div className="text-xs text-amber-600">Total Length</div><div className="text-lg font-bold text-amber-700">{(totalM / 1000).toFixed(2)} km</div></div>
+                      <div className="rounded-lg bg-cyan-50 dark:bg-cyan-900/20 p-3"><div className="text-xs text-cyan-600">Loop Slack</div><div className="text-lg font-bold text-cyan-700">{totalLoopM > 0 ? totalLoopM.toLocaleString() + " m (" + loopSum.length + " loops)" : "None"}</div></div>
+                      <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3"><div className="text-xs text-amber-600">Total Length</div><div className="text-lg font-bold text-amber-700">{Math.round(totalM).toLocaleString()} m</div></div>
                     </div>
                     {lenM > 0 && (
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3">
@@ -1623,7 +1623,7 @@ export default function FiberMap() {
                               {r.tj.name && <span className="ml-1 text-slate-500 dark:text-slate-400">{r.tj.name}</span>}
                               {i === 0 && <span className="ml-2 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">NEAREST</span>}
                             </td>
-                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{(r.distanceM / 1000).toFixed(2)} km</td>
+                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{Math.round(r.distanceM).toLocaleString()} m</td>
                             <td className="py-2 text-right">
                               <div className="font-mono text-slate-700 dark:text-slate-300">{distM.toLocaleString()} m</div>
                               <div className="text-[10px] text-slate-400 mt-0.5 space-x-2">
@@ -1969,16 +1969,15 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
       if (points.length >= 2) {
         const lenM = cableLengthM(cable);
-        const lenKm = (lenM / 1000).toFixed(2);
         const loopSum = loops.filter((l) => l.cable_id === cable.id).reduce((a, l) => a + l.loop_length_m, 0);
         const totalM = lenM + loopSum;
         const dstTj = cable.dst_tj_id ? tjBoxes.find((t) => t.id === cable.dst_tj_id) : null;
         const straightM = dstTj && cable.segments.length ? haversine(cable.segments[0].start_lat, cable.segments[0].start_lng, dstTj.lat, dstTj.lng) : 0;
         const tipParts = [cable.link_id ? cable.link_id + " | " + (cable.link_name || cable.code) : "<b>" + cable.code + "</b>", (cable.manufacturer || "?") + " | " + cable.code, cable.core_count + " cores"];
-        if (straightM > 0) tipParts.push("Straight: " + (straightM / 1000).toFixed(2) + " km");
-        tipParts.push("Link: " + lenKm + " km");
-        if (loopSum > 0) tipParts.push("Loop: " + (loopSum / 1000).toFixed(2) + " km");
-        tipParts.push("Total: " + (totalM / 1000).toFixed(2) + " km");
+        if (straightM > 0) tipParts.push("Straight: " + Math.round(straightM).toLocaleString() + " m");
+        tipParts.push("Link: " + Math.round(lenM).toLocaleString() + " m");
+        if (loopSum > 0) tipParts.push("Loop: " + Math.round(loopSum).toLocaleString() + " m");
+        tipParts.push("Total: " + Math.round(totalM).toLocaleString() + " m");
         tipParts.push("<i>click for details</i>");
 
         const pl = L.polyline(points, { color, weight: 2, opacity: 0.85 })
@@ -2363,9 +2362,9 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           <span className="text-xs font-semibold text-red-600">Editing Cable Route</span>
           <span className="text-[10px] text-slate-400">Click map to add points · Drag to move · Double-click to remove</span>
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
-          <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(cableEditWaypoints).toFixed(2)} km · {cableEditWaypoints.length} pts</span>
+          <span className="text-[10px] text-slate-500 font-mono">{Math.round(calcDistKm(cableEditWaypoints)).toLocaleString()} m · {cableEditWaypoints.length} pts</span>
           <span className="text-[10px] text-slate-400">|</span>
-          <span className="text-[10px] text-slate-500">+5%: {Math.round(calcDistKm(cableEditWaypoints) * 1000 * 1.05).toLocaleString()} m · +10%: {Math.round(calcDistKm(cableEditWaypoints) * 1000 * 1.10).toLocaleString()} m</span>
+          <span className="text-[10px] text-slate-500">+5%: {Math.round(calcDistKm(cableEditWaypoints) * 1.05).toLocaleString()} m · +10%: {Math.round(calcDistKm(cableEditWaypoints) * 1.10).toLocaleString()} m</span>
           <button className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition" onClick={onSaveCableEdit}>Save</button>
           <button className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition" onClick={onCancelCableEdit}>Cancel</button>
         </div>
@@ -2385,7 +2384,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           {drawCable.routePoints.length > 1 && (
             <>
               <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
-              <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(drawCable.routePoints).toFixed(2)} km · {drawCable.routePoints.length - 1} pts</span>
+              <span className="text-[10px] text-slate-500 font-mono">{Math.round(calcDistKm(drawCable.routePoints)).toLocaleString()} m · {drawCable.routePoints.length - 1} pts</span>
             </>
           )}
           <span className="text-[10px] text-slate-400">ESC=undo</span>
@@ -2429,9 +2428,9 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
           {planner.phase === "draw" && planner.waypoints.length >= 2 && (
             <>
-              <span className="text-[10px] text-slate-500 font-mono">{calcDistKm(planner.waypoints).toFixed(2)} km · {planner.waypoints.length} pts</span>
+              <span className="text-[10px] text-slate-500 font-mono">{Math.round(calcDistKm(planner.waypoints)).toLocaleString()} m · {planner.waypoints.length} pts</span>
               <span className="text-[10px] text-slate-400">|</span>
-              <span className="text-[10px] text-slate-500">+5%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.05).toLocaleString()} m · +10%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.10).toLocaleString()} m · +15%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.15).toLocaleString()} m · +20%: {Math.round(calcDistKm(planner.waypoints) * 1000 * 1.20).toLocaleString()} m</span>
+              <span className="text-[10px] text-slate-500">+5%: {Math.round(calcDistKm(planner.waypoints) * 1.05).toLocaleString()} m · +10%: {Math.round(calcDistKm(planner.waypoints) * 1.10).toLocaleString()} m · +15%: {Math.round(calcDistKm(planner.waypoints) * 1.15).toLocaleString()} m · +20%: {Math.round(calcDistKm(planner.waypoints) * 1.20).toLocaleString()} m</span>
             </>
           )}
           {planner.phase === "custom-draw" && customWaypoints.length >= 1 && (() => {
@@ -2441,9 +2440,9 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
             const distKm = calcDistKm(allWp);
             return (
               <>
-                <span className="text-[10px] text-slate-500 font-mono">{distKm.toFixed(2)} km · {allWp.length} pts</span>
+                <span className="text-[10px] text-slate-500 font-mono">{Math.round(distKm).toLocaleString()} m · {allWp.length} pts</span>
                 <span className="text-[10px] text-slate-400">|</span>
-                <span className="text-[10px] text-slate-500">+5%: {Math.round(distKm * 1000 * 1.05).toLocaleString()} m · +10%: {Math.round(distKm * 1000 * 1.10).toLocaleString()} m · +15%: {Math.round(distKm * 1000 * 1.15).toLocaleString()} m · +20%: {Math.round(distKm * 1000 * 1.20).toLocaleString()} m</span>
+                <span className="text-[10px] text-slate-500">+5%: {Math.round(distKm * 1.05).toLocaleString()} m · +10%: {Math.round(distKm * 1.10).toLocaleString()} m · +15%: {Math.round(distKm * 1.15).toLocaleString()} m · +20%: {Math.round(distKm * 1.20).toLocaleString()} m</span>
               </>
             );
           })()}
@@ -2467,8 +2466,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-3">Select Route — {planner.srcTj?.unique_id} → {planner.dstTj?.unique_id}</div>
           <div className="space-y-2">
             {routeAlts.map((alt, i) => {
-              const distM = Math.round(alt.distance);
-              const distKm = (alt.distance / 1000).toFixed(2);
+                const distM = Math.round(alt.distance);
               const wpCount = alt.coords.length;
               const colors = ["bg-emerald-500", "bg-amber-500", "bg-violet-500", "bg-rose-500"];
               const borderColors = ["border-emerald-500", "border-amber-500", "border-violet-500", "border-rose-500"];
@@ -2481,7 +2479,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
                     <div className="text-[10px] text-slate-400 mt-0.5 font-mono">+5%: {Math.round(distM * 1.05).toLocaleString()} m · +10%: {Math.round(distM * 1.10).toLocaleString()} m · +15%: {Math.round(distM * 1.15).toLocaleString()} m · +20%: {Math.round(distM * 1.20).toLocaleString()} m</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-bold text-slate-900 dark:text-white">{distKm} km</div>
+                    <div className="text-sm font-bold text-slate-900 dark:text-white">{distM.toLocaleString()} m</div>
                     <div className="text-[10px] text-slate-400">{distM.toLocaleString()} m</div>
                   </div>
                 </button>

@@ -236,7 +236,7 @@ export default function OnuProfile() {
           <InfoBox label="VLAN" value={onu.vlan > 0 ? String(onu.vlan) : "—"} mono />
           <InfoBox label="RX Power" value={onu.rx_power != null ? `${onu.rx_power} dBm` : "—"} danger={onu.rx_power != null && onu.rx_power < -25} />
           <InfoBox label="TX Power" value={onu.tx_power != null ? `${onu.tx_power} dBm` : "—"} />
-          <InfoBox label="Distance" value={onu.distance != null ? `${onu.distance} km` : "—"} />
+          <InfoBox label="Distance" value={onu.distance != null ? `${Math.round(onu.distance * 1000).toLocaleString()} m` : "—"} />
           <InfoBox label="Vendor" value={onu.vendor || "—"} />
           <InfoBox label="Software" value={onu.sw_version || "—"} />
           <InfoBox label="LAN Port" value={onu.lan_status ? (onu.lan_status === "up" ? "Up" : "Down") : "—"} danger={onu.lan_status === "down"} />

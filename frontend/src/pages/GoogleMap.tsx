@@ -226,7 +226,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   const [allowancePct, setAllowancePct] = useState(10);
   const [selectedRouteIdx, setSelectedRouteIdx] = useState<number | null>(null);
 
-  const calcWaypointDistKm = useCallback((wp: LatLng[]): number => { let d = 0; for (let i = 0; i < wp.length - 1; i++) d += haversine(wp[i].lat, wp[i].lng, wp[i + 1].lat, wp[i + 1].lng); return d / 1000; }, []);
+  const calcWaypointDistKm = useCallback((wp: LatLng[]): number => { let d = 0; for (let i = 0; i < wp.length - 1; i++) d += haversine(wp[i].lat, wp[i].lng, wp[i + 1].lat, wp[i + 1].lng); return d; }, []);
 
   const calcRouteLengthM = useCallback((wp: LatLng[]): number => {
     let d = 0;
@@ -1242,7 +1242,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     }
   }, [planner.waypoints, planner.phase, planner.srcTj, planner.dstTj, customWaypoints, drawCable, cableEdit, selectedWaypoint, routeAlts]);
 
-  const formatDistance = (m: number) => m >= 1000 ? (m / 1000).toFixed(2) + " km" : Math.round(m) + " m";
+  const formatDistance = (m: number) => Math.round(m).toLocaleString() + " m";
 
   if (loadError) {
     return (
@@ -1340,7 +1340,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                       <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">{c.link_id || "?"} | {c.link_name || c.code}</span>
                       <span className="badge text-[10px] ml-1 shrink-0" style={{ background: CORE_COLORS[c.core_count] || "#6b7280", color: "white" }}>{c.core_count}C</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{c.manufacturer || "?"} | {c.code} · {(lenM / 1000).toFixed(2)} km · +10%: {Math.round(lenM * 1.10).toLocaleString()} m</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{c.manufacturer || "?"} | {c.code} · {Math.round(lenM).toLocaleString()} m · +10%: {Math.round(lenM * 1.10).toLocaleString()} m</div>
                     {writeOk && <div className="flex gap-1 mt-1"><button className="btn-ghost text-[10px] py-0" onClick={(e) => { e.stopPropagation(); startEdit("cable", c); }}>Edit</button><button className="btn-ghost text-[10px] py-0 text-red-600" onClick={(e) => { e.stopPropagation(); deleteItem("cable", c.id); }}>Del</button></div>}
                   </div>
                 );
@@ -1489,7 +1489,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
               <div className="flex items-center gap-2">
                 <span className="text-slate-600 dark:text-slate-300">{planner.waypoints.length} pts</span>
                 <span className="text-[10px] text-slate-400">|</span>
-                <span className="text-[10px] font-mono text-slate-500">{calcWaypointDistKm(planner.waypoints).toFixed(2)} km</span>
+                <span className="text-[10px] font-mono text-slate-500">{Math.round(calcWaypointDistKm(planner.waypoints)).toLocaleString()} m</span>
                 <span className="text-[10px] text-slate-400">|</span>
                 <span className="text-[10px] text-slate-500">+{allowancePct}%: {Math.round(calcRouteLengthM(planner.waypoints) * (1 + allowancePct / 100)).toLocaleString()} m</span>
                 <span className="text-[10px] text-slate-400">|</span>
@@ -1525,7 +1525,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
             <div className="space-y-2">
               {routeAlts.map((alt, i) => {
                 const distM = Math.round(alt.distance);
-                const distKm = (alt.distance / 1000).toFixed(2);
                 const cableReq = Math.round(distM * (1 + allowancePct / 100));
                 const wpCount = alt.coords.length;
                 const colors = ["bg-emerald-500", "bg-amber-500", "bg-violet-500"];
@@ -1538,7 +1537,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                       <div className="text-[10px] text-slate-500">{wpCount} waypoints · {i === 0 ? "Shortest" : "Alternative"}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-bold text-slate-900 dark:text-white">{distKm} km</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">{distM.toLocaleString()} m</div>
                       <div className="text-[10px] text-slate-400">+{allowancePct}%: {cableReq.toLocaleString()} m</div>
                     </div>
                   </button>
@@ -1563,7 +1562,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
             {drawCable.routePoints.length > 1 && (
               <>
                 <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
-                <span className="text-[10px] text-slate-500 font-mono">{calcWaypointDistKm(drawCable.routePoints).toFixed(2)} km · {drawCable.routePoints.length - 1} pts</span>
+                <span className="text-[10px] text-slate-500 font-mono">{Math.round(calcWaypointDistKm(drawCable.routePoints)).toLocaleString()} m · {drawCable.routePoints.length - 1} pts</span>
               </>
             )}
             <span className="text-[10px] text-slate-400">ESC=undo</span>
@@ -1575,7 +1574,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         {cableEdit && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 px-4 py-2 flex items-center gap-3 text-sm">
             <span className="text-slate-600 dark:text-slate-300">
-              {cableEdit.waypoints.length} points · {calcWaypointDistKm(cableEdit.waypoints).toFixed(2)}km
+              {cableEdit.waypoints.length} points · {Math.round(calcWaypointDistKm(cableEdit.waypoints)).toLocaleString()} m
             </span>
             <button className="btn-primary text-xs py-1" onClick={saveCableEdit}>Save</button>
             <button className="btn-secondary text-xs py-1" onClick={cancelCableEdit}>Cancel</button>
@@ -1618,12 +1617,12 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                 return (
                   <>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Straight Distance</div><div className="text-lg font-bold">{straightM > 0 ? (straightM / 1000).toFixed(2) + " km" : "—"}</div></div>
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Link Length</div><div className="text-lg font-bold">{(lenM / 1000).toFixed(2)} km</div></div>
+                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Straight Distance</div><div className="text-lg font-bold">{straightM > 0 ? Math.round(straightM).toLocaleString() + " m" : "—"}</div></div>
+                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3"><div className="text-xs text-slate-400">Link Length</div><div className="text-lg font-bold">{Math.round(lenM).toLocaleString()} m</div></div>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg bg-cyan-50 dark:bg-cyan-900/20 p-3"><div className="text-xs text-cyan-600">Loop Slack</div><div className="text-lg font-bold text-cyan-700">{totalLoopM > 0 ? totalLoopM + "m (" + loopSum.length + " loops)" : "None"}</div></div>
-                      <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3"><div className="text-xs text-amber-600">Total Length</div><div className="text-lg font-bold text-amber-700">{(totalM / 1000).toFixed(2)} km</div></div>
+                      <div className="rounded-lg bg-cyan-50 dark:bg-cyan-900/20 p-3"><div className="text-xs text-cyan-600">Loop Slack</div><div className="text-lg font-bold text-cyan-700">{totalLoopM > 0 ? totalLoopM.toLocaleString() + " m (" + loopSum.length + " loops)" : "None"}</div></div>
+                      <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3"><div className="text-xs text-amber-600">Total Length</div><div className="text-lg font-bold text-amber-700">{Math.round(totalM).toLocaleString()} m</div></div>
                     </div>
                     {lenM > 0 && (
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3">
@@ -2095,7 +2094,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                               {r.tj.name && <span className="ml-1 text-slate-500 dark:text-slate-400">{r.tj.name}</span>}
                               {i === 0 && <span className="ml-2 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">NEAREST</span>}
                             </td>
-                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{(r.distanceM / 1000).toFixed(2)} km</td>
+                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{Math.round(r.distanceM).toLocaleString()} m</td>
                             <td className="py-2 text-right">
                               <div className="font-mono text-slate-700 dark:text-slate-300">{distM.toLocaleString()} m</div>
                               <div className="text-[10px] text-slate-400 mt-0.5 space-x-2">
