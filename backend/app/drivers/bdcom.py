@@ -43,6 +43,17 @@ EPON_OLT_SFP_RX_OID = "1.3.6.1.4.1.3320.101.108.1.3"
 GPON_OLT_SFP_TX_OID = "1.3.6.1.4.1.3320.10.2.2.1.5"
 GPON_OLT_SFP_RX_OID = "1.3.6.1.4.1.3320.10.2.3.1.3"
 
+# ONU offline/deregister reason
+EPON_ONU_DEREG_REASON_OID = "1.3.6.1.4.1.3320.101.11.1.1.11"
+GPON_ONU_DEREG_REASON_OID = "1.3.6.1.4.1.3320.10.3.1.1.35"
+
+DEREG_REASON_MAP = {
+    "0": "none", "1": "dying-gasp", "2": "laser-always-on", "3": "admin-down",
+    "4": "omcc-down", "5": "unknown", "6": "pon-los", "7": "lcdg",
+    "8": "wire-down", "9": "omci-mismatch", "10": "password-mismatch",
+    "11": "reboot", "12": "ranging-failed",
+}
+
 # IF-MIB interface counters (per-ONU ports appear in ifDescr).
 IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
 IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"
@@ -706,6 +717,35 @@ class BdcomCliDriver(BaseDriver):
                         if key in onus:
                             onus[key].extra["distance"] = dist
                 except (TelnetError, DriverError):
+                    pass
+
+            # Offline reason via SNMP
+            if self.device.snmp_enabled:
+                try:
+                    is_gpon = self.device.pon_type.lower() == "gpon"
+                    dereg_oid = GPON_ONU_DEREG_REASON_OID if is_gpon else EPON_ONU_DEREG_REASON_OID
+                    ip = self.device.ip
+                    community = self.device.snmp_community or "public"
+                    snmp_port = self.device.snmp_port or 161
+                    dereg_rows = await snmp_walk(ip, community, dereg_oid, snmp_port, timeout=OPTICAL_SNMP_TIMEOUT)
+                    # Build ifDescr map to match index → PON port
+                    ifnames = {}
+                    try:
+                        if_rows = await snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.2", snmp_port, timeout=OPTICAL_SNMP_TIMEOUT)
+                        ifnames = {int(oid_str.split(".")[-1]): name for oid_str, name in if_rows}
+                    except DriverError:
+                        pass
+                    for oid_str, val in dereg_rows:
+                        idx = int(oid_str.split(".")[-1])
+                        name = ifnames.get(idx, "")
+                        if not name:
+                            continue
+                        pon_key = name.upper().replace(" ", "")
+                        reason = DEREG_REASON_MAP.get(val.strip(), val)
+                        for info in onus.values():
+                            if info.pon_port.upper().replace(" ", "") == pon_key and info.state != "active":
+                                info.dereg_reason = reason
+                except DriverError:
                     pass
 
             snmp_optical = await self._snmp_optical() if self.device.snmp_enabled else {}
