@@ -239,6 +239,7 @@ export default function OnuProfile() {
           <InfoBox label="Distance" value={onu.distance != null ? `${onu.distance} km` : "—"} />
           <InfoBox label="Vendor" value={onu.vendor || "—"} />
           <InfoBox label="Software" value={onu.sw_version || "—"} />
+          <InfoBox label="LAN Port" value={onu.lan_status ? (onu.lan_status === "up" ? "Up" : "Down") : "—"} danger={onu.lan_status === "down"} />
           <InfoBox label="Source" value={onu.source} />
           <InfoBox label="Subscriber" value={<SubscriberLink subscriber={onu.subscriber} />} />
           <InfoBox label="Mikrotik IP" value={onu.mikrotik_ip || "—"} />

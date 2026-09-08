@@ -58,6 +58,10 @@ DEREG_REASON_MAP = {
 GPON_ONU_VENDOR_OID = "1.3.6.1.4.1.3320.10.3.1.1.2"
 GPON_ONU_SW_VERSION_OID = "1.3.6.1.4.1.3320.10.3.1.1.20"
 
+# Per-ONU LAN port status
+EPON_ONU_LAN_STATUS_OID = "1.3.6.1.4.1.3320.101.12.1.1.8"
+GPON_ONU_LAN_STATUS_OID = "1.3.6.1.4.1.3320.10.4.1.1.4"
+
 # IF-MIB interface counters (per-ONU ports appear in ifDescr).
 IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
 IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"
@@ -784,6 +788,35 @@ class BdcomCliDriver(BaseDriver):
                         for info in onus.values():
                             if info.pon_port.upper().replace(" ", "") == pon_key:
                                 info.extra["sw_version"] = val.strip()
+                except DriverError:
+                    pass
+
+            # Per-ONU LAN port status
+            if self.device.snmp_enabled:
+                try:
+                    is_gpon = self.device.pon_type.lower() == "gpon"
+                    lan_oid = GPON_ONU_LAN_STATUS_OID if is_gpon else EPON_ONU_LAN_STATUS_OID
+                    ip = self.device.ip
+                    community = self.device.snmp_community or "public"
+                    snmp_port = self.device.snmp_port or 161
+                    lan_rows = await snmp_walk(ip, community, lan_oid, snmp_port, timeout=OPTICAL_SNMP_TIMEOUT)
+                    ifnames = {}
+                    try:
+                        if_rows = await snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.2", snmp_port, timeout=OPTICAL_SNMP_TIMEOUT)
+                        ifnames = {int(oid_str.split(".")[-1]): name for oid_str, name in if_rows}
+                    except DriverError:
+                        pass
+                    for oid_str, val in lan_rows:
+                        idx = int(oid_str.split(".")[-1])
+                        name = ifnames.get(idx, "")
+                        if not name or ":" not in name:
+                            continue
+                        pon_key = name.upper().replace(" ", "")
+                        # val: 1=up, 2=down
+                        status = "up" if val.strip() == "1" else "down"
+                        for info in onus.values():
+                            if info.pon_port.upper().replace(" ", "") == pon_key:
+                                info.extra["lan_status"] = status
                 except DriverError:
                     pass
 

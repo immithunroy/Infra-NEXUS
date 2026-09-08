@@ -165,6 +165,7 @@ export interface Onu {
   distance: number | null;
   vendor: string;
   sw_version: string;
+  lan_status: string;
   last_mac: string;
   mac_vendor: string;
   mikrotik_ip: string;

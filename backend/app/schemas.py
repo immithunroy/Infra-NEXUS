@@ -306,6 +306,7 @@ class OnuOut(BaseModel):
     distance: float | None = None
     vendor: str = ""
     sw_version: str = ""
+    lan_status: str = ""
     last_mac: str
     mac_vendor: str = ""
     mikrotik_ip: str
