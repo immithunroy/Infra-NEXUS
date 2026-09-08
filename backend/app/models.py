@@ -203,6 +203,8 @@ class Onu(Base):
     vendor: Mapped[str] = mapped_column(String(128), default="")  # ONU vendor from SNMP
     sw_version: Mapped[str] = mapped_column(String(128), default="")  # ONU firmware from SNMP
     lan_status: Mapped[str] = mapped_column(String(16), default="")  # up | down from SNMP
+    bw_in: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # latest 5-min avg download (bps)
+    bw_out: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # latest 5-min avg upload (bps)
 
     last_mac: Mapped[str] = mapped_column(String(32), default="")
     mikrotik_ip: Mapped[str] = mapped_column(String(64), default="")
@@ -507,6 +509,8 @@ class OnuTelemetry(Base):
     tx_power: Mapped[float | None] = mapped_column(nullable=True)
     in_octets: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     out_octets: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    bw_in: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # 5-min avg download (bps)
+    bw_out: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # 5-min avg upload (bps)
     sampled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, default=utcnow)
 
 

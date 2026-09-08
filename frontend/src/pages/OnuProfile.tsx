@@ -240,6 +240,8 @@ export default function OnuProfile() {
           <InfoBox label="Vendor" value={onu.vendor || "—"} />
           <InfoBox label="Software" value={onu.sw_version || "—"} />
           <InfoBox label="LAN Port" value={onu.lan_status ? (onu.lan_status === "up" ? "Up" : "Down") : "—"} danger={onu.lan_status === "down"} />
+          <InfoBox label="BW Down" value={onu.bw_in != null ? `${(onu.bw_in / 1000000).toFixed(1)} Mbps` : "—"} />
+          <InfoBox label="BW Up" value={onu.bw_out != null ? `${(onu.bw_out / 1000000).toFixed(1)} Mbps` : "—"} />
           <InfoBox label="Source" value={onu.source} />
           <InfoBox label="Subscriber" value={<SubscriberLink subscriber={onu.subscriber} />} />
           <InfoBox label="Mikrotik IP" value={onu.mikrotik_ip || "—"} />

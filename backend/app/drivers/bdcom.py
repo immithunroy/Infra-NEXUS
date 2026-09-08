@@ -62,6 +62,10 @@ GPON_ONU_SW_VERSION_OID = "1.3.6.1.4.1.3320.10.3.1.1.20"
 EPON_ONU_LAN_STATUS_OID = "1.3.6.1.4.1.3320.101.12.1.1.8"
 GPON_ONU_LAN_STATUS_OID = "1.3.6.1.4.1.3320.10.4.1.1.4"
 
+# Per-ONU 5-minute average bandwidth (bits/sec)
+BANDWIDTH_IN_OID = "1.3.6.1.4.1.3320.9.64.4.1.1.6"   # ifIn5MinBitRate
+BANDWIDTH_OUT_OID = "1.3.6.1.4.1.3320.9.64.4.1.1.8"  # ifOut5MinBitRate
+
 # IF-MIB interface counters (per-ONU ports appear in ifDescr).
 IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
 IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"
@@ -122,6 +126,8 @@ class OpticalSample(NamedTuple):
     tx: float | None
     in_octets: int | None
     out_octets: int | None
+    bw_in: int | None = None   # 5-min avg download (bits/sec)
+    bw_out: int | None = None  # 5-min avg upload (bits/sec)
 
 
 def _counter(value: str) -> int | None:
@@ -191,6 +197,20 @@ async def _snmp_optical(device: OLTDevice, rx_oid: str, tx_oid: str) -> dict[str
     tx = {int(oid.split(".")[-1]): d for oid, v in tx_rows if (d := _dbm(v)) is not None}
     in_octets, out_octets = await _snmp_octets(ip, community, port)
 
+    # 5-minute average bandwidth (bits/sec)
+    bw_in_map: dict[int, int] = {}
+    bw_out_map: dict[int, int] = {}
+    try:
+        bw_in_walk = await snmp_walk(ip, community, BANDWIDTH_IN_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        bw_in_map = {int(oid.split(".")[-1]): int(v) for oid, v in bw_in_walk if v.strip().lstrip("-").isdigit()}
+    except DriverError:
+        pass
+    try:
+        bw_out_walk = await snmp_walk(ip, community, BANDWIDTH_OUT_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        bw_out_map = {int(oid.split(".")[-1]): int(v) for oid, v in bw_out_walk if v.strip().lstrip("-").isdigit()}
+    except DriverError:
+        pass
+
     result: dict[str, OpticalSample] = {}
     for ifindex, name in ifnames.items():
         low = name.lower()
@@ -202,6 +222,8 @@ async def _snmp_optical(device: OLTDevice, rx_oid: str, tx_oid: str) -> dict[str
                 tx.get(ifindex),
                 in_octets.get(ifindex),
                 out_octets.get(ifindex),
+                bw_in_map.get(ifindex),
+                bw_out_map.get(ifindex),
             )
     return result
 

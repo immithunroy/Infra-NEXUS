@@ -413,11 +413,17 @@ async def collect_telemetry(session: AsyncSession, olt_id: int) -> int:
                 tx_power=sample.tx,
                 in_octets=sample.in_octets,
                 out_octets=sample.out_octets,
+                bw_in=sample.bw_in,
+                bw_out=sample.bw_out,
                 sampled_at=now,
             )
         )
         onu.rx_power = sample.rx
         onu.tx_power = sample.tx
+        if sample.bw_in is not None:
+            onu.bw_in = sample.bw_in
+        if sample.bw_out is not None:
+            onu.bw_out = sample.bw_out
         stored += 1
 
     if stored:

@@ -307,6 +307,8 @@ class OnuOut(BaseModel):
     vendor: str = ""
     sw_version: str = ""
     lan_status: str = ""
+    bw_in: int | None = None
+    bw_out: int | None = None
     last_mac: str
     mac_vendor: str = ""
     mikrotik_ip: str
