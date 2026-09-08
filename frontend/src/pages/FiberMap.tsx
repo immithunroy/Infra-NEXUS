@@ -18,9 +18,9 @@ interface TempSegment {
 import { useUserRole } from "../lib/role";
 
 const STATUS_COLOR: Record<string, string> = {
-  pppoe: "#22c55e", up: "#eab308", power_off: "#ef4444", wire_down: "#ef4444",
-  inactive: "#ef4444", offline: "#ef4444", disabled: "#9ca3af", unknown: "#9ca3af",
-  lost: "#a855f7", llid_admin_down: "#9ca3af",
+  pppoe: "#22c55e", up: "#f97316", power_off: "#eab308", wire_down: "#ef4444",
+  inactive: "#000000", offline: "#000000", disabled: "#9ca3af", unknown: "#9ca3af",
+  lost: "#a855f7", llid_admin_down: "#a855f7",
 };
 
 const CORE_COLORS: Record<number, string> = {
@@ -2271,7 +2271,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
 
     for (const p of userPoints) {
       const color = STATUS_COLOR[p.status] || "#6b7280";
-      const isBlinking = p.status === "wire_down" || p.status === "lost" || p.status === "llid_admin_down";
+      const isBlinking = p.status === "wire_down" || p.status === "offline" || p.status === "disabled" || p.status === "llid_admin_down";
       const blinkStyle = isBlinking ? "animation:blink 1.2s ease-in-out infinite;" : "";
       const icon = L.divIcon({
         className: "",

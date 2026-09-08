@@ -17,9 +17,15 @@ interface TempSegment {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  pppoe: "#22c55e", up: "#eab308", power_off: "#ef4444", wire_down: "#ef4444",
-  inactive: "#ef4444", offline: "#ef4444", disabled: "#9ca3af", unknown: "#9ca3af",
-  lost: "#a855f7", llid_admin_down: "#9ca3af",
+  pppoe: "#22c55e", up: "#f97316", power_off: "#eab308", wire_down: "#ef4444",
+  inactive: "#000000", offline: "#000000", disabled: "#9ca3af", unknown: "#9ca3af",
+  lost: "#a855f7", llid_admin_down: "#a855f7",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  pppoe: "ON", up: "UP", power_off: "OFF", wire_down: "WD",
+  inactive: "INA", offline: "OFF", disabled: "DIS", unknown: "?",
+  lost: "LST", llid_admin_down: "ADM",
 };
 
 const CORE_COLORS: Record<number, string> = {
@@ -1095,10 +1101,11 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       for (const p of mapPoints) {
         if (!p.gps_lat || !p.gps_lng) continue;
         const color = STATUS_COLOR[p.status] || "#6b7280";
-        const isFault = p.status === "wire_down" || p.status === "lost" || p.status === "llid_admin_down";
+        const isBlinking = p.status === "wire_down" || p.status === "offline" || p.status === "disabled" || p.status === "llid_admin_down";
+        const blinkSvg = isBlinking ? `<animate attributeName="opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite"/>` : "";
         const m = new google.maps.Marker({
           position: { lat: p.gps_lat, lng: p.gps_lng }, map,
-          icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="${color}" stroke="white" stroke-width="1.5"/></svg>`)}`, scaledSize: new google.maps.Size(12, 12), anchor: new google.maps.Point(6, 6) },
+          icon: { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="${color}" stroke="white" stroke-width="1.5">${blinkSvg}</circle></svg>`)}`, scaledSize: new google.maps.Size(12, 12), anchor: new google.maps.Point(6, 6) },
         });
         m.addListener("mouseover", () => { iw.setContent(userTooltip(p, fmtTimeShort)); iw.open({ anchor: m, map }); });
         m.addListener("mouseout", () => iw.close());
