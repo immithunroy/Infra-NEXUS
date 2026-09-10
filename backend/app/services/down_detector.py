@@ -207,8 +207,6 @@ async def _poll_once(s: _Session) -> None:
                     newly_down.append((info, reason))
                     s.down_since[key] = now
                 else:
-                    # First time (or already-down): baseline so no spurious
-                    # event, but track since when for the live table.
                     s.seen_up[key] = False
                     if key not in s.down_since:
                         s.down_since[key] = now
@@ -216,14 +214,20 @@ async def _poll_once(s: _Session) -> None:
                 s.seen_up[key] = True
                 since = s.down_since.pop(key, None)
                 if since is not None:
-                    await _mark_recovered(session, s, key, now)
+                    try:
+                        await _mark_recovered(session, s, key, now)
+                    except Exception as exc:
+                        logger.exception("mark_recovered failed for %s: %s", key, exc)
 
         s.prev = snapshot
 
         for info, reason in newly_down:
-            await _record_down(session, s, info, reason, now)
+            try:
+                await _record_down(session, s, info, reason, now)
+            except Exception as exc:
+                logger.exception("record_down failed for %s:%s: %s", info.pon_port, info.onu_id, exc)
 
-        # Live "currently down" list for the UI.
+        # Live "currently down" list for the UI, sorted by onu_id ascending.
         s.current_down = [
             _onu_info_to_dict(
                 s.olt_name,
@@ -231,14 +235,29 @@ async def _poll_once(s: _Session) -> None:
                 info.dereg_reason or "unknown",
                 s.down_since.get(key, now),
             )
-            for key, info in sorted(snapshot.items())
+            for key, info in sorted(snapshot.items(), key=lambda kv: kv[0][1])
             if _is_down(info)
         ]
 
-        await _detect_mass_outage(session, s, newly_down, now)
-        await _resolve_outages(session, s, snapshot, now)
-        await session.commit()
+        try:
+            await _detect_mass_outage(session, s, newly_down, now)
+        except Exception as exc:
+            logger.exception("detect_mass_outage failed: %s", exc)
+
+        try:
+            await _resolve_outages(session, s, snapshot, now)
+        except Exception as exc:
+            logger.exception("resolve_outages failed: %s", exc)
+
+        try:
+            await session.commit()
+        except Exception as exc:
+            logger.exception("session commit failed: %s", exc)
+            s.last_error = str(exc)[:500]
+            return
+
         s.last_poll_at = now
+        s.last_error = ""
         logger.info("Down poll: %d ONUs seen, %d down", len(snapshot), len(s.current_down))
 
 
@@ -280,7 +299,6 @@ async def _mark_recovered(session, s: _Session, key: tuple[str, int], now) -> No
         duration = int((now - ev.detected_at).total_seconds())
         ev.kind = "recovery"
         ev.duration_seconds = duration
-        ev.detected_at = now
         logger.info("RECOV %s %s:%s duration=%ss", s.olt_name, pon_port, onu_id, duration)
 
 
