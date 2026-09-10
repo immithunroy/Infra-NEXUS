@@ -89,7 +89,7 @@ async def get_onu(onu_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{onu_id}/check-status")
-async def check_onu_status(onu_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
+async def check_onu_status(onu_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Real-time ONU check via OLT CLI: optical power, status, last up time."""
     onu = await _load_onu(db, onu_id)
     if not onu.olt:
