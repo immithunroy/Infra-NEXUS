@@ -767,10 +767,21 @@ async def start_traffic_monitor(
     if not mkt_device:
         raise HTTPException(status_code=404, detail="MikroTik device not found")
 
+    # Resolve interface: use DB value or look up live from MikroTik
+    interface = ppp_entry.interface
+    if not interface:
+        try:
+            driver = MikrotikDriver(mkt_device)
+            interface = await asyncio.to_thread(driver.get_pppoe_interface, subscriber)
+        except Exception:
+            pass
+    if not interface:
+        raise HTTPException(status_code=404, detail="Could not determine PPPoE interface on MikroTik")
+
     # Create session
     session_data = {
         "subscriber": subscriber,
-        "interface": ppp_entry.interface,
+        "interface": interface,
         "mikrotik_name": mkt_device.name,
         "mikrotik_ip": mkt_device.ip,
         "status": "running",
@@ -785,7 +796,7 @@ async def start_traffic_monitor(
 
     # Start background task
     task = asyncio.create_task(
-        _traffic_monitor_task(subscriber, ppp_entry.device_id, ppp_entry.interface, mkt_device.name, mkt_device.ip)
+        _traffic_monitor_task(subscriber, ppp_entry.device_id, interface, mkt_device.name, mkt_device.ip)
     )
     session_data["task"] = task
 

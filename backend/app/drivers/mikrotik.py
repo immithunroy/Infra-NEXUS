@@ -88,7 +88,8 @@ class MikrotikDriver:
     def _connect_and_monitor(self, interface: str) -> dict:
         api = self._connect()
         try:
-            result = list(api.path("/interface/monitor-traffic", interface=interface, once=True))
+            cmd = f"/interface/monitor-traffic once interface={interface}"
+            result = list(api(cmd))
             if result:
                 row = result[0]
                 return {
@@ -98,6 +99,21 @@ class MikrotikDriver:
                     "tx_byte": row.get("tx-byte", 0),
                 }
             return {}
+        finally:
+            try:
+                api.close()
+            except Exception:
+                pass
+
+    def get_pppoe_interface(self, subscriber: str) -> str:
+        """Look up the PPPoE interface name for a subscriber from live MikroTik data."""
+        api = self._connect()
+        try:
+            active = list(api("/ppp/active/print"))
+            for entry in active:
+                if entry.get("name", "") == subscriber:
+                    return entry.get("interface", "")
+            return ""
         finally:
             try:
                 api.close()
