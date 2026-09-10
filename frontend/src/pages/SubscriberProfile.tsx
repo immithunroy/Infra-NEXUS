@@ -610,11 +610,11 @@ export default function SubscriberProfilePage() {
     };
   }, [subscriber]);
 
-  const formatRate = (bps: number): string => {
-    if (bps >= 1024 * 1024 * 1024) return `${(bps / (1024 * 1024 * 1024)).toFixed(1)} Gbps`;
-    if (bps >= 1024 * 1024) return `${(bps / (1024 * 1024)).toFixed(1)} Mbps`;
-    if (bps >= 1024) return `${(bps / 1024).toFixed(1)} Kbps`;
-    return `${bps} bps`;
+  const formatRate = (bps: number): { value: string; unit: string } => {
+    if (bps >= 1024 * 1024 * 1024) return { value: (bps / (1024 * 1024 * 1024)).toFixed(1), unit: 'Gbps' };
+    if (bps >= 1024 * 1024) return { value: (bps / (1024 * 1024)).toFixed(1), unit: 'Mbps' };
+    if (bps >= 1024) return { value: (bps / 1024).toFixed(1), unit: 'Kbps' };
+    return { value: `${bps}`, unit: 'bps' };
   };
 
   useEffect(() => {
@@ -804,16 +804,20 @@ export default function SubscriberProfilePage() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center">
-                  <div className="text-[10px] font-semibold uppercase text-slate-400">Download</div>
-                  <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                    {trafficSamples.length > 0 ? formatRate(trafficSamples[trafficSamples.length - 1].rx_rate) : "—"}
-                  </div>
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">Customer Downloading</div>
+                  {trafficSamples.length > 0 ? (() => { const r = formatRate(trafficSamples[trafficSamples.length - 1].tx_rate); return (
+                    <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-1">
+                      {r.value} <span className="text-lg">{r.unit}</span>
+                    </div>
+                  ); })() : <div className="text-2xl font-bold text-slate-300 dark:text-slate-600 font-mono mt-1">—</div>}
                 </div>
                 <div className="text-center">
-                  <div className="text-[10px] font-semibold uppercase text-slate-400">Upload</div>
-                  <div className="text-xl font-bold text-blue-600 dark:text-blue-400 font-mono">
-                    {trafficSamples.length > 0 ? formatRate(trafficSamples[trafficSamples.length - 1].tx_rate) : "—"}
-                  </div>
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">Customer Uploading</div>
+                  {trafficSamples.length > 0 ? (() => { const r = formatRate(trafficSamples[trafficSamples.length - 1].rx_rate); return (
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 font-mono mt-1">
+                      {r.value} <span className="text-lg">{r.unit}</span>
+                    </div>
+                  ); })() : <div className="text-2xl font-bold text-slate-300 dark:text-slate-600 font-mono mt-1">—</div>}
                 </div>
               </div>
               <div className="space-y-1">
@@ -836,16 +840,20 @@ export default function SubscriberProfilePage() {
               {trafficSamples.length > 0 && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
-                    <div className="text-[10px] font-semibold uppercase text-slate-400">Avg Download</div>
-                    <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                      {formatRate(trafficSamples.reduce((sum, s) => sum + s.rx_rate, 0) / trafficSamples.length)}
-                    </div>
+                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">Avg Download</div>
+                    {(() => { const r = formatRate(trafficSamples.reduce((sum, s) => sum + s.tx_rate, 0) / trafficSamples.length); return (
+                      <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-1">
+                        {r.value} <span className="text-base">{r.unit}</span>
+                      </div>
+                    ); })()}
                   </div>
                   <div className="text-center">
-                    <div className="text-[10px] font-semibold uppercase text-slate-400">Avg Upload</div>
-                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400 font-mono">
-                      {formatRate(trafficSamples.reduce((sum, s) => sum + s.tx_rate, 0) / trafficSamples.length)}
-                    </div>
+                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">Avg Upload</div>
+                    {(() => { const r = formatRate(trafficSamples.reduce((sum, s) => sum + s.rx_rate, 0) / trafficSamples.length); return (
+                      <div className="text-xl font-bold text-blue-600 dark:text-blue-400 font-mono mt-1">
+                        {r.value} <span className="text-base">{r.unit}</span>
+                      </div>
+                    ); })()}
                   </div>
                 </div>
               )}
