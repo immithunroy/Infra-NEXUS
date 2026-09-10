@@ -23,7 +23,7 @@ router = APIRouter(
 
 
 @router.post("/start", response_model=DownStatusOut)
-async def start_detection(body: DownStartRequest, user: User = Depends(require_ops)):
+async def start_detection(body: DownStartRequest, user: User = Depends(get_current_user)):
     """Start live ONU down detection for an OLT (optionally a single port)."""
     config = down_detector.DownConfig(
         olt_id=body.olt_id,
@@ -38,7 +38,7 @@ async def start_detection(body: DownStartRequest, user: User = Depends(require_o
 
 
 @router.post("/stop")
-async def stop_detection(user: User = Depends(require_ops)):
+async def stop_detection(user: User = Depends(get_current_user)):
     """Stop the running detection session."""
     stopped = down_detector.stop()
     return {"stopped": stopped}
