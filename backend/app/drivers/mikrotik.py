@@ -104,28 +104,12 @@ class MikrotikDriver:
                 pass
 
     def get_pppoe_interface(self, subscriber: str) -> str:
-        """Find the PPPoE server interface name for a subscriber.
+        """Return the PPPoE server interface name for a subscriber.
 
         On RouterOS v7, PPPoE server interfaces are named <pppoe-{user}>.
+        Constructs the name based on convention — does NOT verify against live data.
         """
-        api = self._connect()
-        try:
-            ifaces = list(api("/interface/print"))
-            target = f"<pppoe-{subscriber}>"
-            for iface in ifaces:
-                if iface.get("name", "") == target:
-                    return target
-            # Fallback: try without angle brackets
-            target2 = f"pppoe-{subscriber}"
-            for iface in ifaces:
-                if iface.get("name", "") == target2:
-                    return target2
-            return ""
-        finally:
-            try:
-                api.close()
-            except Exception:
-                pass
+        return f"<pppoe-{subscriber}>"
 
     def _collect(self) -> tuple[list[dict], list[dict]]:
         api = self._connect()
