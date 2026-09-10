@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AcsDevice, AcsWifiStatus, canOps, RemoteAccess, SubscriberProfile, SUBSCRIBER_PHOTO_TYPES, SUBSCRIBER_PHOTO_LABELS } from "../api/types";
+import { AcsDevice, AcsWifiStatus, canOps, RemoteAccess, SubscriberProfile, TrafficSession, SUBSCRIBER_PHOTO_TYPES, SUBSCRIBER_PHOTO_LABELS } from "../api/types";
 import { useUserRole } from "../lib/role";
 import { fmtTime, fmtTimeShort } from "../lib/time";
 import StatusBadge from "../components/StatusBadge";
@@ -503,6 +503,14 @@ export default function SubscriberProfilePage() {
   const [fwUrl, setFwUrl] = useState("");
   const [wanForm, setWanForm] = useState({ ip_address: "", subnet_mask: "", default_gateway: "", dns_servers: "", username: "", password: "", addressing_type: "DHCP" });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [trafficStatus, setTrafficStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle');
+  const [trafficSamples, setTrafficSamples] = useState<{ timestamp: number; rx_rate: number; tx_rate: number }[]>([]);
+  const [trafficElapsed, setTrafficElapsed] = useState(0);
+  const [trafficRemaining, setTrafficRemaining] = useState(120);
+  const [trafficError, setTrafficError] = useState('');
+  const [trafficInterface, setTrafficInterface] = useState('');
+  const [trafficMikrotikName, setTrafficMikrotikName] = useState('');
+  const trafficIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!profile || !profile.mikrotik_ip) {
@@ -601,6 +609,70 @@ export default function SubscriberProfilePage() {
       alive = false;
     };
   }, [subscriber]);
+
+  const formatRate = (bps: number): string => {
+    if (bps >= 1024 * 1024 * 1024) return `${(bps / (1024 * 1024 * 1024)).toFixed(1)} Gbps`;
+    if (bps >= 1024 * 1024) return `${(bps / (1024 * 1024)).toFixed(1)} Mbps`;
+    if (bps >= 1024) return `${(bps / 1024).toFixed(1)} Kbps`;
+    return `${bps} bps`;
+  };
+
+  useEffect(() => {
+    return () => {
+      if (trafficIntervalRef.current) clearInterval(trafficIntervalRef.current);
+    };
+  }, []);
+
+  const startTrafficMonitoring = async () => {
+    try {
+      if (!subscriber) return;
+      setTrafficStatus('running');
+      setTrafficSamples([]);
+      setTrafficElapsed(0);
+      setTrafficRemaining(120);
+      setTrafficError('');
+
+      const res = await api.post<TrafficSession>(`/subscribers/${encodeURIComponent(subscriber)}/traffic/start`);
+      setTrafficInterface(res.interface || '');
+      setTrafficMikrotikName(res.mikrotik_name || '');
+
+      trafficIntervalRef.current = setInterval(async () => {
+        try {
+          const s = await api.get<TrafficSession>(`/subscribers/${encodeURIComponent(subscriber)}/traffic/samples`);
+          setTrafficSamples(s.samples || []);
+          setTrafficElapsed(s.elapsed || 0);
+          setTrafficRemaining(s.remaining || 0);
+          if (s.status === 'completed' || s.status === 'error') {
+            clearInterval(trafficIntervalRef.current!);
+            trafficIntervalRef.current = null;
+            setTrafficStatus(s.status === 'error' ? 'error' : 'completed');
+            if (s.error) setTrafficError(s.error);
+          }
+        } catch {
+          clearInterval(trafficIntervalRef.current!);
+          trafficIntervalRef.current = null;
+          setTrafficStatus('error');
+          setTrafficError('Failed to fetch traffic samples');
+        }
+      }, 2000);
+    } catch (e: unknown) {
+      setTrafficStatus('error');
+      setTrafficError(e instanceof Error ? e.message : 'Failed to start monitoring');
+    }
+  };
+
+  const stopTrafficMonitoring = async () => {
+    try {
+      if (subscriber) {
+        await api.del(`/subscribers/${encodeURIComponent(subscriber)}/traffic/stop`);
+      }
+    } catch { /* ignore */ }
+    if (trafficIntervalRef.current) {
+      clearInterval(trafficIntervalRef.current);
+      trafficIntervalRef.current = null;
+    }
+    setTrafficStatus('completed');
+  };
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -701,6 +773,99 @@ export default function SubscriberProfilePage() {
           <BandwidthChart subscriber={subscriber} />
         </div>
       </div>
+
+      {/* ── Live Traffic Monitoring ── */}
+      {profile.status === "pppoe" && (
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Live Traffic Monitor</div>
+            {trafficStatus === "running" && (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />LIVE
+              </span>
+            )}
+          </div>
+
+          {trafficStatus === "idle" && (
+            <div className="space-y-2">
+              {trafficInterface && (
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  Interface: <span className="font-mono font-medium text-slate-700 dark:text-slate-200">{trafficInterface}</span>
+                  {trafficMikrotikName && <span> @ <span className="font-medium">{trafficMikrotikName}</span></span>}
+                </div>
+              )}
+              <button className="btn-primary w-full py-2 text-sm" onClick={startTrafficMonitoring}>
+                Start Monitoring (2 min)
+              </button>
+            </div>
+          )}
+
+          {trafficStatus === "running" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <div className="text-[10px] font-semibold uppercase text-slate-400">Download</div>
+                  <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                    {trafficSamples.length > 0 ? formatRate(trafficSamples[trafficSamples.length - 1].rx_rate) : "—"}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] font-semibold uppercase text-slate-400">Upload</div>
+                  <div className="text-xl font-bold text-blue-600 dark:text-blue-400 font-mono">
+                    {trafficSamples.length > 0 ? formatRate(trafficSamples[trafficSamples.length - 1].tx_rate) : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                  <div className="h-full bg-emerald-500 transition-all duration-1000" style={{ width: `${((120 - trafficRemaining) / 120) * 100}%` }} />
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400">
+                  <span>{Math.floor(trafficElapsed)}s elapsed</span>
+                  <span>{Math.floor(trafficRemaining / 60)}:{String(Math.floor(trafficRemaining % 60)).padStart(2, "0")} remaining</span>
+                </div>
+              </div>
+              <button className="btn-secondary w-full py-1.5 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950" onClick={stopTrafficMonitoring}>
+                Stop Monitoring
+              </button>
+            </div>
+          )}
+
+          {trafficStatus === "completed" && (
+            <div className="space-y-3">
+              {trafficSamples.length > 0 && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="text-[10px] font-semibold uppercase text-slate-400">Avg Download</div>
+                    <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                      {formatRate(trafficSamples.reduce((sum, s) => sum + s.rx_rate, 0) / trafficSamples.length)}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] font-semibold uppercase text-slate-400">Avg Upload</div>
+                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400 font-mono">
+                      {formatRate(trafficSamples.reduce((sum, s) => sum + s.tx_rate, 0) / trafficSamples.length)}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="text-center text-xs text-slate-500">Monitoring complete ({trafficSamples.length} samples)</div>
+              <button className="btn-primary w-full py-2 text-sm" onClick={startTrafficMonitoring}>
+                Monitor Again
+              </button>
+            </div>
+          )}
+
+          {trafficStatus === "error" && (
+            <div className="space-y-2">
+              <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-xs text-red-700 dark:text-red-400">{trafficError}</div>
+              <button className="btn-primary w-full py-2 text-sm" onClick={startTrafficMonitoring}>
+                Retry
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Remote + ACS + WiFi ── */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">

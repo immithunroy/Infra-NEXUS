@@ -508,6 +508,24 @@ export interface SubscriberProfile {
   last_seen: string | null;
 }
 
+export interface TrafficSample {
+  timestamp: number;
+  rx_rate: number;
+  tx_rate: number;
+}
+
+export interface TrafficSession {
+  subscriber: string;
+  interface: string;
+  mikrotik_name: string;
+  mikrotik_ip: string;
+  status: string;
+  samples: TrafficSample[];
+  elapsed: number;
+  remaining: number;
+  error: string;
+}
+
 export interface TestResult {
   success: boolean;
   message: string;
