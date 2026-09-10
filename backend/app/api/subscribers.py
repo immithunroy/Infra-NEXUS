@@ -774,8 +774,10 @@ async def start_traffic_monitor(
         try:
             driver = MikrotikDriver(mkt_device)
             interface = await asyncio.to_thread(driver.get_pppoe_interface, subscriber)
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"get_pppoe_interface failed for {subscriber}: {e}")
+            interface = ""
     if not interface:
         raise HTTPException(status_code=404, detail="Could not determine PPPoE interface on MikroTik")
 
