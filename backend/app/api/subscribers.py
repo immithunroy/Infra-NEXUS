@@ -660,20 +660,6 @@ import time
 from ..drivers.mikrotik import MikrotikDriver
 
 
-def _parse_rate(rate_str: str) -> int:
-    """Convert MikroTik rate string like '45.2 Mbps' to bytes/sec."""
-    parts = rate_str.strip().split()
-    if len(parts) != 2:
-        return 0
-    try:
-        value = float(parts[0])
-    except ValueError:
-        return 0
-    unit = parts[1].lower()
-    multipliers = {"bps": 1, "kbps": 1024, "mbps": 1024**2, "gbps": 1024**3}
-    return int(value * multipliers.get(unit, 1))
-
-
 # In-memory store: subscriber_name -> session data
 _traffic_sessions: dict[str, dict] = {}
 
@@ -685,12 +671,11 @@ async def _traffic_monitor_task(
     mikrotik_name: str,
     mikrotik_ip: str,
 ):
-    """Background task that polls MikroTik traffic every 2 seconds for 2 minutes."""
+    """Background task: poll MikroTik byte counters every 2 seconds for 2 minutes, compute rates from deltas."""
     session = _traffic_sessions.get(subscriber)
     if not session:
         return
 
-    device = None
     try:
         from sqlalchemy import select as sa_select
         from ..database import SessionLocal
@@ -705,6 +690,9 @@ async def _traffic_monitor_task(
 
         driver = MikrotikDriver(device)
         start = time.time()
+        prev_rx = None
+        prev_tx = None
+        prev_time = None
 
         while time.time() - start < 120:
             if session.get("stop_requested"):
@@ -712,15 +700,28 @@ async def _traffic_monitor_task(
                 break
 
             try:
+                now = time.time()
                 data = await driver.monitor_traffic_once(interface)
-                sample = TrafficSample(
-                    timestamp=time.time(),
-                    rx_rate=_parse_rate(data.get("rx_rate", "0 bps")),
-                    tx_rate=_parse_rate(data.get("tx_rate", "0 bps")),
-                )
-                session["samples"].append(sample)
-                session["elapsed"] = round(time.time() - start, 1)
-                session["remaining"] = max(0, round(120 - (time.time() - start), 1))
+                cur_rx = data.get("rx_byte", 0)
+                cur_tx = data.get("tx_byte", 0)
+
+                if prev_rx is not None and prev_time is not None:
+                    dt = now - prev_time
+                    if dt > 0:
+                        # Compute bits per second from byte deltas
+                        rx_bps = max(0, int((cur_rx - prev_rx) * 8 / dt)) if cur_rx >= prev_rx else 0
+                        tx_bps = max(0, int((cur_tx - prev_tx) * 8 / dt)) if cur_tx >= prev_tx else 0
+                    else:
+                        rx_bps = 0
+                        tx_bps = 0
+                    sample = TrafficSample(timestamp=now, rx_rate=rx_bps, tx_rate=tx_bps)
+                    session["samples"].append(sample)
+
+                prev_rx = cur_rx
+                prev_tx = cur_tx
+                prev_time = now
+                session["elapsed"] = round(now - start, 1)
+                session["remaining"] = max(0, round(120 - (now - start), 1))
             except Exception as e:
                 session["error"] = str(e)
 

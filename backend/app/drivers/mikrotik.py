@@ -86,19 +86,17 @@ class MikrotikDriver:
             return connect(**kwargs)
 
     def _connect_and_monitor(self, interface: str) -> dict:
+        """Get rx/tx byte counters for an interface. Caller computes rate from deltas."""
         api = self._connect()
         try:
-            cmd = f"/interface/monitor-traffic once interface={interface}"
-            result = list(api(cmd))
-            if result:
-                row = result[0]
-                return {
-                    "rx_rate": row.get("rx-rate", "0 bps"),
-                    "tx_rate": row.get("tx-rate", "0 bps"),
-                    "rx_byte": row.get("rx-byte", 0),
-                    "tx_byte": row.get("tx-byte", 0),
-                }
-            return {}
+            ifaces = list(api("/interface/print"))
+            for iface in ifaces:
+                if iface.get("name", "") == interface:
+                    return {
+                        "rx_byte": int(iface.get("rx-byte", 0)),
+                        "tx_byte": int(iface.get("tx-byte", 0)),
+                    }
+            return {"rx_byte": 0, "tx_byte": 0}
         finally:
             try:
                 api.close()
@@ -106,13 +104,22 @@ class MikrotikDriver:
                 pass
 
     def get_pppoe_interface(self, subscriber: str) -> str:
-        """Look up the PPPoE interface name for a subscriber from live MikroTik data."""
+        """Find the PPPoE server interface name for a subscriber.
+
+        On RouterOS v7, PPPoE server interfaces are named <pppoe-{user}>.
+        """
         api = self._connect()
         try:
-            active = list(api("/ppp/active/print"))
-            for entry in active:
-                if entry.get("name", "") == subscriber:
-                    return entry.get("interface", "")
+            ifaces = list(api("/interface/print"))
+            target = f"<pppoe-{subscriber}>"
+            for iface in ifaces:
+                if iface.get("name", "") == target:
+                    return target
+            # Fallback: try without angle brackets
+            target2 = f"pppoe-{subscriber}"
+            for iface in ifaces:
+                if iface.get("name", "") == target2:
+                    return target2
             return ""
         finally:
             try:
