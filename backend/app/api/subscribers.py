@@ -803,7 +803,7 @@ async def start_traffic_monitor(
 
     return TrafficSession(
         subscriber=subscriber,
-        interface=ppp_entry.interface,
+        interface=interface,
         mikrotik_name=mkt_device.name,
         mikrotik_ip=mkt_device.ip,
         status="running",
