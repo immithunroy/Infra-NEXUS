@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
-import { canOps, canWrite, DownEvent, DownStatus, OLTDevice, Outage, PortArea } from "../api/types";
+import { canOps, canWrite, DownEvent, DownStatus, Onu, OLTDevice, Outage, PortArea } from "../api/types";
 import StatusBadge from "../components/StatusBadge";
 import ActionResultBanner from "../components/ActionResultBanner";
 import WarningBanner from "../components/WarningBanner";
@@ -16,12 +16,16 @@ const kindBadge: Record<string, string> = {
 };
 
 const reasonBadge: Record<string, string> = {
-  "power-off": "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  "wire-down": "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  "power-off": "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100",
+  "wire-down": "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  "pon-los": "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  "admin-down": "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
   "mpcp-down": "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
   "oam-down": "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-  "illegal-mac": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+  "illegal-mac": "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
   "llid-admin-down": "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  "dying-gasp": "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  "unknown": "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
 };
 
 function fmtDuration(seconds: number | null | undefined): string {
@@ -66,6 +70,7 @@ export default function LiveDowns() {
   const [areas, setAreas] = useState<PortArea[]>([]);
   const [areaDraft, setAreaDraft] = useState<Record<string, string>>({});
   const [areaSaving, setAreaSaving] = useState(false);
+  const [onuTotal, setOnuTotal] = useState(0);
   const lastNoticeRef = useRef<string>("");
 
   const { page, setPage, totalPages, slice, total, pageSize } = usePagination(events);
@@ -92,6 +97,13 @@ export default function LiveDowns() {
 
   const loadOutages = useCallback(() => {
     api.get<Outage[]>("/downs/outages?limit=50").then(setOutages).catch(() => undefined);
+  }, []);
+
+  const loadOnuTotal = useCallback((oid: string, p: string) => {
+    if (!oid) { setOnuTotal(0); return; }
+    const params = new URLSearchParams({ olt_id: oid });
+    if (p) params.set("pon_port", p);
+    api.get<Onu[]>(`/onus?${params.toString()}`).then((list) => setOnuTotal(Array.isArray(list) ? list.length : 0)).catch(() => setOnuTotal(0));
   }, []);
 
   const loadAreas = useCallback((oid: string) => {
@@ -156,6 +168,10 @@ export default function LiveDowns() {
     loadOutages();
   }, [loadEvents, loadOutages]);
 
+  useEffect(() => {
+    loadOnuTotal(oltId, port);
+  }, [oltId, port, loadOnuTotal]);
+
   // Flash when a new outage appears.
   useEffect(() => {
     const open = outages.filter((o) => !o.resolved);
@@ -180,6 +196,7 @@ export default function LiveDowns() {
     setOltId(v);
     setPort("");
     loadPorts(v);
+    loadOnuTotal(v, "");
   };
 
   const start = async () => {
@@ -220,6 +237,15 @@ export default function LiveDowns() {
   };
 
   const openOutages = outages.filter((o) => !o.resolved);
+
+  const downCount = status?.current_down_count ?? 0;
+  const upCount = onuTotal - downCount;
+  const downReasons: Record<string, number> = {};
+  (status?.current_down || []).forEach((d) => {
+    const r = d.reason || "unknown";
+    downReasons[r] = (downReasons[r] || 0) + 1;
+  });
+  const sortedReasons = Object.entries(downReasons).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="space-y-6">
@@ -294,9 +320,50 @@ export default function LiveDowns() {
           </span>
           <span className="text-slate-500 dark:text-slate-400">started {fmtTime(status.started_at)}</span>
           <span className="text-slate-500 dark:text-slate-400">last poll {fmtTime(status.last_poll_at)}</span>
-          <span className="font-semibold text-rose-600 dark:text-rose-300">{status.current_down_count} down now</span>
           <span className="text-xs text-slate-400">polling every {status.interval}s · threshold {status.mass_threshold}</span>
           {status.last_error && <span className="ml-auto text-xs text-red-600 dark:text-red-400">error: {status.last_error}</span>}
+        </div>
+      )}
+
+      {/* UP / DOWN tiles */}
+      {status?.running && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4 text-center dark:border-emerald-700 dark:bg-emerald-950">
+            <div className="text-4xl font-extrabold text-emerald-600 dark:text-emerald-400">{upCount}</div>
+            <div className="text-sm font-bold tracking-wide text-emerald-600 dark:text-emerald-400">UP</div>
+          </div>
+          <div className="rounded-lg border-2 border-rose-300 bg-rose-50 p-4 text-center dark:border-rose-700 dark:bg-rose-950">
+            <div className="text-4xl font-extrabold text-rose-600 dark:text-rose-400">{downCount}</div>
+            <div className="text-sm font-bold tracking-wide text-rose-600 dark:text-rose-400">DOWN</div>
+          </div>
+        </div>
+      )}
+
+      {/* Down Reasons */}
+      {status?.running && sortedReasons.length > 0 && (
+        <div className="card p-4">
+          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Down Reasons</div>
+          <div className="space-y-2">
+            {sortedReasons.map(([reason, count]) => {
+              const color =
+                reason === "power-off" ? "text-black dark:text-white" :
+                reason === "wire-down" || reason === "pon-los" ? "text-rose-600 dark:text-rose-400" :
+                reason === "admin-down" ? "text-violet-600 dark:text-violet-400" :
+                "text-slate-500 dark:text-slate-400";
+              const dotColor =
+                reason === "power-off" ? "bg-black dark:bg-white" :
+                reason === "wire-down" || reason === "pon-los" ? "bg-rose-500" :
+                reason === "admin-down" ? "bg-violet-500" :
+                "bg-slate-400";
+              return (
+                <div key={reason} className="flex items-center gap-3">
+                  <span className={`inline-block h-3 w-3 rounded-full ${dotColor}`} />
+                  <span className={`flex-1 text-sm font-semibold ${color}`}>{reason}</span>
+                  <span className={`text-2xl font-extrabold ${color}`}>{count}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
