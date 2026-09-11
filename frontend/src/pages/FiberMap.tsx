@@ -2017,38 +2017,22 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           const menu = document.createElement("div");
           menu.className = "ctx-menu";
           menu.style.cssText = "position:absolute;z-index:9999;background:#1e293b;border-radius:8px;padding:4px 0;box-shadow:0 4px 16px rgba(0,0,0,.4);min-width:200px;left:" + pt.x + "px;top:" + pt.y + "px;";
-          const activeCut = cuts.find((c) => c.cable_id === cable.id && c.status === "cut");
-          const isRepaired = cuts.some((c) => c.cable_id === cable.id && c.status === "repaired");
-          const cutDisabled = !!activeCut;
-          const restoreDisabled = !activeCut;
-          const cutLabel = cutDisabled ? "Report Cut (active cut exists)" : "Report Cable Cut";
-          const restoreLabel = restoreDisabled ? "Restore Cable Cut (no active cut)" : "Restore Cable Cut and Auto Add TJ";
           menu.innerHTML = '<div style="padding:6px 12px;color:#94a3b8;font-size:11px;font-weight:600">' + (cable.link_id || cable.code) + "</div>"
             + '<div style="padding:2px 12px 4px;color:#64748b;font-size:10px;border-bottom:1px solid #334155;margin-bottom:2px">' + (cable.link_name || cable.code) + " · " + cable.core_count + " cores</div>"
-            + '<div class="ctx-i" data-action="report-cut" style="padding:7px 12px;color:' + (cutDisabled ? "#475569" : "#e2e8f0") + ';font-size:13px;cursor:' + (cutDisabled ? "not-allowed" : "pointer") + ';display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
-            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><line x1="6" y1="18" x2="18" y2="6"/></svg>' + cutLabel + '</div>'
+            + '<div class="ctx-i" data-action="report-cut" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><line x1="6" y1="18" x2="18" y2="6"/></svg>Report Cable Cut</div>'
             + '<div class="ctx-i" data-action="add-loop" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
-            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><circle cx="12" cy="12" r="8" stroke-dasharray="4,2"/></svg>Add Loop</div>'
-            + '<div class="ctx-i" data-action="restore-cut" style="padding:7px 12px;color:' + (restoreDisabled ? "#475569" : "#e2e8f0") + ';font-size:13px;cursor:' + (restoreDisabled ? "not-allowed" : "pointer") + ';display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
-            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>' + restoreLabel + '</div>';
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><circle cx="12" cy="12" r="8" stroke-dasharray="4,2"/></svg>Add Loop</div>';
           map.getContainer().appendChild(menu);
           L.DomEvent.disableClickPropagation(menu);
-          const midLat = cable.segments[0].start_lat;
-          const midLng = cable.segments[0].start_lng;
           menu.querySelector('[data-action="report-cut"]')?.addEventListener("click", () => {
-            if (cutDisabled) return;
-            setCutForm({ cable_id: cable.id, lat: midLat, lng: midLng });
+            setCutForm({ cable_id: cable.id, lat: e.latlng.lat, lng: e.latlng.lng });
             setShowForm("cut");
             menu.remove();
           });
           menu.querySelector('[data-action="add-loop"]')?.addEventListener("click", () => {
-            setLoopForm({ cable_id: cable.id, lat: midLat, lng: midLng, loop_length_m: 30 });
+            setLoopForm({ cable_id: cable.id, lat: e.latlng.lat, lng: e.latlng.lng, loop_length_m: 30 });
             setShowForm("loop");
-            menu.remove();
-          });
-          menu.querySelector('[data-action="restore-cut"]')?.addEventListener("click", () => {
-            if (restoreDisabled || !activeCut) return;
-            startRecovery(activeCut);
             menu.remove();
           });
           map.once("click", () => menu.remove());
@@ -2165,13 +2149,36 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
           "<b>" + (cut.status === "repaired" ? "Repaired" : "CABLE CUT") + "</b>"
           + (cut.splice_tj_name ? "<br>Splice at: " + cut.splice_tj_name : "")
           + (cut.notes ? "<br>" + cut.notes : "")
-          + "<br><i>click for details</i>",
+          + (cut.status === "cut" ? "<br><i>right-click to recover</i>" : "<br><i>click for details</i>"),
           { sticky: true }
         );
       marker.on("click", (e) => {
         L.DomEvent.stopPropagation(e);
         onCutClickFn(cut);
       });
+      if (cut.status === "cut") {
+        marker.on("contextmenu", (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(e);
+          const map = mapRef.current;
+          if (!map) return;
+          const old = map.getContainer().querySelector(".ctx-menu");
+          if (old) old.remove();
+          const pt = map.latLngToContainerPoint(e.latlng);
+          const menu = document.createElement("div");
+          menu.className = "ctx-menu";
+          menu.style.cssText = "position:absolute;z-index:9999;background:#1e293b;border-radius:8px;padding:4px 0;box-shadow:0 4px 16px rgba(0,0,0,.4);min-width:200px;left:" + pt.x + "px;top:" + pt.y + "px;";
+          menu.innerHTML = '<div style="padding:6px 12px;color:#94a3b8;font-size:11px;font-weight:600">Cable Cut</div>'
+            + '<div class="ctx-i" data-action="recover" style="padding:7px 12px;color:#e2e8f0;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Recover Cable Cut</div>';
+          map.getContainer().appendChild(menu);
+          L.DomEvent.disableClickPropagation(menu);
+          menu.querySelector('[data-action="recover"]')?.addEventListener("click", () => {
+            startRecovery(cut);
+            menu.remove();
+          });
+          map.once("click", () => menu.remove());
+        });
+      }
       marker.addTo(map);
     }
   }, [cables, tjBoxes, splitters, loops, cuts, netLayers]);

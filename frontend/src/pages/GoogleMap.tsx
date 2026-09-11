@@ -983,11 +983,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           if (!e.domEvent || !e.latLng) return;
           const existing = document.getElementById("gmap-ctx-menu");
           if (existing) existing.remove();
-          const activeCut = cuts.find((c) => c.cable_id === cable.id && c.status === "cut");
-          const cutDisabled = !!activeCut;
-          const restoreDisabled = !activeCut;
-          const cutLabel = cutDisabled ? "Report Cut (active cut exists)" : "Report Cable Cut";
-          const restoreLabel = restoreDisabled ? "Restore Cable Cut (no active cut)" : "Restore Cable Cut and Auto Add TJ";
+          const lat = e.latLng.lat(), lng = e.latLng.lng();
           const menu = document.createElement("div");
           menu.id = "gmap-ctx-menu";
           menu.style.cssText = `position:fixed;z-index:9999;background:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;min-width:220px;font-size:13px;`;
@@ -996,31 +992,23 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           header.textContent = (cable.link_id || cable.code) + " · " + (cable.link_name || cable.code) + " · " + cable.core_count + " cores";
           menu.appendChild(header);
           const items = [
-            { label: cutLabel, action: "report-cut", color: cutDisabled ? "#94a3b8" : "#ef4444", disabled: cutDisabled },
-            { label: "Add Loop", action: "add-loop", color: "#06b6d4", disabled: false },
-            { label: restoreLabel, action: "restore-cut", color: restoreDisabled ? "#94a3b8" : "#22c55e", disabled: restoreDisabled },
+            { label: "Report Cable Cut", action: "report-cut", color: "#ef4444" },
+            { label: "Add Loop", action: "add-loop", color: "#06b6d4" },
           ];
-          const midLat = cable.segments[0].start_lat;
-          const midLng = cable.segments[0].start_lng;
           for (const item of items) {
             const btn = document.createElement("button");
             btn.textContent = item.label;
-            btn.style.cssText = `display:block;width:100%;text-align:left;padding:8px 16px;border:none;background:none;cursor:${item.disabled ? "not-allowed" : "pointer"};font-size:13px;color:${item.disabled ? "#94a3b8" : "#334155"};`;
-            if (!item.disabled) {
-              btn.onmouseenter = () => btn.style.background = "#f1f5f9";
-              btn.onmouseleave = () => btn.style.background = "none";
-            }
+            btn.style.cssText = `display:block;width:100%;text-align:left;padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;color:#334155;`;
+            btn.onmouseenter = () => btn.style.background = "#f1f5f9";
+            btn.onmouseleave = () => btn.style.background = "none";
             btn.onclick = () => {
               menu.remove();
-              if (item.disabled) return;
               if (item.action === "report-cut") {
-                setCutForm({ cable_id: cable.id, lat: midLat, lng: midLng });
+                setCutForm({ cable_id: cable.id, lat, lng });
                 setShowForm("cut");
               } else if (item.action === "add-loop") {
-                setLoopForm({ cable_id: cable.id, lat: midLat, lng: midLng, loop_length_m: 30 });
+                setLoopForm({ cable_id: cable.id, lat, lng, loop_length_m: 30 });
                 setShowForm("loop");
-              } else if (item.action === "restore-cut" && activeCut) {
-                startRecovery(activeCut);
               }
             };
             menu.appendChild(btn);
@@ -1142,9 +1130,42 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         position: { lat: cut.lat, lng: cut.lng }, map,
         icon: { url: cutSvgUrl(color), scaledSize: new google.maps.Size(22, 22), anchor: new google.maps.Point(11, 11) },
       });
-      m.addListener("mouseover", () => { iw.setContent(cutTooltip(cut)); iw.open({ anchor: m, map }); });
+      m.addListener("mouseover", () => {
+        const tip = cut.status === "cut"
+          ? cutTooltip(cut).replace("</i>", " · right-click to recover</i>")
+          : cutTooltip(cut);
+        iw.setContent(tip);
+        iw.open({ anchor: m, map });
+      });
       m.addListener("mouseout", () => iw.close());
       m.addListener("click", () => { setCutForm(cut); setShowForm("cut"); });
+      if (cut.status === "cut") {
+        m.addListener("rightclick", (e: google.maps.MapMouseEvent) => {
+          e.domEvent.preventDefault();
+          e.domEvent.stopPropagation();
+          const existing = document.getElementById("gmap-ctx-menu");
+          if (existing) existing.remove();
+          const menu = document.createElement("div");
+          menu.id = "gmap-ctx-menu";
+          menu.style.cssText = `position:fixed;z-index:9999;background:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;min-width:200px;font-size:13px;`;
+          const header = document.createElement("div");
+          header.style.cssText = "padding:6px 16px;color:#64748b;font-size:11px;font-weight:600;border-bottom:1px solid #e2e8f0;";
+          header.textContent = "Cable Cut";
+          menu.appendChild(header);
+          const btn = document.createElement("button");
+          btn.textContent = "Recover Cable Cut";
+          btn.style.cssText = `display:block;width:100%;text-align:left;padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;color:#334155;`;
+          btn.onmouseenter = () => btn.style.background = "#f1f5f9";
+          btn.onmouseleave = () => btn.style.background = "none";
+          btn.onclick = () => { menu.remove(); startRecovery(cut); };
+          menu.appendChild(btn);
+          const px = (e.domEvent as MouseEvent).clientX, py = (e.domEvent as MouseEvent).clientY;
+          menu.style.left = `${px}px`; menu.style.top = `${py}px`;
+          document.body.appendChild(menu);
+          const removeMenu = () => { menu.remove(); document.removeEventListener("click", removeMenu); };
+          setTimeout(() => document.addEventListener("click", removeMenu), 0);
+        });
+      }
       markersRef.current.set(`cut-${cut.id}`, m);
     }
 

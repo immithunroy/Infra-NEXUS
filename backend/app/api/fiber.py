@@ -510,10 +510,27 @@ async def recover_cut(cut_id: int, user: User = Depends(require_write), db: Asyn
     if cut.status == "repaired":
         raise HTTPException(400, "This cut is already repaired")
 
-    # 2. Look up the cable
+    # 2. Look up the cable — if original cable was deleted (by a prior recovery), find the cable containing this cut point
     cable = await db.get(Cable, cut.cable_id)
     if cable is None:
-        raise HTTPException(400, "Associated cable not found")
+        # Find which cable's segments contain this cut point
+        all_cables = (await db.execute(select(Cable))).scalars().all()
+        best_cable = None
+        best_dist = float("inf")
+        for c in all_cables:
+            segs = (await db.execute(
+                select(CableSegment).where(CableSegment.cable_id == c.id).order_by(CableSegment.order_index)
+            )).scalars().all()
+            for seg in segs:
+                d = haversine(seg.start_lat, seg.start_lng, cut.lat, cut.lng)
+                seg_len = haversine(seg.start_lat, seg.start_lng, seg.end_lat, seg.end_lng)
+                if d < seg_len + 0.5 and d < best_dist:
+                    best_dist = d
+                    best_cable = c
+        if best_cable is None:
+            raise HTTPException(400, "No cable found containing this cut point")
+        cable = best_cable
+        cut.cable_id = cable.id
 
     core_count = cable.core_count
     if core_count <= 0:
@@ -666,8 +683,30 @@ async def recover_cut(cut_id: int, user: User = Depends(require_write), db: Asyn
         if splice.cable_a_id == cable.id:
             splice.cable_a_id = cable_a.id
         if splice.cable_b_id == cable.id:
-            splice.cable_b_id = cable_a.id
+            splice.cable_b_id = cable_b.id
         db.add(splice)
+
+    # 12b. Reassign other active cuts on this cable to the correct new cable
+    other_cuts_result = await db.execute(
+        select(CableCut).where(
+            CableCut.cable_id == cable.id,
+            CableCut.id != cut.id,
+            CableCut.status == "cut",
+        )
+    )
+    other_cuts = other_cuts_result.scalars().all()
+    for other_cut in other_cuts:
+        # Determine which new cable contains this cut's point
+        on_a = False
+        for seg in seg_before:
+            d_start = haversine(seg.start_lat, seg.start_lng, other_cut.lat, other_cut.lng)
+            d_end = haversine(seg.end_lat, seg.end_lng, other_cut.lat, other_cut.lng)
+            seg_len = haversine(seg.start_lat, seg.start_lng, seg.end_lat, seg.end_lng)
+            if d_start <= seg_len + 0.5 and d_end <= seg_len + 0.5:
+                on_a = True
+                break
+        other_cut.cable_id = cable_a.id if on_a else cable_b.id
+        db.add(other_cut)
 
     # 13. Create splices for each core at the new TJ (connecting Cable A to Cable B)
     splices_created = 0
