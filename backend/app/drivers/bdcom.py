@@ -874,7 +874,7 @@ class BdcomCliDriver(BaseDriver):
                         if pon.startswith("GPON"):
                             optical = await self._exec(f"show gpon onu-optical-transceiver-diagnosis interface gpON {pon.replace('GPON', '')}", timeout=12)
                         else:
-                            optical = await self._exec(f"show epon optical-transceiver-diagnosis interface epON {pon.replace('EPON', '')}", timeout=12)
+                            optical = await self._exec(f"show epon onu optical-transceiver-diagnosis interface epON {pon.replace('EPON', '')}", timeout=12)
                         for (base, onu_id), (rx, tx) in self._parse_optical(optical).items():
                             key = (base, onu_id)
                             if key in onus:
