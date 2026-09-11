@@ -303,11 +303,31 @@ _EPON_SNMP_STATUS_MAP = {
 }
 
 
+def _bytes_to_mac(raw: str) -> str:
+    """Convert SNMP raw bytes like '0x001bd60691f1' or space-separated to '00:1b:d6:06:91:f1'."""
+    raw = raw.strip()
+    if raw.startswith("0x"):
+        hex_str = raw[2:]
+    else:
+        hex_str = raw.replace(" ", "").replace("-", "").replace(":", "")
+    if len(hex_str) != 12:
+        return ""
+    return ":".join(hex_str[i : i + 2] for i in range(0, 12, 2)).lower()
+
+
 async def _snmp_epon_names(device: OLTDevice) -> dict[str, dict]:
     """Walk EPON ONU name + status via SNMP.
 
+    The EPON LLID-ONU bind table (.11.1.1.x) is indexed by the full MAC
+    address, not by an integer.  The ONU info table (.10.1.1.x) is indexed
+    by the LLID ifIndex.  We correlate the two via the shared MAC address:
+
+      1. Walk .11.1.1.3 (bind MAC) and .11.1.1.4 (name)  — same index
+      2. Walk .10.1.1.3 (info MAC) and .10.1.1.26 (status) — LLID ifIndex
+      3. Walk ifName (.1.3.6.1.2.1.2.2.1.2)                — ifIndex
+      4. Join by MAC address → (pon_port, onu_id)
+
     Returns {(pon_port_upper, onu_id): {"name": ..., "state": ..., "mac": ...}}
-    joined through the LLID ifIndex → ifName mapping.
     """
     community = device.snmp_community or ""
     if not community:
@@ -316,47 +336,55 @@ async def _snmp_epon_names(device: OLTDevice) -> dict[str, dict]:
     ip = device.ip
 
     try:
-        # 1. Build ifIndex → ifName map (EPON0/3:4 etc.)
+        # 1. ifIndex → ifName map
         if_rows = await snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.2", port, timeout=OPTICAL_SNMP_TIMEOUT)
-        ifnames: dict[int, str] = {}
-        for oid_str, name in if_rows:
-            idx = int(oid_str.split(".")[-1])
-            ifnames[idx] = name
+        ifnames: dict[int, str] = {int(o.split(".")[-1]): n for o, n in if_rows}
         if not ifnames:
             return {}
 
-        # 2. Walk ONU MAC (to correlate with CLI results)
+        # 2. Bind table: MAC index → MAC address (.11.1.1.3)
+        bind_mac_rows = await snmp_walk(ip, community, EPON_ONU_BIND_DIID_OID.replace(".1", ".3"), port, timeout=OPTICAL_SNMP_TIMEOUT)
+        # Actually walk .11.1.1.3 (bind MAC) not .11.1.1.1 (DIID)
+        bind_mac_oid = "1.3.6.1.4.1.3320.101.11.1.1.3"
+        bind_mac_rows = await snmp_walk(ip, community, bind_mac_oid, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        bind_mac_by_suffix: dict[str, str] = {}  # oid_suffix → mac
+        for oid_str, val in bind_mac_rows:
+            mac = _bytes_to_mac(val)
+            if mac:
+                suffix = oid_str[len(EPON_ONU_NAME_OID.rsplit(".", 1)[0]) + 1 :]
+                bind_mac_by_suffix[suffix] = mac
+
+        # 3. Bind table: suffix → name (.11.1.1.4)
+        name_rows = await snmp_walk(ip, community, EPON_ONU_NAME_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        name_by_suffix: dict[str, str] = {}
+        name_base = EPON_ONU_NAME_OID
+        for oid_str, val in name_rows:
+            suffix = oid_str[len(name_base) + 1 :]
+            text = val.strip()
+            if text and text != "N/A":
+                name_by_suffix[suffix] = text
+
+        # 4. Info table: LLID ifIndex → MAC (.10.1.1.3)
         mac_rows = await snmp_walk(ip, community, EPON_ONU_MAC_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
-        mac_by_idx: dict[int, str] = {}
+        mac_by_llid: dict[int, str] = {}
         for oid_str, val in mac_rows:
             idx = int(oid_str.split(".")[-1])
-            mac_raw = val.strip().replace(" ", ":").replace("-", ":").lower()
-            if len(mac_raw) == 17:  # xx:xx:xx:xx:xx:xx
-                mac_by_idx[idx] = mac_raw
+            mac = _bytes_to_mac(val)
+            if mac:
+                mac_by_llid[idx] = mac
 
-        # 3. Walk ONU status
+        # 5. Info table: LLID ifIndex → status (.10.1.1.26)
         status_rows = await snmp_walk(ip, community, EPON_ONU_STATUS_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
-        status_by_idx: dict[int, str] = {}
+        status_by_llid: dict[int, str] = {}
         for oid_str, val in status_rows:
             idx = int(oid_str.split(".")[-1])
-            status_by_idx[idx] = _EPON_SNMP_STATUS_MAP.get(str(val).strip(), "unknown")
+            status_by_llid[idx] = _EPON_SNMP_STATUS_MAP.get(str(val).strip(), "unknown")
 
-        # 4. Walk ONU name (description)
-        name_rows = await snmp_walk(ip, community, EPON_ONU_NAME_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
-        name_by_idx: dict[int, str] = {}
-        for oid_str, val in name_rows:
-            idx = int(oid_str.split(".")[-1])
-            name_text = val.strip()
-            if name_text and name_text != "N/A":
-                name_by_idx[idx] = name_text
-
-        # 5. Join: ifIndex → ifName → (pon_port, onu_id) → data
-        result: dict[tuple[str, int], dict] = {}
+        # 6. Build MAC → (pon_port, onu_id) from ifName
+        mac_to_loc: dict[str, tuple[str, int]] = {}
         for ifindex, ifname in ifnames.items():
-            low = ifname.lower()
-            if "epon" not in low or ":" not in ifname:
+            if "epon" not in ifname.lower() or ":" not in ifname:
                 continue
-            # Parse "EPON0/3:4" → pon_port="EPON0/3", onu_id=4
             parts = ifname.split(":")
             if len(parts) != 2:
                 continue
@@ -365,15 +393,34 @@ async def _snmp_epon_names(device: OLTDevice) -> dict[str, dict]:
                 onu_id = int(parts[1])
             except ValueError:
                 continue
-            entry: dict = {}
-            if ifindex in mac_by_idx:
-                entry["mac"] = mac_by_idx[ifindex]
-            if ifindex in status_by_idx:
-                entry["state"] = status_by_idx[ifindex]
-            if ifindex in name_by_idx:
-                entry["name"] = name_by_idx[ifindex]
-            if entry:
-                result[(pon_port, onu_id)] = entry
+            if ifindex in mac_by_llid:
+                mac_to_loc[mac_by_llid[ifindex]] = (pon_port, onu_id)
+
+        # 7. Build MAC → name from bind table (same suffix for .3 and .4)
+        mac_to_name: dict[str, str] = {}
+        for suffix, mac in bind_mac_by_suffix.items():
+            if suffix in name_by_suffix:
+                mac_to_name[mac] = name_by_suffix[suffix]
+
+        # 8. Build MAC → status from info table
+        mac_to_status: dict[str, str] = {}
+        for llid_idx, mac in mac_by_llid.items():
+            if llid_idx in status_by_llid:
+                mac_to_status[mac] = status_by_llid[llid_idx]
+
+        # 9. Assemble result
+        result: dict[tuple[str, int], dict] = {}
+        all_macs = set(mac_to_loc.keys()) | set(mac_to_name.keys())
+        for mac in all_macs:
+            if mac in mac_to_loc:
+                pon_port, onu_id = mac_to_loc[mac]
+                entry: dict = {"mac": mac}
+                if mac in mac_to_name:
+                    entry["name"] = mac_to_name[mac]
+                if mac in mac_to_status:
+                    entry["state"] = mac_to_status[mac]
+                if len(entry) > 1:  # has more than just mac
+                    result[(pon_port, onu_id)] = entry
 
         return result
     except DriverError:
