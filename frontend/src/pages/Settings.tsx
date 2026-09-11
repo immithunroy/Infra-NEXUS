@@ -12,17 +12,6 @@ export default function Settings() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  if (role !== "admin") {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <div className="text-center space-y-3">
-          <div className="text-red-500 text-lg font-semibold">Access Denied</div>
-          <div className="text-sm text-slate-500">Settings are restricted to administrators.</div>
-        </div>
-      </div>
-    );
-  }
-
   // Change Password state
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -45,6 +34,17 @@ export default function Settings() {
   const [timezoneOptions, setTimezoneOptions] = useState<string[]>([]);
   const [tzMsg, setTzMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingTz, setSavingTz] = useState(false);
+
+  if (role !== "admin") {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="text-center space-y-3">
+          <div className="text-red-500 text-lg font-semibold">Access Denied</div>
+          <div className="text-sm text-slate-500">Settings are restricted to administrators.</div>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     api.get<any[]>("/settings").then((list) => {

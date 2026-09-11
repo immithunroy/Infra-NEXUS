@@ -461,6 +461,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   const blinkingUsersRef = useRef<google.maps.Marker[]>([]);
   const polylinesRef = useRef<Map<number, google.maps.Polyline>>(new Map());
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -790,6 +791,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
       gestureHandling: "greedy",
     });
     mapRef.current = map;
+    setMapReady(true);
 
     map.addListener("click", (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
@@ -1115,7 +1117,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         markersRef.current.set(`user-${p.olt_id}-${p.onu_id}`, m);
       }
     }
-  }, [cables, tjBoxes, splitters, loops, cuts, filteredUsers, nocPopData, netLayers, drawCable.active, planner.phase, filterType, filterCore]);
+  }, [cables, tjBoxes, splitters, loops, cuts, filteredUsers, nocPopData, netLayers, drawCable.active, planner.phase, filterType, filterCore, mapReady]);
 
   // Blink effect for Google Maps markers (SVG animate doesn't work in data URIs)
   useEffect(() => {
