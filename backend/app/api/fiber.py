@@ -739,6 +739,9 @@ async def recover_cut(cut_id: int, user: User = Depends(require_write), db: Asyn
     cut.splice_tj_id = new_tj.id
     cut.notes = (cut.notes + "\n" if cut.notes else "") + f"Auto-recovered: {tj_unique_id} with {splices_created} splices. Cable split into {link_id_a} and {link_id_b}"
 
+    # 15. Delete the original cable (all segments, loops, splices already reassigned)
+    await db.delete(cable)
+
     await db.commit()
     await db.refresh(new_tj)
     await db.refresh(cable_a)
