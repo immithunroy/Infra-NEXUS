@@ -403,7 +403,23 @@ async def collect_telemetry(session: AsyncSession, olt_id: int) -> int:
         )
         onu = res.scalars().first()
         if onu is None:
-            continue
+            # ONU seen via SNMP but not yet in DB — discover it now.
+            # Parse pon_port (e.g. "EPON0/3:3") to extract onu_id.
+            _onu_id = 0
+            if ":" in pon_port:
+                try:
+                    _onu_id = int(pon_port.rsplit(":", 1)[1])
+                except (ValueError, IndexError):
+                    _onu_id = 0
+            onu = Onu(
+                olt_id=olt_id,
+                source=OnuSource.auto,
+                pon_port=pon_port,
+                onu_id=_onu_id,
+                state=OnuState.active,
+            )
+            session.add(onu)
+            await session.flush()
         session.add(
             OnuTelemetry(
                 onu_id=onu.id,

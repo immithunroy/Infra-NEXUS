@@ -412,6 +412,11 @@ class BdcomCliDriver(BaseDriver):
             lower = buf.lower()
             if "--more--" in lower or "press any key" in lower:
                 await self._sendline(" ")
+                for _marker in ("--more--", "press any key"):
+                    idx = lower.find(_marker)
+                    if idx >= 0:
+                        buf = buf[:idx]
+                        lower = lower[:idx]
                 continue
             if prompt and len(buf) > len(prompt) and buf.endswith(prompt):
                 return buf
