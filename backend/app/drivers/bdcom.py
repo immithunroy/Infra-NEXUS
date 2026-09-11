@@ -343,26 +343,30 @@ async def _snmp_epon_names(device: OLTDevice) -> dict[str, dict]:
             return {}
 
         # 2. Bind table: MAC index → MAC address (.11.1.1.3)
-        bind_mac_rows = await snmp_walk(ip, community, EPON_ONU_BIND_DIID_OID.replace(".1", ".3"), port, timeout=OPTICAL_SNMP_TIMEOUT)
-        # Actually walk .11.1.1.3 (bind MAC) not .11.1.1.1 (DIID)
+        #    and Name: same index → name (.11.1.1.4)
+        #    Both share the same base OID (1.3.6.1.4.1.3320.101.11.1.1)
+        #    with column .3=MAC, .4=name. Index is DIID.MAC_bytes.
         bind_mac_oid = "1.3.6.1.4.1.3320.101.11.1.1.3"
         bind_mac_rows = await snmp_walk(ip, community, bind_mac_oid, port, timeout=OPTICAL_SNMP_TIMEOUT)
-        bind_mac_by_suffix: dict[str, str] = {}  # oid_suffix → mac
+        name_rows = await snmp_walk(ip, community, EPON_ONU_NAME_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+
+        # Common base for both: strip column number (.3 or .4) from OID
+        _bind_base = "1.3.6.1.4.1.3320.101.11.1.1"
+        bind_mac_by_index: dict[str, str] = {}  # index_part → mac
         for oid_str, val in bind_mac_rows:
             mac = _bytes_to_mac(val)
             if mac:
-                suffix = oid_str[len(EPON_ONU_NAME_OID.rsplit(".", 1)[0]) + 1 :]
-                bind_mac_by_suffix[suffix] = mac
+                # OID = base + ".3." + index → strip base + ".3"
+                idx_part = oid_str[len(_bind_base) + 3 :]  # skip ".3."
+                bind_mac_by_index[idx_part] = mac
 
-        # 3. Bind table: suffix → name (.11.1.1.4)
-        name_rows = await snmp_walk(ip, community, EPON_ONU_NAME_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
-        name_by_suffix: dict[str, str] = {}
-        name_base = EPON_ONU_NAME_OID
+        name_by_index: dict[str, str] = {}  # index_part → name
         for oid_str, val in name_rows:
-            suffix = oid_str[len(name_base) + 1 :]
             text = val.strip()
             if text and text != "N/A":
-                name_by_suffix[suffix] = text
+                # OID = base + ".4." + index → strip base + ".4"
+                idx_part = oid_str[len(_bind_base) + 3 :]  # skip ".4"
+                name_by_index[idx_part] = text
 
         # 4. Info table: LLID ifIndex → MAC (.10.1.1.3)
         mac_rows = await snmp_walk(ip, community, EPON_ONU_MAC_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
@@ -396,11 +400,11 @@ async def _snmp_epon_names(device: OLTDevice) -> dict[str, dict]:
             if ifindex in mac_by_llid:
                 mac_to_loc[mac_by_llid[ifindex]] = (pon_port, onu_id)
 
-        # 7. Build MAC → name from bind table (same suffix for .3 and .4)
+        # 7. Build MAC → name from bind table (same index for .3 and .4)
         mac_to_name: dict[str, str] = {}
-        for suffix, mac in bind_mac_by_suffix.items():
-            if suffix in name_by_suffix:
-                mac_to_name[mac] = name_by_suffix[suffix]
+        for idx_part, mac in bind_mac_by_index.items():
+            if idx_part in name_by_index:
+                mac_to_name[mac] = name_by_index[idx_part]
 
         # 8. Build MAC → status from info table
         mac_to_status: dict[str, str] = {}
