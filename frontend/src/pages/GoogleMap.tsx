@@ -4,6 +4,7 @@ import { useJsApiLoader } from "@react-google-maps/api";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
 import TjDetailPanel from "../components/TjDetailPanel";
+import NocPopDetailPanel from "../components/NocPopDetailPanel";
 import { api } from "../api/client";
 import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, CutRecoveryResult, canWrite, canEditMap, canDeleteMap, canManageLayers, canApprove, canSubmit } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
@@ -421,6 +422,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   }, [dragTj]);
 
   const [selectedTj, setSelectedTj] = useState<TjBox | null>(null);
+  const [selectedNocPop, setSelectedNocPop] = useState<any | null>(null);
   const [selectedCable, setSelectedCable] = useState<Cable | null>(null);
   const [cableEdit, setCableEdit] = useState<{
     cableId: number;
@@ -961,12 +963,14 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         const m = new google.maps.Marker({ position: { lat: noc.lat, lng: noc.lng }, map, icon: { url: nocSvgUrl(), scaledSize: new google.maps.Size(28, 28) } });
         m.addListener("mouseover", () => { iw.setContent(nocTooltip(noc)); iw.open({ anchor: m, map }); });
         m.addListener("mouseout", () => iw.close());
+        m.addListener("click", () => { iw.close(); setSelectedNocPop({ ...noc, type: "noc" }); });
         markersRef.current.set(`noc-${noc.id}`, m);
       }
       for (const pop of nocPopData.pops) {
         const m = new google.maps.Marker({ position: { lat: pop.lat, lng: pop.lng }, map, icon: { url: popSvgUrl(), scaledSize: new google.maps.Size(24, 24) } });
         m.addListener("mouseover", () => { iw.setContent(popTooltip(pop)); iw.open({ anchor: m, map }); });
         m.addListener("mouseout", () => iw.close());
+        m.addListener("click", () => { iw.close(); setSelectedNocPop({ ...pop, type: "pop" }); });
         markersRef.current.set(`pop-${pop.id}`, m);
       }
     }
@@ -1746,6 +1750,15 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
               onEditSplitter={(sp) => { setEditingId(sp.id); setEditKind("splitter"); setSplitterForm(sp as any); setShowForm("splitter"); }}
               onDelete={() => { setSelectedTj(null); deleteItem("tj", selectedTj.id); }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* NOC/POP detail */}
+      {selectedNocPop && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedNocPop(null)}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <NocPopDetailPanel item={selectedNocPop} onClose={() => setSelectedNocPop(null)} onRefresh={load} writeOk={writeOk} />
           </div>
         </div>
       )}

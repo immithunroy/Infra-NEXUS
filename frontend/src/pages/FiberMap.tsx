@@ -6,6 +6,7 @@ import "leaflet-draw";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
 import TjDetailPanel from "../components/TjDetailPanel";
+import NocPopDetailPanel from "../components/NocPopDetailPanel";
 import { api } from "../api/client";
 import { Cable, TjBox, Splitter, FiberLoop, CableCut, Splice, TJ_PHOTO_TYPES, TJ_PHOTO_LABELS, MapPoint, MapPointResponse, CutRecoveryResult, canWrite } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
@@ -156,6 +157,7 @@ export default function FiberMap() {
   const [cuts, setCuts] = useState<CableCut[]>([]);
   const [splices, setSplices] = useState<Splice[]>([]);
   const [nocPopData, setNocPopData] = useState<{ nocs: any[]; pops: any[] }>({ nocs: [], pops: [] });
+  const [selectedNocPop, setSelectedNocPop] = useState<any | null>(null);
   const [error, setError] = useState("");
 
   const [filterType, setFilterType] = useState<string>("all");
@@ -1120,6 +1122,14 @@ export default function FiberMap() {
               onEditSplitter={(sp) => { setEditingId(sp.id); setEditKind("splitter"); setSplitterForm(sp as any); setShowForm("splitter"); }}
               onDelete={() => { setSelectedTj(null); deleteItem("tj", selectedTj.id); }}
             />
+          </div>
+        </div>
+      )}
+
+      {selectedNocPop && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedNocPop(null)}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <NocPopDetailPanel item={selectedNocPop} onClose={() => setSelectedNocPop(null)} onRefresh={load} writeOk={writeOk} />
           </div>
         </div>
       )}
@@ -2222,6 +2232,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       const deviceList = (noc.devices || []).map((d: any) => `<div style="font-size:11px">${d.name} <span style="color:${d.status === "reachable" ? "#22c55e" : "#ef4444"}">${d.status}</span></div>`).join("");
       L.marker([noc.lat, noc.lng], { icon })
         .bindTooltip(`<b>${noc.name}</b><br>${noc.address || ""}<br>${noc.device_count || 0} device(s)<br>${deviceList}`, { sticky: true })
+        .on("click", () => setSelectedNocPop({ ...noc, type: "noc" }))
         .addTo(layer);
     }
 
@@ -2250,6 +2261,7 @@ function FiberMapView({ cables, tjBoxes, splitters, loops, cuts, nocPopData, cen
       const deviceList = (pop.devices || []).map((d: any) => `<div style="font-size:11px">${d.name} <span style="color:${d.status === "reachable" ? "#22c55e" : "#ef4444"}">${d.status}</span></div>`).join("");
       L.marker([pop.lat, pop.lng], { icon })
         .bindTooltip(`<b>${pop.name}</b><br>${pop.address || ""}<br>${pop.device_count || 0} device(s)<br>${deviceList}`, { sticky: true })
+        .on("click", () => setSelectedNocPop({ ...pop, type: "pop" }))
         .addTo(layer);
     }
 

@@ -449,6 +449,8 @@ class TjBox(Base):
     lng: Mapped[float] = mapped_column()
     address: Mapped[str] = mapped_column(String(256), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    noc_id: Mapped[int | None] = mapped_column(ForeignKey("nocs.id", ondelete="SET NULL"), nullable=True, index=True)
+    pop_id: Mapped[int | None] = mapped_column(ForeignKey("pops.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

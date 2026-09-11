@@ -157,12 +157,32 @@ export function nocTooltip(noc: any): string {
   const deviceList = (noc.devices || []).map((d: any) =>
     `<div style="font-size:11px">${d.name} <span style="color:${d.status === "reachable" ? "#16a34a" : "#ef4444"};font-weight:600">${d.status}</span></div>`
   ).join("");
-  return tooltipWrap(`${noc.address || ""}<br>${noc.device_count || 0} device(s)<br>${deviceList}`, `${noc.name} — NOC`);
+  const tjList = (noc.tj_boxes || []).map((t: any) =>
+    `<div style="font-size:11px;font-weight:500">${t.unique_id} — ${t.name || t.box_type}</div>`
+  ).join("");
+  const parts = [];
+  if (noc.address) parts.push(noc.address);
+  if (noc.device_count) parts.push(`${noc.device_count} OLT(s)`);
+  if (noc.tj_count) parts.push(`${noc.tj_count} TJ Box(es)`);
+  if (deviceList) parts.push(deviceList);
+  if (tjList) parts.push(tjList);
+  parts.push(`<div style="font-size:9px;color:#94a3b8;margin-top:4px">Click for details</div>`);
+  return tooltipWrap(parts.join("<br>"), `${noc.name} — NOC`);
 }
 
 export function popTooltip(pop: any): string {
   const deviceList = (pop.devices || []).map((d: any) =>
     `<div style="font-size:11px">${d.name} <span style="color:${d.status === "reachable" ? "#16a34a" : "#ef4444"};font-weight:600">${d.status}</span></div>`
   ).join("");
-  return tooltipWrap(`${pop.address || ""}<br>${pop.device_count || 0} device(s)<br>${deviceList}`, `${pop.name} — POP`);
+  const tjList = (pop.tj_boxes || []).map((t: any) =>
+    `<div style="font-size:11px;font-weight:500">${t.unique_id} — ${t.name || t.box_type}</div>`
+  ).join("");
+  const parts = [];
+  if (pop.address) parts.push(pop.address);
+  if (pop.device_count) parts.push(`${pop.device_count} OLT(s)`);
+  if (pop.tj_count) parts.push(`${pop.tj_count} TJ Box(es)`);
+  if (deviceList) parts.push(deviceList);
+  if (tjList) parts.push(tjList);
+  parts.push(`<div style="font-size:9px;color:#94a3b8;margin-top:4px">Click for details</div>`);
+  return tooltipWrap(parts.join("<br>"), `${pop.name} — POP`);
 }

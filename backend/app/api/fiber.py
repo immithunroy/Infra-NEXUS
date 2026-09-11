@@ -1223,27 +1223,34 @@ async def get_noc_pop_map(db: AsyncSession = Depends(get_db)):
     nocs = (await db.execute(select(Noc))).scalars().all()
     pops = (await db.execute(select(Pop))).scalars().all()
     olts = (await db.execute(select(OLTDevice))).scalars().all()
+    tjs = (await db.execute(select(TjBox))).scalars().all()
 
     noc_items = []
     for n in nocs:
         devices = [o for o in olts if o.noc_id == n.id]
+        noc_tjs = [t for t in tjs if t.noc_id == n.id]
         noc_items.append({
             "id": n.id, "name": n.name, "type": "noc",
             "lat": n.gps_lat, "lng": n.gps_lng, "address": n.address,
             "contact_name": n.contact_name, "contact_phone": n.contact_phone,
             "device_count": len(devices),
+            "tj_count": len(noc_tjs),
             "devices": [{"id": d.id, "name": d.name, "ip": d.ip, "status": d.status, "pon_type": d.pon_type} for d in devices],
+            "tj_boxes": [{"id": t.id, "unique_id": t.unique_id, "name": t.name, "box_type": t.box_type, "tj_port": t.tj_port} for t in noc_tjs],
         })
 
     pop_items = []
     for p in pops:
         devices = [o for o in olts if o.pop_id == p.id]
+        pop_tjs = [t for t in tjs if t.pop_id == p.id]
         pop_items.append({
             "id": p.id, "name": p.name, "type": "pop",
             "lat": p.gps_lat, "lng": p.gps_lng, "address": p.address,
             "contact_name": p.contact_name, "contact_phone": p.contact_phone,
             "device_count": len(devices),
+            "tj_count": len(pop_tjs),
             "devices": [{"id": d.id, "name": d.name, "ip": d.ip, "status": d.status, "pon_type": d.pon_type} for d in devices],
+            "tj_boxes": [{"id": t.id, "unique_id": t.unique_id, "name": t.name, "box_type": t.box_type, "tj_port": t.tj_port} for t in pop_tjs],
         })
 
     return {"nocs": noc_items, "pops": pop_items}

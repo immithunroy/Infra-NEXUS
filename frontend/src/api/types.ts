@@ -907,6 +907,8 @@ export interface TjBox {
   lng: number;
   address: string;
   notes: string;
+  noc_id: number | null;
+  pop_id: number | null;
 }
 
 export interface Splitter {
@@ -1138,5 +1140,54 @@ export type SubscriberPhotoType = (typeof SUBSCRIBER_PHOTO_TYPES)[number];
 export const SUBSCRIBER_PHOTO_LABELS: Record<SubscriberPhotoType, string> = {
   overall: "Installation View",
   equipment: "ONU / Equipment",
+  identification: "Identification",
+};
+
+export interface NocItem {
+  id: number;
+  name: string;
+  address: string;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  contact_name: string;
+  contact_phone: string;
+  notes: string;
+  device_count: number;
+  tj_count: number;
+  devices: { id: number; name: string; ip: string; status: string; pon_type: string }[];
+  tj_boxes: { id: number; unique_id: string; name: string; box_type: string; tj_port: number; lat: number; lng: number }[];
+}
+
+export interface PopItem {
+  id: number;
+  name: string;
+  address: string;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  contact_name: string;
+  contact_phone: string;
+  notes: string;
+  device_count: number;
+  tj_count: number;
+  devices: { id: number; name: string; ip: string; status: string; pon_type: string }[];
+  tj_boxes: { id: number; unique_id: string; name: string; box_type: string; tj_port: number; lat: number; lng: number }[];
+}
+
+export const NOC_PHOTO_TYPES = ["overall", "equipment_rack", "patch_panel", "identification"] as const;
+export type NocPhotoType = (typeof NOC_PHOTO_TYPES)[number];
+
+export const NOC_PHOTO_LABELS: Record<NocPhotoType, string> = {
+  overall: "Overall View",
+  equipment_rack: "Equipment Rack",
+  patch_panel: "Patch Panel",
+  identification: "Identification",
+};
+
+export const POP_PHOTO_TYPES = ["overall", "equipment", "identification"] as const;
+export type PopPhotoType = (typeof POP_PHOTO_TYPES)[number];
+
+export const POP_PHOTO_LABELS: Record<PopPhotoType, string> = {
+  overall: "Overall View",
+  equipment: "Equipment",
   identification: "Identification",
 };

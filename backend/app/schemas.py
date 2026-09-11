@@ -1167,6 +1167,8 @@ class TjBoxBase(BaseModel):
     lng: float
     address: str = ""
     notes: str = ""
+    noc_id: int | None = None
+    pop_id: int | None = None
 
     @validator("name", pre=True)
     def upper_str(cls, v):
@@ -1188,6 +1190,8 @@ class TjBoxUpdate(BaseModel):
     lng: float | None = None
     address: str | None = None
     notes: str | None = None
+    noc_id: int | None = None
+    pop_id: int | None = None
 
     @validator("name", pre=True)
     def upper_str(cls, v):
