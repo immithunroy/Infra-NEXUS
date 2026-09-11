@@ -889,3 +889,12 @@ class Setting(Base):
     key: Mapped[str] = mapped_column(String(128), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class SchedulerJobState(Base):
+    __tablename__ = "scheduler_job_state"
+
+    job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    error: Mapped[str] = mapped_column(Text, default="")

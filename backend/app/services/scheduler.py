@@ -36,6 +36,66 @@ def _track_job(job_id: str) -> None:
 def _finish_job(job_id: str, success: bool, error: str = "") -> None:
     """Mark a job as finished."""
     _job_status[job_id] = {"last_run": utcnow().isoformat(), "status": "success" if success else "failed", "error": error}
+    _persist_job_state(job_id)
+
+
+def _persist_job_state(job_id: str) -> None:
+    """Persist a single job's state to the database (fire-and-forget)."""
+    import asyncio
+    state = _job_status.get(job_id)
+    if not state:
+        return
+
+    async def _save():
+        from ..database import SessionLocal
+        from ..models import SchedulerJobState
+        try:
+            async with SessionLocal() as session:
+                row = await session.get(SchedulerJobState, job_id)
+                if row is None:
+                    row = SchedulerJobState(job_id=job_id)
+                    session.add(row)
+                row.status = state["status"]
+                row.error = state.get("error", "")
+                if state.get("last_run"):
+                    from ..utils.time import utcnow as _u
+                    row.last_run = _u()
+                await session.commit()
+        except Exception:
+            pass
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_save())
+    except RuntimeError:
+        pass
+
+
+def _load_job_states() -> None:
+    """Load persisted job states from DB into memory on startup."""
+    import asyncio
+
+    async def _load():
+        from ..database import SessionLocal
+        from ..models import SchedulerJobState
+        try:
+            async with SessionLocal() as session:
+                from sqlalchemy import select
+                rows = (await session.execute(select(SchedulerJobState))).scalars().all()
+                for row in rows:
+                    _job_status[row.job_id] = {
+                        "last_run": row.last_run.isoformat() if row.last_run else None,
+                        "status": row.status,
+                        "error": row.error or "",
+                    }
+        except Exception:
+            pass
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_load())
+    except RuntimeError:
+        pass
 
 
 def get_scheduler_status() -> list[dict[str, Any]]:
@@ -241,10 +301,13 @@ async def _write_all_olts() -> None:
     _track_job("olt_write_all")
 
     from ..drivers.bdcom import BdcomCliDriver
-    from ..models import OLTDevice, OltWriteLog
 
     try:
         async with SessionLocal() as session:
+            from sqlalchemy import select
+
+            from ..models import OLTDevice, OltWriteLog
+
             devices = (await session.execute(select(OLTDevice).where(OLTDevice.enabled.is_(True)))).scalars().all()
         all_ok = True
         for device in devices:
@@ -462,6 +525,7 @@ def start_scheduler() -> AsyncIOScheduler:
         settings.telemetry_interval,
         settings.acs_poll_interval,
     )
+    _load_job_states()
     return scheduler
 
 
