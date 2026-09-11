@@ -3,6 +3,7 @@ import { useTheme } from "../theme";
 import { api, downloadFile } from "../api/client";
 import { useUserRole } from "../lib/role";
 import ActionResultBanner from "../components/ActionResultBanner";
+import { setTimezone, fmtTimeInZone, getTimezone } from "../lib/time";
 
 export default function Settings() {
   const { theme, toggle } = useTheme();
@@ -39,6 +40,12 @@ export default function Settings() {
   const [keyMsg, setKeyMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showKey, setShowKey] = useState(false);
 
+  // Timezone state
+  const [timezone, setTimezoneVal] = useState("Asia/Dhaka");
+  const [timezoneOptions, setTimezoneOptions] = useState<string[]>([]);
+  const [tzMsg, setTzMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [savingTz, setSavingTz] = useState(false);
+
   useEffect(() => {
     api.get<any[]>("/settings").then((list) => {
       const found = list.find((s) => s.key === "google_maps_api_key");
@@ -46,6 +53,11 @@ export default function Settings() {
         setGmapsKey(found.value);
         setGmapsOrig(found.value);
       }
+      const tzFound = list.find((s) => s.key === "timezone");
+      if (tzFound) setTimezoneVal(tzFound.value);
+    }).catch(() => {});
+    api.get<{ timezones: string[]; default: string }>("/settings/timezone/options").then((data) => {
+      setTimezoneOptions(data.timezones || []);
     }).catch(() => {});
   }, []);
 
@@ -159,6 +171,57 @@ export default function Settings() {
           <button onClick={toggle} className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" style={{ backgroundColor: theme === "dark" ? "#3b82f6" : "#cbd5e1" }}>
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${theme === "dark" ? "translate-x-6" : "translate-x-1"}`} />
           </button>
+        </div>
+      </section>
+
+      {/* Timezone */}
+      <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Timezone</h2>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-slate-700 dark:text-slate-300">Application Timezone</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">All timestamps are displayed in this timezone</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={timezone}
+                onChange={(e) => setTimezoneVal(e.target.value)}
+                className="text-xs border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+              >
+                {timezoneOptions.map((tz) => (
+                  <option key={tz} value={tz}>{tz}</option>
+                ))}
+              </select>
+              <button
+                className="btn-primary text-xs py-1 px-2"
+                onClick={async () => {
+                  setSavingTz(true);
+                  setTzMsg(null);
+                  try {
+                    await api.put("/settings/timezone", { value: timezone });
+                    setTimezone(timezone);
+                    setTzMsg({ ok: true, text: `Timezone changed to ${timezone}` });
+                  } catch (e: any) {
+                    setTzMsg({ ok: false, text: e?.response?.data?.detail || "Failed to save" });
+                  } finally {
+                    setSavingTz(false);
+                  }
+                }}
+                disabled={savingTz}
+              >
+                {savingTz ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+          {tzMsg && (
+            <div className={`text-xs px-3 py-2 rounded ${tzMsg.ok ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"}`}>
+              {tzMsg.text}
+            </div>
+          )}
+          <div className="text-[11px] text-slate-400 dark:text-slate-500">
+            Current time in <strong>{timezone}</strong>: {fmtTimeInZone(new Date(), timezone)}
+          </div>
         </div>
       </section>
 

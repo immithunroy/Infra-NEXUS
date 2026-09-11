@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, useMemo, useCallback } from "react";
 import { api } from "../api/client";
 import { BgpSession, BgpPrefixSnapshot, MikrotikDevice } from "../api/types";
+import { fmtTimeShort } from "../lib/time";
 
 const TIME_RANGES = [
   { label: "1D", hours: 24 },
@@ -131,12 +132,7 @@ function SessionRow({ session, snapshots, timeRange, onToggleUpstream }: {
     return {
       recorded: sorted.map(([, v]) => v.recorded),
       advertised: sorted.map(([, v]) => v.advertised),
-      labels: sorted.map(([k]) => {
-        const d = new Date(k);
-        if (timeRange <= 24) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        if (timeRange <= 168) return d.toLocaleDateString([], { weekday: "short", hour: "2-digit" });
-        return d.toLocaleDateString([], { month: "short", day: "numeric" });
-      }),
+      labels: sorted.map(([k]) => fmtTimeShort(k)),
     };
   }, [snapshots, timeRange]);
 
@@ -284,12 +280,7 @@ export default function Routing() {
     return {
       recorded: sorted.map(([, v]) => v.recorded),
       advertised: sorted.map(([, v]) => v.advertised),
-      labels: sorted.map(([k]) => {
-        const d = new Date(k);
-        if (timeRange <= 24) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        if (timeRange <= 168) return d.toLocaleDateString([], { weekday: "short", hour: "2-digit" });
-        return d.toLocaleDateString([], { month: "short", day: "numeric" });
-      }),
+      labels: sorted.map(([k]) => fmtTimeShort(k)),
     };
   }, [allSnapshots, timeRange]);
 

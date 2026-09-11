@@ -13,12 +13,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from ..config import get_settings
 from ..database import SessionLocal
-from ..utils.time import utcnow
+from ..utils.time import utcnow, get_app_tz, localize
 from . import collector
 from .mac_binding import run_bindings
 from .mac_vendor import sync_all_vendors
-
-TZ_BD = "Asia/Dhaka"
 
 logger = logging.getLogger("olt_commander.scheduler")
 
@@ -358,9 +356,12 @@ async def _write_all_olts_retry() -> None:
     from ..models import OltWriteLog
     from datetime import timedelta
 
-    # Check for failures since today's midnight BDT = 18:00 UTC yesterday
-    now_utc = utcnow()
-    today_midnight_bdt_utc = now_utc.replace(hour=18, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    # Check for failures since today's midnight in the app timezone
+    tz = get_app_tz()
+    local_now = localize(utcnow())
+    today_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    from datetime import timezone as _tz
+    today_midnight_utc = today_midnight.astimezone(_tz.utc).replace(tzinfo=None)
 
     async with SessionLocal() as session:
         from sqlalchemy import func, select as _sel
@@ -369,7 +370,7 @@ async def _write_all_olts_retry() -> None:
             await session.execute(
                 _sel(func.count(OltWriteLog.id)).where(
                     OltWriteLog.status == "failed",
-                    OltWriteLog.started_at >= today_midnight_bdt_utc,
+                    OltWriteLog.started_at >= today_midnight_utc,
                 )
             )
         ).scalar() or 0
@@ -419,7 +420,8 @@ async def start_scheduler() -> AsyncIOScheduler:
         return _scheduler
 
     settings = get_settings()
-    scheduler = AsyncIOScheduler(timezone=TZ_BD)
+    app_tz = get_app_tz()
+    scheduler = AsyncIOScheduler(timezone=app_tz)
     if settings.scan_olt_interval > 0:
         scheduler.add_job(
             _scan_all_olts,
@@ -509,8 +511,8 @@ async def start_scheduler() -> AsyncIOScheduler:
         )
 
     logger.info(
-        "Scheduler started (tz=%s, olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@10:00 BDT, olt_write_all=daily@03:00 BDT)",
-        TZ_BD,
+        "Scheduler started (tz=%s, olt=%ss, mikrotik=%ss, bind=%ss, telemetry=%ss, acs_poll=%ss, mac_vendor_sync=daily@10:00, olt_write_all=daily@03:00)",
+        app_tz.key if hasattr(app_tz, "key") else str(app_tz),
         settings.scan_olt_interval,
         settings.scan_mikrotik_interval,
         settings.bind_interval,

@@ -81,12 +81,12 @@ def _format_timestamp(dt: datetime | str | None) -> str:
             dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
         except (ValueError, TypeError):
             return dt
-    # Convert to local timezone (UTC+6 for Bangladesh)
-    from datetime import timezone, timedelta
-    local_tz = timezone(timedelta(hours=6))
+    # Convert to app timezone
+    from ..utils.time import get_app_tz
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    dt = dt.astimezone(local_tz)
+        from datetime import timezone as _tz
+        dt = dt.replace(tzinfo=_tz.utc)
+    dt = dt.astimezone(get_app_tz())
     return dt.strftime("%d %b %Y, %I:%M %p")
 
 

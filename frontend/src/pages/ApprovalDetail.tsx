@@ -7,6 +7,7 @@ import {
   STATUS_LABELS, PRIORITY_LABELS, canApprove, canSubmit,
 } from "../api/types";
 import ActionResultBanner from "../components/ActionResultBanner";
+import { fmtTimeShort } from "../lib/time";
 
 const statusColor: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
@@ -15,10 +16,6 @@ const statusColor: Record<string, string> = {
   returned_for_correction: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
   resubmitted: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
 };
-
-function fmtDate(s: string) {
-  return new Date(s).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 // Fields to display per entity type (order matters)
 const ENTITY_FIELDS: Record<string, { key: string; label: string; format?: (v: unknown) => string }[]> = {
@@ -322,9 +319,9 @@ export default function ApprovalDetail() {
       {/* Meta */}
       <div className="flex flex-wrap gap-4 text-sm text-slate-600 dark:text-slate-300">
         <span>Submitted by: <strong>{item.submitted_by_name || `User #${item.requested_by}`}</strong></span>
-        <span>Date: {fmtDate(item.created_at)}</span>
-        {item.reviewed_at && <span>Reviewed: {fmtDate(item.reviewed_at)}</span>}
-        {item.resubmitted_at && <span>Resubmitted: {fmtDate(item.resubmitted_at)}</span>}
+        <span>Date: {fmtTimeShort(item.created_at)}</span>
+        {item.reviewed_at && <span>Reviewed: {fmtTimeShort(item.reviewed_at)}</span>}
+        {item.resubmitted_at && <span>Resubmitted: {fmtTimeShort(item.resubmitted_at)}</span>}
       </div>
 
       {/* Correction note (if returned) */}

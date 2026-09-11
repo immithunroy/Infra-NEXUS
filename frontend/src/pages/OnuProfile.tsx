@@ -11,6 +11,7 @@ import ActionResultBanner from "../components/ActionResultBanner";
 import WarningBanner from "../components/WarningBanner";
 import SpeedToggle from "../components/SpeedToggle";
 import CapsuleToggle from "../components/CapsuleToggle";
+import { fmtTime } from "../lib/time";
 
 export default function OnuProfile() {
   const { id } = useParams<{ id: string }>();
@@ -245,7 +246,7 @@ export default function OnuProfile() {
           <InfoBox label="Source" value={onu.source} />
           <InfoBox label="Subscriber" value={<SubscriberLink subscriber={onu.subscriber} />} />
           <InfoBox label="Mikrotik IP" value={onu.mikrotik_ip || "—"} />
-          <InfoBox label="Last Seen" value={onu.last_seen ? new Date(onu.last_seen).toLocaleString() : "—"} />
+          <InfoBox label="Last Seen" value={onu.last_seen ? fmtTime(onu.last_seen) : "—"} />
           <InfoBox label="State" value={onu.state} />
         </div>
       </div>

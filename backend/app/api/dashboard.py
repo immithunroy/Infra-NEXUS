@@ -10,7 +10,7 @@ from ..models import Binding, Cable, CableSegment, MacEntry, MikrotikDevice, OLT
 from ..schemas import BrandBucket, DashboardSummary, MassDownPort, NetworkSummary, OltUsage, OltWriteLogOut, PortUsage, ScanLogOut, SignalBucket, WeakOnu
 from ..security import get_current_user
 from ..services.mac_vendor import vendor_map
-from ..utils.time import utcnow
+from ..utils.time import utcnow, localize
 
 router = APIRouter(prefix="/api", tags=["dashboard"], dependencies=[Depends(get_current_user)])
 
@@ -392,7 +392,7 @@ async def daily_map_stats(db: AsyncSession = Depends(get_db)):
     from datetime import timedelta
     from ..models import Cable, TjBox, Splitter
 
-    today_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = localize(utcnow()).replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
 
     # Cables added today (count + km)

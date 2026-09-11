@@ -9,9 +9,10 @@ from .api import acs, auth, bindings, dashboard, devices, downs, fiber, fiber_ap
 from .api import settings as settings_api
 from .config import get_settings
 from .database import SessionLocal, init_db
-from .models import User
+from .models import Setting, User
 from .security import hash_password
 from .services.scheduler import start_scheduler, stop_scheduler, get_scheduler_status
+from .utils.time import set_app_tz
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("olt_commander")
@@ -33,10 +34,29 @@ async def _seed_admin() -> None:
             logger.info("Created default admin user '%s'", settings.admin_username)
 
 
+async def _load_app_timezone() -> None:
+    """Load the configured timezone from DB and cache it."""
+    try:
+        async with SessionLocal() as session:
+            result = await session.execute(
+                select(Setting.value).where(Setting.key == "timezone")
+            )
+            tz = result.scalar_one_or_none()
+            if tz and tz.strip():
+                set_app_tz(tz.strip())
+                logger.info("App timezone loaded: %s", tz.strip())
+            else:
+                set_app_tz("Asia/Dhaka")
+                logger.info("App timezone default: Asia/Dhaka")
+    except Exception:
+        set_app_tz("Asia/Dhaka")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     await _seed_admin()
+    await _load_app_timezone()
     scheduler = await start_scheduler()
     yield
     stop_scheduler()

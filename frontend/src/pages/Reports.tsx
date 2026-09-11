@@ -13,6 +13,7 @@ import {
   ReportSummary,
 } from "../api/types";
 import StatusBadge from "../components/StatusBadge";
+import { fmtTimeShort } from "../lib/time";
 
 function pct(used: number, total: number) {
   return total > 0 ? Math.round((used / total) * 100) : 0;
@@ -24,8 +25,7 @@ const reasonBadge: Record<string, string> = {
   unknown: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
 };
 
-const fmtDt = (v: string | null | undefined) =>
-  v ? new Date(v).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const fmtDt = (v: string | null | undefined) => v ? fmtTimeShort(v) : "—";
 
 const fmtH = (s: number) => `${(s / 3600).toFixed(2)} h`;
 const fmtMin = (s: number) => `${(s / 60).toFixed(1)} min`;

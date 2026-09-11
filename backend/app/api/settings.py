@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models import Setting
 from ..security import get_current_user, require_admin
+from ..utils.time import set_app_tz
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -56,4 +57,23 @@ async def upsert_setting(
     else:
         s.value = body.value
     await db.commit()
+    if key == "timezone":
+        set_app_tz(body.value)
     return SettingOut(key=s.key, value=s.value)
+
+
+TIMEZONES = [
+    "Asia/Dhaka", "Asia/Kolkata", "Asia/Karachi", "Asia/Kathmandu",
+    "Asia/Colombo", "Asia/Bangkok", "Asia/Ho_Chi_Minh", "Asia/Jakarta",
+    "Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Manila",
+    "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Hong_Kong",
+    "Asia/Taipei", "Asia/Dubai", "Asia/Riyadh", "Europe/London",
+    "Europe/Paris", "Europe/Berlin", "Europe/Moscow",
+    "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+    "Pacific/Auckland", "Australia/Sydney", "UTC",
+]
+
+
+@router.get("/timezone/options")
+async def get_timezone_options(_user=Depends(get_current_user)):
+    return {"timezones": TIMEZONES, "default": "Asia/Dhaka"}

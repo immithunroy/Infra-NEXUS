@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { OltWriteLog } from "../api/types";
 import { Pagination, usePagination } from "../components/Pagination";
-import { fmtTime } from "../lib/time";
+import { fmtTime, fmtTimeShort } from "../lib/time";
 
 interface SchedulerJob {
   id: string;
@@ -28,13 +28,6 @@ const statusIcons: Record<string, string> = {
   running: "\u27F3",
   pending: "\u2014",
 };
-
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return "Never";
-  const d = new Date(iso);
-  const mon = d.toLocaleString("en-US", { month: "short" });
-  return `${mon} ${d.getDate()}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-}
 
 function durationSec(start: string, end: string | null): string {
   if (!end) return "\u2014";
@@ -94,7 +87,7 @@ export default function ScheduleJobs() {
                     "Every 5 min"
                   )}
                 </td>
-                <td className="td whitespace-nowrap text-xs">{fmtDateTime(job.last_run)}</td>
+                <td className="td whitespace-nowrap text-xs">{fmtTimeShort(job.last_run)}</td>
                 <td className="td">
                   <span className={`badge ${statusStyles[job.status] || statusStyles.pending}`}>
                     {statusIcons[job.status] || "\u2014"}{" "}
@@ -105,7 +98,7 @@ export default function ScheduleJobs() {
                   {!job.enabled ? (
                     <span className="text-slate-400">Paused</span>
                   ) : job.next_run ? (
-                    fmtDateTime(job.next_run)
+                    fmtTimeShort(job.next_run)
                   ) : (
                     "\u2014"
                   )}

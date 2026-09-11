@@ -6,6 +6,7 @@ import {
   ApprovalItem, PendingCount, ENTITY_TYPE_LABELS, ACTION_LABELS,
   STATUS_LABELS, PRIORITY_LABELS, canApprove,
 } from "../api/types";
+import { fmtTimeShort } from "../lib/time";
 
 const statusColor: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
@@ -35,14 +36,6 @@ const priorityColor: Record<string, string> = {
   high: "text-amber-600 dark:text-amber-400",
   urgent: "text-red-600 dark:text-red-400",
 };
-
-function fmtDate(s: string) {
-  return new Date(s).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function fmtTime(s: string) {
-  return new Date(s).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-}
 
 export default function NocApprovals() {
   const navigate = useNavigate();
@@ -185,8 +178,7 @@ export default function NocApprovals() {
                   {item.submitted_by_name || `User #${item.requested_by}`}
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-500">
-                  <div>{fmtDate(item.created_at)}</div>
-                  <div>{fmtTime(item.created_at)}</div>
+                  {fmtTimeShort(item.created_at)}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusColor[item.status] || ""}`}>

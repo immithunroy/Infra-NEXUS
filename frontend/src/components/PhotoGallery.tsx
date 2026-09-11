@@ -5,6 +5,7 @@ import type {
   FieldPhotoItem,
   FieldPhotoUploadResponse,
 } from "../api/types";
+import { fmtTime } from "../lib/time";
 
 interface Props {
   entityType: "tj" | "subscriber";
@@ -214,7 +215,7 @@ export default function PhotoGallery({ entityType, entityId, photoTypes, photoLa
               <div className="flex gap-3">
                 {viewerPhoto.captured_at && (
                   <span className="text-slate-400">
-                    {new Date(viewerPhoto.captured_at).toLocaleString()}
+                    {fmtTime(viewerPhoto.captured_at)}
                   </span>
                 )}
                 {viewerPhoto.latitude != null && (

@@ -373,5 +373,5 @@ async def _resolve_outages(session, s: _Session, snapshot, now) -> None:
     for outage in rows:
         if down_by_port.get(outage.pon_port, 0) < threshold:
             outage.resolved = True
-            outage.resolved_at = now.replace(tzinfo=None)
+            outage.resolved_at = now
             logger.info("OUTAGE RESOLVED %s %s", s.olt_name, outage.pon_port)

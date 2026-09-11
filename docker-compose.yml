@@ -7,6 +7,7 @@ services:
       POSTGRES_USER: olt
       POSTGRES_PASSWORD: oltpassword
       POSTGRES_DB: infra_nexus
+      TZ: UTC
     volumes:
       - nexus_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,6 +33,7 @@ services:
       BIND_INTERVAL: "300"
       TELEMETRY_INTERVAL: "300"
       MAC_VENDOR_SYNC_INTERVAL: "86400"
+      TZ: UTC
     volumes:
       - nexus_uploads:/app/uploads
     depends_on:

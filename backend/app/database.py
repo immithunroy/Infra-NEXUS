@@ -69,6 +69,8 @@ async def init_db() -> None:
         """))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_tj_id_reservations_status ON tj_id_reservations (status)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_tj_id_reservations_expires ON tj_id_reservations (expires_at)"))
+        # Default timezone setting
+        await conn.execute(text("INSERT INTO settings (key, value) VALUES ('timezone', 'Asia/Dhaka') ON CONFLICT (key) DO NOTHING"))
         # Subscribers table (synced from MikroTik PPPoE secrets)
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS subscribers (
