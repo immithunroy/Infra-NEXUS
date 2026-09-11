@@ -423,12 +423,14 @@ async def start_scheduler() -> AsyncIOScheduler:
     app_tz = get_app_tz()
     scheduler = AsyncIOScheduler(timezone=app_tz)
     if settings.scan_olt_interval > 0:
+        # Offset OLT scan by 2 minutes so telemetry (optical metrics) runs first.
         scheduler.add_job(
             _scan_all_olts,
             IntervalTrigger(seconds=settings.scan_olt_interval),
             id="scan_olts",
             replace_existing=True,
             misfire_grace_time=30,
+            next_run_time=utcnow() + timedelta(seconds=120),
         )
     if settings.scan_mikrotik_interval > 0:
         scheduler.add_job(
@@ -447,15 +449,14 @@ async def start_scheduler() -> AsyncIOScheduler:
             misfire_grace_time=30,
         )
     if settings.telemetry_interval > 0:
-        # Offset the first run so SNMP telemetry doesn't collide with the
-        # startup burst of OLT/Mikrotik scans (sporadic SNMP timeouts).
+        # Telemetry is the primary source of optical metrics (rx/tx power,
+        # bandwidth).  Run it first each cycle; scan_olts follows ~2 min later.
         scheduler.add_job(
             _collect_all_telemetry,
             IntervalTrigger(seconds=settings.telemetry_interval),
             id="telemetry",
             replace_existing=True,
             misfire_grace_time=30,
-            next_run_time=utcnow() + timedelta(seconds=90),
         )
 
     if settings.acs_poll_interval > 0:

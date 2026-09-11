@@ -853,7 +853,7 @@ class BdcomCliDriver(BaseDriver):
             return await _snmp_optical_gpon(self.device)
         return await _snmp_optical_epon(self.device)
 
-    async def get_onus(self) -> list[OnuInfo]:
+    async def get_onus(self, collect_optics: bool = True) -> list[OnuInfo]:
         try:
             await self.connect()
         except DriverError:
@@ -865,20 +865,23 @@ class BdcomCliDriver(BaseDriver):
                 output = await self._exec("show gpon onu-information", timeout=120)
             onus = self._parse_onu_info(output)
 
-            pon_bases = sorted({k[0] for k in onus})
-            for pon in pon_bases:
-                try:
-                    if pon.startswith("GPON"):
-                        optical = await self._exec(f"show gpon onu-optical-transceiver-diagnosis interface gpON {pon.replace('GPON', '')}", timeout=12)
-                    else:
-                        optical = await self._exec(f"show epon optical-transceiver-diagnosis interface epON {pon.replace('EPON', '')}", timeout=12)
-                    for (base, onu_id), (rx, tx) in self._parse_optical(optical).items():
-                        key = (base, onu_id)
-                        if key in onus:
-                            onus[key].rx = rx
-                            onus[key].tx = tx
-                except (TelnetError, DriverError):
-                    continue
+            # Optical CLI collection (per-PON-port) — skipped when telemetry
+            # is the primary source of rx/tx power metrics.
+            if collect_optics:
+                pon_bases = sorted({k[0] for k in onus})
+                for pon in pon_bases:
+                    try:
+                        if pon.startswith("GPON"):
+                            optical = await self._exec(f"show gpon onu-optical-transceiver-diagnosis interface gpON {pon.replace('GPON', '')}", timeout=12)
+                        else:
+                            optical = await self._exec(f"show epon optical-transceiver-diagnosis interface epON {pon.replace('EPON', '')}", timeout=12)
+                        for (base, onu_id), (rx, tx) in self._parse_optical(optical).items():
+                            key = (base, onu_id)
+                            if key in onus:
+                                onus[key].rx = rx
+                                onus[key].tx = tx
+                    except (TelnetError, DriverError):
+                        continue
 
             # Distance (SNGP for both EPON and GPON)
             if self.device.snmp_enabled:
@@ -994,12 +997,13 @@ class BdcomCliDriver(BaseDriver):
                 except DriverError:
                     pass
 
-            snmp_optical = await self._snmp_optical() if self.device.snmp_enabled else {}
-            if snmp_optical:
-                for info in onus.values():
-                    key = info.pon_port.upper().replace(" ", "")
-                    if key in snmp_optical:
-                        info.rx, info.tx = snmp_optical[key]
+            if collect_optics:
+                snmp_optical = await self._snmp_optical() if self.device.snmp_enabled else {}
+                if snmp_optical:
+                    for info in onus.values():
+                        key = info.pon_port.upper().replace(" ", "")
+                        if key in snmp_optical:
+                            info.rx, info.tx = snmp_optical[key]
 
             # EPON: SNMP name/status supplement (CLI output may be truncated)
             if self.device.snmp_enabled and self.device.pon_type.lower() == "epon":

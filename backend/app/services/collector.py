@@ -160,7 +160,7 @@ async def scan_olt(session: AsyncSession, olt_id: int) -> ScanLog:
 
     driver = build_driver(device)
     try:
-        onus = await driver.get_onus()
+        onus = await driver.get_onus(collect_optics=False)
         macs = await driver.get_macs()
     except DriverError as exc:
         device.status = "unreachable"
@@ -186,10 +186,10 @@ async def scan_olt(session: AsyncSession, olt_id: int) -> ScanLog:
             onu_info.onu_id,
             onu_info.serial,
             _map_state(onu_info.state),
-            onu_info.rx,
-            onu_info.tx,
-            onu_info.description,
-            onu_info.dereg_reason,
+            rx=None,
+            tx=None,
+            description=onu_info.description,
+            down_reason=onu_info.dereg_reason,
             mac=onu_info.extra.get("mac", ""),
             distance=onu_info.extra.get("distance"),
             vendor=onu_info.extra.get("vendor", ""),
