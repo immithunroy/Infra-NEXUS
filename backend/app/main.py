@@ -37,7 +37,7 @@ async def _seed_admin() -> None:
 async def lifespan(app: FastAPI):
     await init_db()
     await _seed_admin()
-    scheduler = start_scheduler()
+    scheduler = await start_scheduler()
     yield
     stop_scheduler()
 

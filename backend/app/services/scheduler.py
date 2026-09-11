@@ -29,8 +29,9 @@ _job_status: dict[str, dict[str, Any]] = {}
 
 
 def _track_job(job_id: str) -> None:
-    """Mark a job as currently running."""
-    _job_status[job_id] = {"last_run": None, "status": "running", "error": ""}
+    """Mark a job as currently running, preserving previous last_run."""
+    prev = _job_status.get(job_id, {})
+    _job_status[job_id] = {"last_run": prev.get("last_run"), "status": "running", "error": ""}
 
 
 def _finish_job(job_id: str, success: bool, error: str = "") -> None:
@@ -71,30 +72,21 @@ def _persist_job_state(job_id: str) -> None:
         pass
 
 
-def _load_job_states() -> None:
+async def _load_job_states() -> None:
     """Load persisted job states from DB into memory on startup."""
-    import asyncio
-
-    async def _load():
-        from ..database import SessionLocal
-        from ..models import SchedulerJobState
-        try:
-            async with SessionLocal() as session:
-                from sqlalchemy import select
-                rows = (await session.execute(select(SchedulerJobState))).scalars().all()
-                for row in rows:
-                    _job_status[row.job_id] = {
-                        "last_run": row.last_run.isoformat() if row.last_run else None,
-                        "status": row.status,
-                        "error": row.error or "",
-                    }
-        except Exception:
-            pass
-
+    from ..database import SessionLocal
+    from ..models import SchedulerJobState
     try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(_load())
-    except RuntimeError:
+        async with SessionLocal() as session:
+            from sqlalchemy import select
+            rows = (await session.execute(select(SchedulerJobState))).scalars().all()
+            for row in rows:
+                _job_status[row.job_id] = {
+                    "last_run": row.last_run.isoformat() if row.last_run else None,
+                    "status": row.status,
+                    "error": row.error or "",
+                }
+    except Exception:
         pass
 
 
@@ -421,7 +413,7 @@ async def _cleanup_tj_reservations():
         logger.error("TJ reservation cleanup failed: %s", e)
 
 
-def start_scheduler() -> AsyncIOScheduler:
+async def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
         return _scheduler
@@ -525,7 +517,7 @@ def start_scheduler() -> AsyncIOScheduler:
         settings.telemetry_interval,
         settings.acs_poll_interval,
     )
-    _load_job_states()
+    await _load_job_states()
     return scheduler
 
 
