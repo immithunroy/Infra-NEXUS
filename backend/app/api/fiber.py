@@ -479,7 +479,7 @@ CORE_COLOR_NAMES = [
     "Red", "Black", "Yellow", "Violet", "Rose", "Aqua",
 ]
 
-SUPPORTED_TJ_CAPACITIES = [4, 8, 10]
+SUPPORTED_TJ_CAPACITIES = [4, 8, 10, 12]
 
 
 def _select_tj_capacity(core_count: int) -> int:

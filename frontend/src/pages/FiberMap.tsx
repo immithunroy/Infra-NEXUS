@@ -1434,7 +1434,7 @@ export default function FiberMap() {
             {(() => {
               const cable = cables.find((c) => c.id === recoveryCut.cable_id);
               const coreCount = cable?.core_count || 0;
-              const tjCapacity = coreCount <= 4 ? 4 : coreCount <= 8 ? 8 : coreCount <= 10 ? 10 : 0;
+              const tjCapacity = coreCount <= 4 ? 4 : coreCount <= 8 ? 8 : coreCount <= 10 ? 10 : coreCount <= 12 ? 12 : 0;
               const CORE_COLOR_NAMES = ["Blue", "Orange", "Green", "Brown", "Slate", "White", "Red", "Black", "Yellow", "Violet", "Rose", "Aqua"];
               return (
                 <div className="space-y-4">
@@ -1446,9 +1446,9 @@ export default function FiberMap() {
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">New TJ Box</div>
                     <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs space-y-1">
-                      <div><span className="font-medium">Capacity:</span> {tjCapacity || "Exceeds max"} Port {tjCapacity ? `(${tjCapacity <= 4 ? "4-port" : tjCapacity <= 8 ? "8-port" : "10-port"})` : ""}</div>
+                      <div><span className="font-medium">Capacity:</span> {tjCapacity || "Exceeds max"} Port {tjCapacity ? `(${tjCapacity}-port)` : ""}</div>
                       <div><span className="font-medium">Location:</span> {recoveryCut.lat.toFixed(6)}, {recoveryCut.lng.toFixed(6)}</div>
-                      {tjCapacity === 0 && <div className="text-red-600 dark:text-red-400 font-medium">Core count {coreCount} exceeds maximum supported TJ capacity (10). Manual recovery required.</div>}
+                      {tjCapacity === 0 && <div className="text-red-600 dark:text-red-400 font-medium">Core count {coreCount} exceeds maximum supported TJ capacity (12). Manual recovery required.</div>}
                     </div>
                   </div>
 
