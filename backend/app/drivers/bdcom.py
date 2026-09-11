@@ -32,6 +32,10 @@ GPON_ONU_DISTANCE_OID = "1.3.6.1.4.1.3320.10.3.1.1.33"  # decameters (÷10 = met
 
 # EPON MIB (1.3.6.1.4.1.3320.101.x)
 EPON_ONU_DISTANCE_OID = "1.3.6.1.4.1.3320.101.10.1.1.27"  # meters
+EPON_ONU_STATUS_OID = "1.3.6.1.4.1.3320.101.10.1.1.26"   # 0=auth,1=reg,2=dereg,3=auto,4=lost,5=standby
+EPON_ONU_MAC_OID = "1.3.6.1.4.1.3320.101.10.1.1.3"       # PhysAddress
+EPON_ONU_NAME_OID = "1.3.6.1.4.1.3320.101.11.1.1.4"      # llidOnuBindDesc (operator name)
+EPON_ONU_BIND_DIID_OID = "1.3.6.1.4.1.3320.101.11.1.1.1" # llidEponIfDiid (LLID ifIndex)
 
 # OLT system health OIDs (shared by EPON and GPON)
 OLT_CPU_OID = "1.3.6.1.4.1.3320.9.109.1.1.1.1"
@@ -282,6 +286,98 @@ async def _snmp_distance(device: OLTDevice) -> dict[str, float]:
         if ifindex in dist_by_idx:
             result[name.upper().replace(" ", "")] = dist_by_idx[ifindex]
     return result
+
+
+# ---------------------------------------------------------------------------
+# EPON SNMP: ONU name + status (fallback for truncated CLI output)
+# ---------------------------------------------------------------------------
+
+# Mapping from EPON SNMP status integer to state string
+_EPON_SNMP_STATUS_MAP = {
+    "0": "active",       # authenticated
+    "1": "active",       # registered
+    "2": "deregistered", # deregistered
+    "3": "auto-configured",
+    "4": "lost",
+    "5": "standby",
+}
+
+
+async def _snmp_epon_names(device: OLTDevice) -> dict[str, dict]:
+    """Walk EPON ONU name + status via SNMP.
+
+    Returns {(pon_port_upper, onu_id): {"name": ..., "state": ..., "mac": ...}}
+    joined through the LLID ifIndex → ifName mapping.
+    """
+    community = device.snmp_community or ""
+    if not community:
+        return {}
+    port = device.snmp_port or 161
+    ip = device.ip
+
+    try:
+        # 1. Build ifIndex → ifName map (EPON0/3:4 etc.)
+        if_rows = await snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.2", port, timeout=OPTICAL_SNMP_TIMEOUT)
+        ifnames: dict[int, str] = {}
+        for oid_str, name in if_rows:
+            idx = int(oid_str.split(".")[-1])
+            ifnames[idx] = name
+        if not ifnames:
+            return {}
+
+        # 2. Walk ONU MAC (to correlate with CLI results)
+        mac_rows = await snmp_walk(ip, community, EPON_ONU_MAC_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        mac_by_idx: dict[int, str] = {}
+        for oid_str, val in mac_rows:
+            idx = int(oid_str.split(".")[-1])
+            mac_raw = val.strip().replace(" ", ":").replace("-", ":").lower()
+            if len(mac_raw) == 17:  # xx:xx:xx:xx:xx:xx
+                mac_by_idx[idx] = mac_raw
+
+        # 3. Walk ONU status
+        status_rows = await snmp_walk(ip, community, EPON_ONU_STATUS_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        status_by_idx: dict[int, str] = {}
+        for oid_str, val in status_rows:
+            idx = int(oid_str.split(".")[-1])
+            status_by_idx[idx] = _EPON_SNMP_STATUS_MAP.get(str(val).strip(), "unknown")
+
+        # 4. Walk ONU name (description)
+        name_rows = await snmp_walk(ip, community, EPON_ONU_NAME_OID, port, timeout=OPTICAL_SNMP_TIMEOUT)
+        name_by_idx: dict[int, str] = {}
+        for oid_str, val in name_rows:
+            idx = int(oid_str.split(".")[-1])
+            name_text = val.strip()
+            if name_text and name_text != "N/A":
+                name_by_idx[idx] = name_text
+
+        # 5. Join: ifIndex → ifName → (pon_port, onu_id) → data
+        result: dict[tuple[str, int], dict] = {}
+        for ifindex, ifname in ifnames.items():
+            low = ifname.lower()
+            if "epon" not in low or ":" not in ifname:
+                continue
+            # Parse "EPON0/3:4" → pon_port="EPON0/3", onu_id=4
+            parts = ifname.split(":")
+            if len(parts) != 2:
+                continue
+            pon_port = parts[0].upper().replace(" ", "")
+            try:
+                onu_id = int(parts[1])
+            except ValueError:
+                continue
+            entry: dict = {}
+            if ifindex in mac_by_idx:
+                entry["mac"] = mac_by_idx[ifindex]
+            if ifindex in status_by_idx:
+                entry["state"] = status_by_idx[ifindex]
+            if ifindex in name_by_idx:
+                entry["name"] = name_by_idx[ifindex]
+            if entry:
+                result[(pon_port, onu_id)] = entry
+
+        return result
+    except DriverError:
+        return {}
 
 
 async def _snmp_olt_health(device: OLTDevice) -> OltHealthSample:
@@ -853,6 +949,37 @@ class BdcomCliDriver(BaseDriver):
                     key = info.pon_port.upper().replace(" ", "")
                     if key in snmp_optical:
                         info.rx, info.tx = snmp_optical[key]
+
+            # EPON: SNMP name/status supplement (CLI output may be truncated)
+            if self.device.snmp_enabled and self.device.pon_type.lower() == "epon":
+                try:
+                    snmp_data = await _snmp_epon_names(self.device)
+                    if snmp_data:
+                        # 1. Fill gaps in CLI-parsed ONUs
+                        for (pon_port, onu_id), data in snmp_data.items():
+                            pon_base = pon_port.rsplit(":", 1)[0] if ":" in pon_port else pon_port
+                            key = (pon_base, onu_id)
+                            if key in onus:
+                                info = onus[key]
+                                if not info.description and "name" in data:
+                                    info.description = data["name"]
+                                if info.state == "unknown" and "state" in data:
+                                    info.state = data["state"]
+                                if not info.extra.get("mac") and "mac" in data:
+                                    info.extra["mac"] = data["mac"]
+                            elif "mac" in data:
+                                # 2. Add ONUs that CLI missed (truncated output)
+                                info = OnuInfo(
+                                    pon_port=f"{pon_port}:{onu_id}",
+                                    onu_id=onu_id,
+                                    state=data.get("state", "unknown"),
+                                    description=data.get("name", ""),
+                                )
+                                info.extra["mac"] = data["mac"]
+                                onus[(pon_base, onu_id)] = info
+                except DriverError:
+                    pass
+
             return list(onus.values())
         except TelnetError as exc:
             raise DriverError(f"Failed to collect ONUs: {exc}") from exc
