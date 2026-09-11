@@ -819,8 +819,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         { label: "Feasibility Check", kind: "feas", color: "#22c55e" },
         { label: "Add TJ Box", kind: "tj", color: "#6366f1" },
         { label: "Add Link", kind: "cable", color: "#ef4444" },
-        { label: "Add Loop", kind: "loop", color: "#06b6d4" },
-        { label: "Report Cut", kind: "cut", color: "#ef4444" },
       ];
       for (const item of items) {
         const btn = document.createElement("button");
@@ -833,8 +831,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           if (item.kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); }
           else if (item.kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 8, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
           else if (item.kind === "cable") { setShowForm("cable"); }
-          else if (item.kind === "loop") { setLoopForm({ lat, lng }); setShowForm("loop"); }
-          else if (item.kind === "cut") { setCutForm({ lat, lng }); setShowForm("cut"); }
         };
         menu.appendChild(btn);
       }
@@ -892,8 +888,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         { label: "Feasibility Check", kind: "feas" },
         { label: "Add TJ Box", kind: "tj" },
         { label: "Add Link", kind: "cable" },
-        { label: "Add Loop", kind: "loop" },
-        { label: "Report Cut", kind: "cut" },
       ];
       for (const item of items) {
         const btn = document.createElement("button");
@@ -906,8 +900,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           if (item.kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); }
           else if (item.kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 8, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
           else if (item.kind === "cable") { setShowForm("cable"); }
-          else if (item.kind === "loop") { setLoopForm({ lat, lng }); setShowForm("loop"); }
-          else if (item.kind === "cut") { setCutForm({ lat, lng }); setShowForm("cut"); }
         };
         menu.appendChild(btn);
       }
@@ -985,7 +977,60 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         const pl = new google.maps.Polyline({ path, map, strokeColor: color, strokeOpacity: 0.8, strokeWeight: 3, clickable: !drawCable.active });
         pl.addListener("click", () => setSelectedCable(cable));
         pl.addListener("dblclick", () => { if (writeOk) startCableEdit(cable); });
-        pl.addListener("rightclick", (e: google.maps.MapMouseEvent) => { e.domEvent.preventDefault(); e.domEvent.stopPropagation(); });
+        pl.addListener("rightclick", (e: google.maps.MapMouseEvent) => {
+          e.domEvent.preventDefault();
+          e.domEvent.stopPropagation();
+          if (!e.domEvent || !e.latLng) return;
+          const existing = document.getElementById("gmap-ctx-menu");
+          if (existing) existing.remove();
+          const activeCut = cuts.find((c) => c.cable_id === cable.id && c.status === "cut");
+          const cutDisabled = !!activeCut;
+          const restoreDisabled = !activeCut;
+          const cutLabel = cutDisabled ? "Report Cut (active cut exists)" : "Report Cable Cut";
+          const restoreLabel = restoreDisabled ? "Restore Cable Cut (no active cut)" : "Restore Cable Cut and Auto Add TJ";
+          const menu = document.createElement("div");
+          menu.id = "gmap-ctx-menu";
+          menu.style.cssText = `position:fixed;z-index:9999;background:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px 0;min-width:220px;font-size:13px;`;
+          const header = document.createElement("div");
+          header.style.cssText = "padding:6px 16px;color:#64748b;font-size:11px;font-weight:600;border-bottom:1px solid #e2e8f0;";
+          header.textContent = (cable.link_id || cable.code) + " · " + (cable.link_name || cable.code) + " · " + cable.core_count + " cores";
+          menu.appendChild(header);
+          const items = [
+            { label: cutLabel, action: "report-cut", color: cutDisabled ? "#94a3b8" : "#ef4444", disabled: cutDisabled },
+            { label: "Add Loop", action: "add-loop", color: "#06b6d4", disabled: false },
+            { label: restoreLabel, action: "restore-cut", color: restoreDisabled ? "#94a3b8" : "#22c55e", disabled: restoreDisabled },
+          ];
+          const midLat = cable.segments[0].start_lat;
+          const midLng = cable.segments[0].start_lng;
+          for (const item of items) {
+            const btn = document.createElement("button");
+            btn.textContent = item.label;
+            btn.style.cssText = `display:block;width:100%;text-align:left;padding:8px 16px;border:none;background:none;cursor:${item.disabled ? "not-allowed" : "pointer"};font-size:13px;color:${item.disabled ? "#94a3b8" : "#334155"};`;
+            if (!item.disabled) {
+              btn.onmouseenter = () => btn.style.background = "#f1f5f9";
+              btn.onmouseleave = () => btn.style.background = "none";
+            }
+            btn.onclick = () => {
+              menu.remove();
+              if (item.disabled) return;
+              if (item.action === "report-cut") {
+                setCutForm({ cable_id: cable.id, lat: midLat, lng: midLng });
+                setShowForm("cut");
+              } else if (item.action === "add-loop") {
+                setLoopForm({ cable_id: cable.id, lat: midLat, lng: midLng, loop_length_m: 30 });
+                setShowForm("loop");
+              } else if (item.action === "restore-cut" && activeCut) {
+                startRecovery(activeCut);
+              }
+            };
+            menu.appendChild(btn);
+          }
+          const px = (e.domEvent as MouseEvent).clientX, py = (e.domEvent as MouseEvent).clientY;
+          menu.style.left = `${px}px`; menu.style.top = `${py}px`;
+          document.body.appendChild(menu);
+          const removeMenu = () => { menu.remove(); document.removeEventListener("click", removeMenu); };
+          setTimeout(() => document.addEventListener("click", removeMenu), 0);
+        });
         pl.addListener("mouseover", (e: google.maps.MapMouseEvent) => {
           if (!e.latLng) return;
           iw.setContent(cableTooltip(cable, tjBoxes, loops));
