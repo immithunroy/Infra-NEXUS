@@ -1,5 +1,4 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import {
   Lead, LeadDashboard, UserLeadPerformance, MonthlySummary,
@@ -11,6 +10,7 @@ import { useUserRole } from "../lib/role";
 import { fmtTime } from "../lib/time";
 import ActionResultBanner from "../components/ActionResultBanner";
 import { Pagination, PAGE_SIZE } from "../components/Pagination";
+import LeadDetailPanel from "./LeadDetail";
 
 /* ── helpers ────────────────────────────────────────────────────────── */
 
@@ -350,7 +350,7 @@ export default function Leads() {
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
-  const navigate = useNavigate();
+  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
 
   const flash = (text: string, ok = true) => {
     setNotice({ text, ok });
@@ -771,7 +771,7 @@ export default function Leads() {
                     <div className="flex gap-1">
                       <button
                         className="btn-ghost text-xs text-blue-600"
-                        onClick={() => navigate(`/leads/${l.id}`)}
+                        onClick={() => setSelectedLeadId(l.id)}
                       >
                         View
                       </button>
@@ -1120,6 +1120,14 @@ export default function Leads() {
             </form>
           </div>
         </div>
+      )}
+
+      {selectedLeadId && (
+        <LeadDetailPanel
+          leadId={selectedLeadId}
+          onClose={() => setSelectedLeadId(null)}
+          onConverted={() => { loadLeads(); loadDashboard(); loadUserPerf(); loadMonthly(); }}
+        />
       )}
     </div>
   );
