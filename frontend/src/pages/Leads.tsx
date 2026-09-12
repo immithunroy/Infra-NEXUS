@@ -515,6 +515,15 @@ export default function Leads() {
     setPage(0);
   };
 
+  const handleInlineUpdate = async (id: number, field: string, value: unknown) => {
+    try {
+      await api.put(`/leads/${id}`, { [field]: value });
+      setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Update failed", false);
+    }
+  };
+
   /* ── derived data ─────────────────────────────────────────────────── */
 
   const totalPages = Math.max(Math.ceil(totalCount / PAGE_SIZE), 1);
@@ -625,7 +634,7 @@ export default function Leads() {
 
         <div className="card flex h-[360px] flex-col p-5">
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            User Performance
+            Employee Performance
           </h3>
           <div className="flex-1 overflow-hidden">
             <HorizontalBarChart
@@ -742,6 +751,7 @@ export default function Leads() {
           <table className="w-full text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
               <tr>
+                <th className="th w-12">SL</th>
                 <th className="th">Lead</th>
                 <th className="th">Mobile</th>
                 <th className="th">Area / Road</th>
@@ -754,8 +764,9 @@ export default function Leads() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-              {leads.map((l) => (
+              {leads.map((l, index) => (
                 <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="td text-center text-xs text-slate-500">{page * PAGE_SIZE + index + 1}</td>
                   <td className="td">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-slate-800 dark:text-slate-100">{l.customer_name}</span>
@@ -771,15 +782,31 @@ export default function Leads() {
                   <td className="td text-sm">{l.road_area || "—"}</td>
                   <td className="td text-sm">{l.package_name || "—"}</td>
                   <td className="td text-sm font-medium">{fmtCurrency(l.service_charge)}</td>
-                  <td className="td text-sm text-slate-600 dark:text-slate-300">
-                    {l.assigned_to_name || (l.assigned_to ? userNameMap[l.assigned_to] || "—" : "—")}
+                  <td className="td">
+                    <select
+                      className="w-full border-0 bg-transparent text-sm text-slate-600 dark:text-slate-300"
+                      value={l.assigned_to ?? ""}
+                      onChange={(e) => handleInlineUpdate(l.id, "assigned_to", e.target.value ? Number(e.target.value) : null)}
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>{u.username}</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="td">
                     <span className={`badge ${LEAD_STATUS_COLORS[l.status as keyof typeof LEAD_STATUS_COLORS] || ""}`}>
                       {LEAD_STATUS_LABELS[l.status as keyof typeof LEAD_STATUS_LABELS] || l.status}
                     </span>
                   </td>
-                  <td className="td text-xs text-slate-500">{l.expected_connection_date ? fmtTime(l.expected_connection_date) : "—"}</td>
+                  <td className="td">
+                    <input
+                      type="date"
+                      className="w-full border-0 bg-transparent text-xs text-slate-500"
+                      value={l.expected_connection_date ? l.expected_connection_date.slice(0, 10) : ""}
+                      onChange={(e) => handleInlineUpdate(l.id, "expected_connection_date", e.target.value || null)}
+                    />
+                  </td>
                   <td className="td">
                     <div className="flex gap-1">
                       <button
@@ -816,7 +843,7 @@ export default function Leads() {
               ))}
               {leads.length === 0 && (
                 <tr>
-                  <td className="td text-slate-500" colSpan={8}>
+                  <td className="td text-slate-500" colSpan={9}>
                     No leads found.
                   </td>
                 </tr>
@@ -871,12 +898,12 @@ export default function Leads() {
         </div>
       )}
 
-      {/* ── User Performance Table ───────────────────────────────────── */}
+      {/* ── Employee Performance Table ───────────────────────────────────── */}
       {userPerf.length > 0 && (
         <div className="card overflow-x-auto">
           <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-700">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              User Performance
+            Employee Performance
             </h3>
           </div>
           <table className="w-full text-sm">

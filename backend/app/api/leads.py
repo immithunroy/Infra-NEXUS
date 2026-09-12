@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, nullslast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
@@ -115,11 +115,12 @@ async def list_leads(
         "customer_name": Lead.customer_name,
         "service_charge": Lead.service_charge,
         "follow_up_date": Lead.follow_up_date,
-    }.get(sort or "", Lead.created_at)
+        "expected_connection_date": Lead.expected_connection_date,
+    }.get(sort or "", Lead.expected_connection_date)
     if order == "desc":
-        stmt = stmt.order_by(sort_col.desc(), Lead.id.desc())
+        stmt = stmt.order_by(nullslast(sort_col.desc()), Lead.id.desc())
     else:
-        stmt = stmt.order_by(sort_col.asc(), Lead.id.asc())
+        stmt = stmt.order_by(nullslast(sort_col.asc()), Lead.id.asc())
     stmt = stmt.offset(offset).limit(limit)
     rows = (await db.execute(stmt)).scalars().all()
     umap = await _user_map(db)
