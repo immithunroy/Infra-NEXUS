@@ -405,7 +405,7 @@ export default function Leads() {
     if (filters.package) params.package = filters.package;
     if (filters.date_from) params.date_from = filters.date_from;
     if (filters.date_to) params.date_to = filters.date_to;
-    api.get<number>("/leads/count", params).then(setTotalCount).catch(() => undefined);
+    api.get<{ total: number }>("/leads/count", params).then((d) => setTotalCount(d.total)).catch(() => undefined);
   }, [filters]);
 
   useEffect(() => {
