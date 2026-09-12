@@ -375,6 +375,18 @@ async def source_performance(
     return [{"source": k, "total": v["total"], "successful": v["successful"]} for k, v in sorted(by_src.items())]
 
 
+@router.get("/wards/list")
+async def list_wards(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    rows = (await db.execute(select(Lead.ward).where(Lead.ward != "").distinct())).scalars().all()
+    return sorted(rows)
+
+
+@router.get("/packages/list")
+async def list_packages(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    rows = (await db.execute(select(Lead.package_name).where(Lead.package_name != "").distinct())).scalars().all()
+    return sorted(rows)
+
+
 @router.get("/{lead_id}", response_model=LeadOut)
 async def get_lead(
     lead_id: int,
@@ -484,15 +496,3 @@ async def convert_lead(
     await db.refresh(lead)
     umap = await _user_map(db)
     return _to_out(lead, umap)
-
-
-@router.get("/wards/list")
-async def list_wards(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = (await db.execute(select(Lead.ward).where(Lead.ward != "").distinct())).scalars().all()
-    return sorted(rows)
-
-
-@router.get("/packages/list")
-async def list_packages(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = (await db.execute(select(Lead.package_name).where(Lead.package_name != "").distinct())).scalars().all()
-    return sorted(rows)

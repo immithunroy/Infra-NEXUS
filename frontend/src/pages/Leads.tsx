@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import {
   Lead, LeadDashboard, UserLeadPerformance, MonthlySummary,
@@ -349,6 +350,7 @@ export default function Leads() {
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const navigate = useNavigate();
 
   const flash = (text: string, ok = true) => {
     setNotice({ text, ok });
@@ -734,7 +736,7 @@ export default function Leads() {
                 <th className="th">Service Charge</th>
                 <th className="th">Assigned To</th>
                 <th className="th">Status</th>
-                <th className="th">Created</th>
+                <th className="th">Expected Date</th>
                 <th className="th">Actions</th>
               </tr>
             </thead>
@@ -764,9 +766,15 @@ export default function Leads() {
                       {LEAD_STATUS_LABELS[l.status as keyof typeof LEAD_STATUS_LABELS] || l.status}
                     </span>
                   </td>
-                  <td className="td text-xs text-slate-500">{fmtTime(l.created_at)}</td>
+                  <td className="td text-xs text-slate-500">{l.expected_connection_date ? fmtTime(l.expected_connection_date) : "—"}</td>
                   <td className="td">
                     <div className="flex gap-1">
+                      <button
+                        className="btn-ghost text-xs text-blue-600"
+                        onClick={() => navigate(`/leads/${l.id}`)}
+                      >
+                        View
+                      </button>
                       <button
                         className="btn-ghost text-xs"
                         onClick={() => setModal(l)}
@@ -795,7 +803,7 @@ export default function Leads() {
               ))}
               {leads.length === 0 && (
                 <tr>
-                  <td className="td text-slate-500" colSpan={9}>
+                  <td className="td text-slate-500" colSpan={8}>
                     No leads found.
                   </td>
                 </tr>

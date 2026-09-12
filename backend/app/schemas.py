@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, validator
 
@@ -1494,6 +1494,18 @@ class LeadCreate(BaseModel):
     follow_up_notes: str = ""
     lost_reason: str = ""
 
+    @validator("expected_connection_date", "follow_up_date", pre=True)
+    def _parse_date(cls, v):
+        if isinstance(v, str) and v:
+            try:
+                return datetime.fromisoformat(v)
+            except ValueError:
+                try:
+                    return datetime.combine(date.fromisoformat(v), datetime.min.time())
+                except ValueError:
+                    return None
+        return v
+
 
 class LeadUpdate(BaseModel):
     customer_name: str | None = None
@@ -1515,6 +1527,18 @@ class LeadUpdate(BaseModel):
     follow_up_date: datetime | None = None
     follow_up_notes: str | None = None
     lost_reason: str | None = None
+
+    @validator("expected_connection_date", "follow_up_date", pre=True)
+    def _parse_date(cls, v):
+        if isinstance(v, str) and v:
+            try:
+                return datetime.fromisoformat(v)
+            except ValueError:
+                try:
+                    return datetime.combine(date.fromisoformat(v), datetime.min.time())
+                except ValueError:
+                    return None
+        return v
 
 
 class LeadOut(BaseModel):
