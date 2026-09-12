@@ -11,6 +11,7 @@ import FiberMap from "./pages/FiberMap";
 import GoogleMap from "./pages/GoogleMap";
 import LiveDowns from "./pages/LiveDowns";
 import Login from "./pages/Login";
+import Leads from "./pages/Leads";
 import NocApprovals from "./pages/NocApprovals";
 import Onus from "./pages/Onus";
 import OnuProfile from "./pages/OnuProfile";
@@ -71,6 +72,7 @@ export default function App() {
             <Route path="/subscribers" element={<Subscribers />} />
             <Route path="/subscribers/:subscriber" element={<SubscriberProfile />} />
             <Route path="/tickets" element={<Tickets />} />
+            <Route path="/leads" element={<Leads />} />
             <Route path="/acs" element={<Acs />} />
             <Route path="/live-downs" element={<LiveDowns />} />
             <Route path="/fiber-map" element={<FiberMap />} />

@@ -1468,3 +1468,113 @@ class ApprovalHistoryEntry(BaseModel):
     user_name: str = ""
     note: str = ""
     timestamp: datetime | None = None
+
+
+# ── Lead Management ─────────────────────────────────────────────────────
+
+
+class LeadCreate(BaseModel):
+    customer_name: str = ""
+    mobile_primary: str = ""
+    mobile_secondary: str = ""
+    road_area: str = ""
+    ward: str = ""
+    package_name: str = ""
+    service_charge: float | None = None
+    lead_source: str = "walk_in"
+    assigned_to: int | None = None
+    status: str = "new"
+    priority: str = "normal"
+    expected_connection_date: datetime | None = None
+    customer_address: str = ""
+    notes: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    follow_up_date: datetime | None = None
+    follow_up_notes: str = ""
+    lost_reason: str = ""
+
+
+class LeadUpdate(BaseModel):
+    customer_name: str | None = None
+    mobile_primary: str | None = None
+    mobile_secondary: str | None = None
+    road_area: str | None = None
+    ward: str | None = None
+    package_name: str | None = None
+    service_charge: float | None = None
+    lead_source: str | None = None
+    assigned_to: int | None = None
+    status: str | None = None
+    priority: str | None = None
+    expected_connection_date: datetime | None = None
+    customer_address: str | None = None
+    notes: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    follow_up_date: datetime | None = None
+    follow_up_notes: str | None = None
+    lost_reason: str | None = None
+
+
+class LeadOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    customer_name: str = ""
+    mobile_primary: str = ""
+    mobile_secondary: str = ""
+    road_area: str = ""
+    ward: str = ""
+    package_name: str = ""
+    service_charge: float | None = None
+    lead_source: str = "walk_in"
+    assigned_to: int | None = None
+    assigned_to_name: str = ""
+    status: str = "new"
+    priority: str = "normal"
+    expected_connection_date: datetime | None = None
+    customer_address: str = ""
+    notes: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    follow_up_date: datetime | None = None
+    follow_up_notes: str = ""
+    lost_reason: str = ""
+    converted_to_subscriber: str | None = None
+    converted_at: datetime | None = None
+    created_by: int | None = None
+    created_by_name: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class LeadDashboard(BaseModel):
+    total: int = 0
+    new_count: int = 0
+    follow_up: int = 0
+    interested: int = 0
+    installation_pending: int = 0
+    successful: int = 0
+    lost: int = 0
+    conversion_rate: float = 0.0
+    total_service_charge: float = 0.0
+
+
+class UserLeadPerformance(BaseModel):
+    user_id: int = 0
+    user_name: str = ""
+    total_leads: int = 0
+    successful: int = 0
+    pending: int = 0
+    lost: int = 0
+    conversion_rate: float = 0.0
+    total_service_charge: float = 0.0
+    avg_service_charge: float = 0.0
+
+
+class MonthlySummary(BaseModel):
+    month: str = ""
+    total_leads: int = 0
+    successful: int = 0
+    lost: int = 0

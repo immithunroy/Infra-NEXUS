@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
-from .api import acs, auth, bindings, dashboard, devices, downs, fiber, fiber_approvals, map, noc_pop, onus, photos, reports, search, subscribers, tickets, users, approvals
+from .api import acs, auth, bindings, dashboard, devices, downs, fiber, fiber_approvals, leads, map, noc_pop, onus, photos, reports, search, subscribers, tickets, users, approvals
 from .api import settings as settings_api
 from .config import get_settings
 from .database import SessionLocal, init_db
@@ -93,6 +93,7 @@ app.include_router(photos.router)
 app.include_router(photos.file_router)
 app.include_router(noc_pop.router)
 app.include_router(settings_api.router)
+app.include_router(leads.router)
 
 
 @app.get("/api/health")

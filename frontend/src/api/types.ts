@@ -1191,3 +1191,118 @@ export const POP_PHOTO_LABELS: Record<PopPhotoType, string> = {
   equipment: "Equipment",
   identification: "Identification",
 };
+
+// ── Lead Management ───────────────────────────────────────────────────
+
+export interface Lead {
+  id: number;
+  customer_name: string;
+  mobile_primary: string;
+  mobile_secondary: string;
+  road_area: string;
+  ward: string;
+  package_name: string;
+  service_charge: number | null;
+  lead_source: string;
+  assigned_to: number | null;
+  assigned_to_name: string;
+  status: string;
+  priority: string;
+  expected_connection_date: string | null;
+  customer_address: string;
+  notes: string;
+  latitude: number | null;
+  longitude: number | null;
+  follow_up_date: string | null;
+  follow_up_notes: string;
+  lost_reason: string;
+  converted_to_subscriber: string | null;
+  converted_at: string | null;
+  created_by: number | null;
+  created_by_name: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface LeadDashboard {
+  total: number;
+  new_count: number;
+  follow_up: number;
+  interested: number;
+  installation_pending: number;
+  successful: number;
+  lost: number;
+  conversion_rate: number;
+  total_service_charge: number;
+}
+
+export interface UserLeadPerformance {
+  user_id: number;
+  user_name: string;
+  total_leads: number;
+  successful: number;
+  pending: number;
+  lost: number;
+  conversion_rate: number;
+  total_service_charge: number;
+  avg_service_charge: number;
+}
+
+export interface MonthlySummary {
+  month: string;
+  total_leads: number;
+  successful: number;
+  lost: number;
+}
+
+export const LEAD_STATUSES = ["new", "contacted", "follow_up", "interested", "installation_pending", "successful", "lost"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
+  new: "New",
+  contacted: "Contacted",
+  follow_up: "Follow-up",
+  interested: "Interested",
+  installation_pending: "Installation Pending",
+  successful: "Successful",
+  lost: "Lost",
+};
+
+export const LEAD_STATUS_COLORS: Record<LeadStatus, string> = {
+  new: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  contacted: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
+  follow_up: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  interested: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
+  installation_pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  successful: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  lost: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+};
+
+export const LEAD_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+export type LeadPriority = (typeof LEAD_PRIORITIES)[number];
+
+export const LEAD_PRIORITY_LABELS: Record<LeadPriority, string> = {
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
+};
+
+export const LEAD_PRIORITY_COLORS: Record<LeadPriority, string> = {
+  low: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300",
+  normal: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300",
+  high: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300",
+  urgent: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300",
+};
+
+export const LEAD_SOURCES = ["walk_in", "referral", "phone_call", "online", "field_visit", "other"] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
+  walk_in: "Walk-in",
+  referral: "Referral",
+  phone_call: "Phone Call",
+  online: "Online",
+  field_visit: "Field Visit",
+  other: "Other",
+};

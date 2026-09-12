@@ -75,6 +75,32 @@ class TicketPriority(str, enum.Enum):
     urgent = "urgent"
 
 
+class LeadStatus(str, enum.Enum):
+    new = "new"
+    contacted = "contacted"
+    follow_up = "follow_up"
+    interested = "interested"
+    installation_pending = "installation_pending"
+    successful = "successful"
+    lost = "lost"
+
+
+class LeadPriority(str, enum.Enum):
+    low = "low"
+    normal = "normal"
+    high = "high"
+    urgent = "urgent"
+
+
+class LeadSource(str, enum.Enum):
+    walk_in = "walk_in"
+    referral = "referral"
+    phone_call = "phone_call"
+    online = "online"
+    field_visit = "field_visit"
+    other = "other"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -900,3 +926,33 @@ class SchedulerJobState(Base):
     last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     error: Mapped[str] = mapped_column(Text, default="")
+
+
+class Lead(Base):
+    __tablename__ = "leads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_name: Mapped[str] = mapped_column(String(256), default="")
+    mobile_primary: Mapped[str] = mapped_column(String(32), default="")
+    mobile_secondary: Mapped[str] = mapped_column(String(32), default="")
+    road_area: Mapped[str] = mapped_column(String(256), default="")
+    ward: Mapped[str] = mapped_column(String(64), default="")
+    package_name: Mapped[str] = mapped_column(String(128), default="")
+    service_charge: Mapped[float | None] = mapped_column(nullable=True)
+    lead_source: Mapped[str] = mapped_column(String(64), default="walk_in")
+    assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="new", index=True)
+    priority: Mapped[str] = mapped_column(String(16), default="normal")
+    expected_connection_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    customer_address: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    latitude: Mapped[float | None] = mapped_column(nullable=True)
+    longitude: Mapped[float | None] = mapped_column(nullable=True)
+    follow_up_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    follow_up_notes: Mapped[str] = mapped_column(Text, default="")
+    lost_reason: Mapped[str] = mapped_column(String(256), default="")
+    converted_to_subscriber: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    converted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
