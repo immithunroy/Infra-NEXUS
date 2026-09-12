@@ -777,6 +777,9 @@ export interface Ticket {
   description: string;
   status: string;
   priority: string;
+  category: string;
+  department: string;
+  tags: string;
   assigned_to: number | null;
   assigned_name: string;
   created_by: number | null;
@@ -786,10 +789,77 @@ export interface Ticket {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+  first_response_at: string | null;
+  due_at: string | null;
+  customer_satisfaction: number | null;
+  is_reopened: boolean;
+  comment_count: number;
 }
 
 export const TICKET_STATUSES = ["open", "in_progress", "resolved", "closed"];
 export const TICKET_PRIORITIES = ["low", "normal", "high", "urgent"];
+export const TICKET_CATEGORIES = ["installation", "repair", "complaint", "maintenance", "billing", "inquiry", "other"];
+export const TICKET_DEPARTMENTS = ["field", "noc", "billing", "support", "other"];
+
+export interface TicketComment {
+  id: number;
+  ticket_id: number;
+  user_id: number | null;
+  user_name: string;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+}
+
+export interface TicketActivity {
+  id: number;
+  ticket_id: number;
+  user_id: number | null;
+  user_name: string;
+  action: string;
+  field: string;
+  old_value: string;
+  new_value: string;
+  created_at: string;
+}
+
+export interface TicketTemplate {
+  id: number;
+  name: string;
+  title: string;
+  description: string;
+  priority: string;
+  category: string;
+  department: string;
+  created_by: number | null;
+  created_at: string;
+}
+
+export interface TicketAnalytics {
+  total: number;
+  open_count: number;
+  in_progress_count: number;
+  resolved_count: number;
+  closed_count: number;
+  sla_breaches: number;
+  avg_response_hours: number | null;
+  avg_resolution_hours: number | null;
+  avg_satisfaction: number | null;
+  reopened_count: number;
+  by_priority: { label: string; count: number }[];
+  by_category: { label: string; count: number }[];
+  by_department: { label: string; count: number }[];
+  by_assignee: { label: string; count: number }[];
+  volume_over_time: { date: string; count: number }[];
+}
+
+export interface TicketListResponse {
+  items: Ticket[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
 
 export interface AcsDevice {
   id: number;

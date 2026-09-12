@@ -23,6 +23,9 @@ import Settings from "./pages/Settings";
 import SubscriberProfile from "./pages/SubscriberProfile";
 import Subscribers from "./pages/Subscribers";
 import Tickets from "./pages/Tickets";
+import TicketList from "./pages/TicketList";
+import TicketDetail from "./pages/TicketDetail";
+import TicketDashboard from "./pages/TicketDashboard";
 import Users from "./pages/Users";
 import { Component, ErrorInfo, ReactNode } from "react";
 
@@ -71,7 +74,9 @@ export default function App() {
             <Route path="/bindings" element={<Bindings />} />
             <Route path="/subscribers" element={<Subscribers />} />
             <Route path="/subscribers/:subscriber" element={<SubscriberProfile />} />
-            <Route path="/tickets" element={<Tickets />} />
+            <Route path="/tickets" element={<TicketList />} />
+            <Route path="/tickets/analytics" element={<TicketDashboard />} />
+            <Route path="/tickets/:id" element={<TicketDetail />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/acs" element={<Acs />} />
             <Route path="/live-downs" element={<LiveDowns />} />
