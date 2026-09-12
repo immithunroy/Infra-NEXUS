@@ -14,6 +14,16 @@ import LeadDetailPanel from "./LeadDetail";
 
 /* ── helpers ────────────────────────────────────────────────────────── */
 
+const PREDEFINED_PACKAGES = [
+  { name: "30 Mbps", price: 500 },
+  { name: "35 Mbps", price: 525 },
+  { name: "40 Mbps", price: 650 },
+  { name: "60 Mbps", price: 800 },
+  { name: "100 Mbps", price: 1000 },
+  { name: "150 Mbps", price: 1200 },
+  { name: "200 Mbps", price: 1500 },
+];
+
 function fmtCurrency(n: number | null): string {
   if (n == null) return "৳0";
   return `৳${n.toLocaleString("en-IN")}`;
@@ -346,6 +356,9 @@ export default function Leads() {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [wards, setWards] = useState<string[]>([]);
   const [packages, setPackages] = useState<string[]>([]);
+  const [showAddPackage, setShowAddPackage] = useState(false);
+  const [newPackageName, setNewPackageName] = useState("");
+  const [newPackagePrice, setNewPackagePrice] = useState("");
   const [users, setUsers] = useState<{ id: number; username: string }[]>([]);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
@@ -953,16 +966,70 @@ export default function Leads() {
                   </datalist>
                 </div>
                 <div>
-                  <label className="label">Package Name</label>
-                  <input
-                    className="input"
-                    value={modal.package_name || ""}
-                    onChange={(e) => setModal({ ...modal, package_name: e.target.value })}
-                    list="package-options"
-                  />
-                  <datalist id="package-options">
-                    {packages.map((p) => <option key={p} value={p} />)}
-                  </datalist>
+                  <label className="label">Package</label>
+                  <div className="flex gap-1.5">
+                    <select
+                      className="input flex-1"
+                      value={modal.package_name || ""}
+                      onChange={(e) => {
+                        const pkg = PREDEFINED_PACKAGES.find((p) => p.name === e.target.value);
+                        setModal({
+                          ...modal,
+                          package_name: e.target.value,
+                          service_charge: pkg ? pkg.price : modal.service_charge,
+                        });
+                      }}
+                    >
+                      <option value="">Select package</option>
+                      {PREDEFINED_PACKAGES.map((p) => (
+                        <option key={p.name} value={p.name}>{p.name} @ {p.price} Tk</option>
+                      ))}
+                      {packages.filter((p) => !PREDEFINED_PACKAGES.some((pp) => pp.name === p)).map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-ghost shrink-0 px-2 text-xs"
+                      onClick={() => setShowAddPackage(!showAddPackage)}
+                      title="Add custom package"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  {showAddPackage && (
+                    <div className="mt-2 flex gap-1.5">
+                      <input
+                        className="input flex-1"
+                        placeholder="Package name"
+                        value={newPackageName}
+                        onChange={(e) => setNewPackageName(e.target.value)}
+                      />
+                      <input
+                        className="input w-24"
+                        type="number"
+                        placeholder="Price"
+                        value={newPackagePrice}
+                        onChange={(e) => setNewPackagePrice(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn-primary shrink-0 px-3 text-xs"
+                        onClick={() => {
+                          const name = newPackageName.trim();
+                          if (!name) return;
+                          const price = newPackagePrice ? Number(newPackagePrice) : null;
+                          setPackages((prev) => [...prev, name]);
+                          setModal({ ...modal, package_name: name, service_charge: price ?? modal.service_charge });
+                          setNewPackageName("");
+                          setNewPackagePrice("");
+                          setShowAddPackage(false);
+                        }}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="label">Service Charge (৳)</label>
