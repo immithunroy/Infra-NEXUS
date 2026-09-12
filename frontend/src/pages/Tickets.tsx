@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import {
@@ -7,13 +7,44 @@ import {
 } from "../api/types";
 import { useUserRole } from "../lib/role";
 import { canWrite, canManageUsers } from "../api/types";
-import { fmtTimeShort } from "../lib/time";
+import { fmtTimeShort, fmtTime } from "../lib/time";
 import { StatusBadge, PriorityBadge, CategoryBadge } from "../components/tickets/TicketBadges";
 import { KpiCard } from "../components/tickets/KpiCard";
 import { BarChart } from "../components/tickets/Charts";
 import { Pagination } from "../components/Pagination";
 import ActionResultBanner from "../components/ActionResultBanner";
 
+/* ── Predefined trouble types ── */
+const TROUBLE_TYPES = [
+  "No Internet",
+  "Slow Speed",
+  "Intermittent Connection",
+  "WiFi Not Working",
+  "No TV / IPTV",
+  "Fiber Cut / Damage",
+  "ONU Down",
+  "Power Off",
+  "Registration Failed",
+  "High Latency / Packet Loss",
+  "Billing Issue",
+  "New Installation Request",
+  "Equipment Upgrade",
+  "Other",
+];
+
+/* ── Subscriber search result ── */
+interface SubResult {
+  subscriber: string;
+  onu_name: string;
+  pon_port: string;
+  olt_name: string;
+  state: string;
+  rx_power: number | null;
+  tx_power: number | null;
+  onu_id: number;
+}
+
+/* ── Filters ── */
 interface Filters {
   status: string;
   priority: string;
@@ -30,13 +61,32 @@ const defaultFilters: Filters = {
   assigned_to: "", search: "", sort_by: "created_at", sort_dir: "desc",
 };
 
+/* ── Helpers ── */
+function elapsed(from: string, to?: string | null): string {
+  const ms = (to ? new Date(to) : new Date()).getTime() - new Date(from).getTime();
+  if (ms < 0) return "—";
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  if (h > 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function rxPowerColor(rx: number | null): string {
+  if (rx == null) return "text-slate-400";
+  if (rx > -18) return "text-emerald-600 dark:text-emerald-400 font-bold";
+  if (rx > -22) return "text-emerald-600 dark:text-emerald-400";
+  if (rx > -26) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
+}
+
 export default function Tickets() {
   const navigate = useNavigate();
   const { role } = useUserRole();
   const writeOk = canWrite(role);
   const isAdmin = canManageUsers(role);
 
-  // ── List state ──
+  /* ── List state ── */
   const [items, setItems] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -48,20 +98,34 @@ export default function Tickets() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [createModal, setCreateModal] = useState<Record<string, unknown> | null>(null);
   const [bulkModal, setBulkModal] = useState(false);
 
-  // ── Analytics state ──
+  /* ── Create modal state ── */
+  const [createModal, setCreateModal] = useState(false);
+  const [subSearch, setSubSearch] = useState("");
+  const [subResults, setSubResults] = useState<SubResult[]>([]);
+  const [subDropdown, setSubDropdown] = useState(false);
+  const [selectedSub, setSelectedSub] = useState<SubResult | null>(null);
+  const [troubleType, setTroubleType] = useState("");
+  const [customTitle, setCustomTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("normal");
+  const [category, setCategory] = useState("");
+  const [department, setDepartment] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
+  const subRef = useRef<HTMLDivElement>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  /* ── Analytics state ── */
   const [analytics, setAnalytics] = useState<TicketAnalytics | null>(null);
   const [analyticsDays, setAnalyticsDays] = useState(30);
-  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const flash = (text: string, ok = true) => {
     setNotice({ text, ok });
     setTimeout(() => setNotice(null), 5000);
   };
 
-  // ── Data loading ──
+  /* ── Data loading ── */
   const loadList = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
@@ -83,40 +147,42 @@ export default function Tickets() {
   }, [filters, page]);
 
   const loadAnalytics = useCallback(() => {
-    api
-      .get<TicketAnalytics>(`/tickets/analytics/dashboard?days=${analyticsDays}`)
-      .then(setAnalytics)
-      .catch(() => setAnalytics(null));
+    api.get<TicketAnalytics>(`/tickets/analytics/dashboard?days=${analyticsDays}`).then(setAnalytics).catch(() => {});
   }, [analyticsDays]);
 
   useEffect(() => { loadList(); }, [loadList]);
-  useEffect(() => { if (showAnalytics) loadAnalytics(); }, [showAnalytics, loadAnalytics]);
-
+  useEffect(() => { loadAnalytics(); }, [loadAnalytics]);
   useEffect(() => {
     if (isAdmin) api.get<UserOut[]>("/users").then(setUsers).catch(() => {});
     api.get<TicketTemplate[]>("/tickets/templates/list").then(setTemplates).catch(() => {});
   }, [isAdmin]);
 
-  // ── Filter helpers ──
+  /* ── Subscriber search ── */
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (subSearch.length < 2) { setSubResults([]); return; }
+    searchTimerRef.current = setTimeout(() => {
+      api.get<SubResult[]>(`/subscribers?q=${encodeURIComponent(subSearch)}&limit=8`).then(setSubResults).catch(() => setSubResults([]));
+    }, 300);
+  }, [subSearch]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (subRef.current && !subRef.current.contains(e.target as Node)) setSubDropdown(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  /* ── Filter helpers ── */
   const updateFilter = (key: keyof Filters, value: string) => {
     setFilters((f) => ({ ...f, [key]: value }));
     setPage(1);
     setSelected(new Set());
   };
-
-  const resetFilters = () => {
-    setFilters(defaultFilters);
-    setPage(1);
-    setSelected(new Set());
-  };
-
-  const toggleSelect = (id: number) => {
-    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  };
-
-  const toggleSelectAll = () => {
-    setSelected((s) => s.size === items.length ? new Set() : new Set(items.map((t) => t.id)));
-  };
+  const resetFilters = () => { setFilters(defaultFilters); setPage(1); setSelected(new Set()); };
+  const toggleSelect = (id: number) => { setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
+  const toggleSelectAll = () => { setSelected((s) => s.size === items.length ? new Set() : new Set(items.map((t) => t.id))); };
 
   const bulkUpdate = async (data: Record<string, unknown>) => {
     if (selected.size === 0) return;
@@ -126,42 +192,71 @@ export default function Tickets() {
       setSelected(new Set());
       setBulkModal(false);
       loadList();
-    } catch (err) {
-      flash(err instanceof Error ? err.message : "Bulk update failed", false);
-    }
+    } catch (err) { flash(err instanceof Error ? err.message : "Bulk update failed", false); }
   };
 
+  /* ── Create ticket ── */
   const createTicket = async (e: FormEvent) => {
     e.preventDefault();
-    if (!createModal) return;
+    const title = troubleType === "Other" || !troubleType ? customTitle : troubleType;
+    if (!title.trim()) { flash("Please select a trouble type or enter a title", false); return; }
     try {
       await api.post("/tickets", {
-        title: createModal.title,
-        description: createModal.description || "",
-        priority: createModal.priority || "normal",
-        category: createModal.category || "",
-        department: createModal.department || "",
-        assigned_to: createModal.assigned_to ? Number(createModal.assigned_to) : null,
-        subscriber: createModal.subscriber || "",
-        onu_id: createModal.onu_id ? Number(createModal.onu_id) : null,
+        title: title.trim(),
+        description,
+        priority,
+        category: category || (troubleType ? "complaint" : ""),
+        department,
+        assigned_to: assignedTo ? Number(assignedTo) : null,
+        subscriber: selectedSub?.subscriber || "",
+        onu_id: selectedSub?.onu_id || null,
       });
       flash("Ticket created");
-      setCreateModal(null);
+      resetCreateForm();
       loadList();
-    } catch (err) {
-      flash(err instanceof Error ? err.message : "Create failed", false);
-    }
+      loadAnalytics();
+    } catch (err) { flash(err instanceof Error ? err.message : "Create failed", false); }
+  };
+
+  const resetCreateForm = () => {
+    setCreateModal(false);
+    setSubSearch("");
+    setSubResults([]);
+    setSelectedSub(null);
+    setTroubleType("");
+    setCustomTitle("");
+    setDescription("");
+    setPriority("normal");
+    setCategory("");
+    setDepartment("");
+    setAssignedTo("");
   };
 
   const applyTemplate = (tmpl: TicketTemplate) => {
-    setCreateModal({
-      title: tmpl.title, description: tmpl.description, priority: tmpl.priority,
-      category: tmpl.category, department: tmpl.department,
-      assigned_to: "", subscriber: "", onu_id: "",
-    });
+    setTroubleType(tmpl.title);
+    setDescription(tmpl.description);
+    setPriority(tmpl.priority);
+    setCategory(tmpl.category);
+    setDepartment(tmpl.department);
+  };
+
+  const selectSub = (sub: SubResult) => {
+    setSelectedSub(sub);
+    setSubSearch(sub.subscriber);
+    setSubDropdown(false);
   };
 
   const activeFilterCount = [filters.status, filters.priority, filters.category, filters.department, filters.assigned_to].filter(Boolean).length;
+
+  /* ── Derived stats ── */
+  const userTicketMap = new Map<string, number>();
+  const troubleMap = new Map<string, number>();
+  items.forEach((t) => {
+    if (t.assigned_name) userTicketMap.set(t.assigned_name, (userTicketMap.get(t.assigned_name) || 0) + 1);
+    if (t.category) troubleMap.set(t.category, (troubleMap.get(t.category) || 0) + 1);
+  });
+  const userStats = [...userTicketMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const troubleStats = [...troubleMap.entries()].sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="space-y-4">
@@ -169,26 +264,16 @@ export default function Tickets() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Troubles & Tickets</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{total} tickets · {analytics ? `${analytics.open_count} open` : "loading…"}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{total} total tickets</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            className={`btn-ghost text-xs ${showAnalytics ? "bg-slate-100 dark:bg-slate-800" : ""}`}
-            onClick={() => setShowAnalytics(!showAnalytics)}
-          >
-            {showAnalytics ? "Hide Analytics" : "Show Analytics"}
-          </button>
-          {writeOk && (
-            <button className="btn-primary" onClick={() => setCreateModal({ title: "", description: "", priority: "normal", category: "", department: "", assigned_to: "", subscriber: "", onu_id: "" })}>
-              + New ticket
-            </button>
-          )}
+          {writeOk && <button className="btn-primary" onClick={() => setCreateModal(true)}>+ New ticket</button>}
         </div>
       </header>
 
       {notice && <ActionResultBanner ok={notice.ok} message={notice.text} onDismiss={() => setNotice(null)} />}
 
-      {/* ── KPI Cards ── */}
+      {/* ── KPI Cards (always visible) ── */}
       {analytics && (
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
           <KpiCard label="Total" value={analytics.total} icon="📋" color="brand" />
@@ -200,8 +285,8 @@ export default function Tickets() {
         </div>
       )}
 
-      {/* ── Analytics Section (collapsible) ── */}
-      {showAnalytics && analytics && (
+      {/* ── Analytics (always visible) ── */}
+      {analytics && (
         <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-900 dark:text-white">Analytics — Last {analyticsDays} days</p>
@@ -222,6 +307,48 @@ export default function Tickets() {
               icon="⭐" color="amber"
               sub={analytics.avg_satisfaction != null ? `${"★".repeat(Math.round(analytics.avg_satisfaction))}${"☆".repeat(5 - Math.round(analytics.avg_satisfaction))}` : undefined}
             />
+          </div>
+
+          {/* User & Trouble Ratio */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="card p-4">
+              <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Tickets by Assignee</p>
+              {userStats.length === 0 ? <p className="text-sm text-slate-400">No data</p> : (
+                <div className="space-y-2">
+                  {userStats.map(([name, count]) => {
+                    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                    return (
+                      <div key={name} className="flex items-center gap-2">
+                        <span className="w-28 shrink-0 truncate text-xs text-slate-600 dark:text-slate-400">{name}</span>
+                        <div className="relative h-5 flex-1 overflow-hidden rounded bg-slate-100 dark:bg-slate-800">
+                          <div className="absolute inset-y-0 left-0 rounded bg-brand-500/80 dark:bg-brand-400/60" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="w-16 text-right text-xs text-slate-500">{count} ({pct}%)</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="card p-4">
+              <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Trouble Type Distribution</p>
+              {troubleStats.length === 0 ? <p className="text-sm text-slate-400">No data</p> : (
+                <div className="space-y-2">
+                  {troubleStats.map(([cat, count]) => {
+                    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                    return (
+                      <div key={cat} className="flex items-center gap-2">
+                        <span className="w-28 shrink-0 truncate text-xs text-slate-600 dark:text-slate-400">{cat}</span>
+                        <div className="relative h-5 flex-1 overflow-hidden rounded bg-slate-100 dark:bg-slate-800">
+                          <div className="absolute inset-y-0 left-0 rounded bg-amber-500/80 dark:bg-amber-400/60" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="w-16 text-right text-xs text-slate-500">{count} ({pct}%)</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -298,20 +425,15 @@ export default function Tickets() {
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                 <tr>
-                  {isAdmin && (
-                    <th className="th w-8">
-                      <input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleSelectAll} className="rounded" />
-                    </th>
-                  )}
+                  {isAdmin && <th className="th w-8"><input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleSelectAll} className="rounded" /></th>}
                   <th className="th w-12">ID</th>
-                  <th className="th">Title</th>
+                  <th className="th">Title / Subscriber</th>
                   <th className="th">Status</th>
                   <th className="th">Priority</th>
                   <th className="th hidden lg:table-cell">Category</th>
                   <th className="th hidden md:table-cell">Assigned</th>
-                  <th className="th hidden lg:table-cell">Subscriber</th>
-                  <th className="th hidden xl:table-cell">Comments</th>
-                  <th className="th">Created</th>
+                  <th className="th hidden xl:table-cell">Created</th>
+                  <th className="th hidden xl:table-cell">Elapsed</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -321,32 +443,28 @@ export default function Tickets() {
                     className={`cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 ${selected.has(t.id) ? "bg-brand-50/50 dark:bg-brand-900/10" : ""}`}
                     onClick={() => navigate(`/tickets/${t.id}`)}
                   >
-                    {isAdmin && (
-                      <td className="td" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} className="rounded" />
-                      </td>
-                    )}
+                    {isAdmin && <td className="td" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} className="rounded" /></td>}
                     <td className="td text-xs text-slate-400">{t.id}</td>
                     <td className="td">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-slate-800 dark:text-slate-100">{t.title}</span>
                         {t.is_reopened && <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">reopened</span>}
                       </div>
-                      {t.description && <div className="max-w-md truncate text-xs text-slate-500 dark:text-slate-400">{t.description}</div>}
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        {t.subscriber && (
+                          <button className="font-mono text-brand-700 hover:underline dark:text-cyan-300" onClick={(e) => { e.stopPropagation(); navigate(`/subscribers/${encodeURIComponent(t.subscriber)}`); }}>
+                            {t.subscriber}
+                          </button>
+                        )}
+                        {t.description && <span className="max-w-xs truncate">{t.description}</span>}
+                      </div>
                     </td>
                     <td className="td"><StatusBadge status={t.status} /></td>
                     <td className="td"><PriorityBadge priority={t.priority} /></td>
                     <td className="td hidden lg:table-cell"><CategoryBadge category={t.category} /></td>
                     <td className="td hidden md:table-cell text-slate-600 dark:text-slate-300">{t.assigned_name || "—"}</td>
-                    <td className="td hidden lg:table-cell">
-                      {t.subscriber ? (
-                        <button className="font-mono text-xs text-brand-700 hover:underline dark:text-cyan-300" onClick={(e) => { e.stopPropagation(); navigate(`/subscribers/${encodeURIComponent(t.subscriber)}`); }}>
-                          {t.subscriber}
-                        </button>
-                      ) : <span className="text-slate-400">—</span>}
-                    </td>
-                    <td className="td hidden xl:table-cell text-xs text-slate-400">{t.comment_count || ""}</td>
-                    <td className="td text-xs text-slate-500">{fmtTimeShort(t.created_at)}</td>
+                    <td className="td hidden xl:table-cell text-xs text-slate-500">{fmtTimeShort(t.created_at)}</td>
+                    <td className="td hidden xl:table-cell text-xs text-slate-500">{elapsed(t.created_at, t.resolved_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -356,72 +474,139 @@ export default function Tickets() {
         )}
       </div>
 
-      {/* ── Create Modal ── */}
+      {/* ══════════════════════════════════════════════════════════════════
+          CREATE TICKET MODAL
+          ══════════════════════════════════════════════════════════════════ */}
       {createModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setCreateModal(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">New ticket</h2>
-            {templates.length > 0 && (
-              <div className="mb-3">
-                <label className="label">Quick fill from template</label>
-                <div className="flex flex-wrap gap-1">
-                  {templates.map((t) => <button key={t.id} className="btn-ghost text-xs" onClick={() => applyTemplate(t)}>{t.name}</button>)}
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 pt-8" onClick={resetCreateForm}>
+          <div className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">New Trouble / Ticket</h2>
+
+            <form onSubmit={createTicket} className="space-y-4">
+              {/* ── 1. Subscriber Search ── */}
+              <div ref={subRef} className="relative">
+                <label className="label">Subscriber (PPPoE ID)</label>
+                <input
+                  className="input font-mono"
+                  placeholder="Search subscriber by name, PPPoE ID, or MAC…"
+                  value={subSearch}
+                  onChange={(e) => { setSubSearch(e.target.value); setSelectedSub(null); setSubDropdown(true); }}
+                  onFocus={() => subSearch.length >= 2 && setSubDropdown(true)}
+                />
+                {subDropdown && subResults.length > 0 && (
+                  <div className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                    {subResults.map((s) => (
+                      <button
+                        key={s.subscriber}
+                        type="button"
+                        className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700"
+                        onClick={() => selectSub(s)}
+                      >
+                        <div>
+                          <span className="font-mono font-medium text-slate-800 dark:text-slate-100">{s.subscriber}</span>
+                          {s.onu_name && <span className="ml-2 text-slate-500 dark:text-slate-400">{s.onu_name}</span>}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className={`badge ${s.state === "active" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"}`}>{s.state}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── 2. Selected Subscriber Info + ONU Status ── */}
+              {selectedSub && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-sm font-bold text-slate-800 dark:text-slate-100">{selectedSub.subscriber}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{selectedSub.onu_name} · {selectedSub.pon_port} · {selectedSub.olt_name}</p>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <div className={`badge ${selectedSub.state === "active" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"}`}>
+                        {selectedSub.state}
+                      </div>
+                      <div className="text-right">
+                        <div className={rxPowerColor(selectedSub.rx_power)}>RX: {selectedSub.rx_power != null ? `${selectedSub.rx_power} dBm` : "—"}</div>
+                        <div className="text-slate-500 dark:text-slate-400">TX: {selectedSub.tx_power != null ? `${selectedSub.tx_power} dBm` : "—"}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
-            <form onSubmit={createTicket} className="space-y-3">
+              )}
+
+              {/* ── 3. Trouble Type ── */}
               <div>
-                <label className="label">Title</label>
-                <input className="input" value={createModal.title as string} onChange={(e) => setCreateModal({ ...createModal, title: e.target.value })} required />
+                <label className="label">Trouble Type</label>
+                <select className="input" value={troubleType} onChange={(e) => setTroubleType(e.target.value)}>
+                  <option value="">Select a trouble type…</option>
+                  {TROUBLE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
               </div>
+
+              {/* ── 4. Custom Title (if Other or empty) ── */}
+              {(!troubleType || troubleType === "Other") && (
+                <div>
+                  <label className="label">Ticket Title</label>
+                  <input className="input" placeholder="Enter ticket title…" value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} required />
+                </div>
+              )}
+
+              {/* ── 5. Description ── */}
               <div>
                 <label className="label">Description</label>
-                <textarea className="input min-h-[80px]" value={createModal.description as string} onChange={(e) => setCreateModal({ ...createModal, description: e.target.value })} />
+                <textarea className="input min-h-[80px]" placeholder="Describe the issue…" value={description} onChange={(e) => setDescription(e.target.value)} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+
+              {/* ── 6. Priority / Category / Department ── */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="label">Priority</label>
-                  <select className="input" value={createModal.priority as string} onChange={(e) => setCreateModal({ ...createModal, priority: e.target.value })}>
+                  <select className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
                     {TICKET_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="label">Category</label>
-                  <select className="input" value={createModal.category as string} onChange={(e) => setCreateModal({ ...createModal, category: e.target.value })}>
-                    <option value="">None</option>
+                  <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+                    <option value="">Auto</option>
                     {TICKET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Department</label>
-                  <select className="input" value={createModal.department as string} onChange={(e) => setCreateModal({ ...createModal, department: e.target.value })}>
+                  <select className="input" value={department} onChange={(e) => setDepartment(e.target.value)}>
                     <option value="">None</option>
                     {TICKET_DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
+              </div>
+
+              {/* ── 7. Assign To ── */}
+              {isAdmin && (
                 <div>
-                  <label className="label">Assign to</label>
-                  <select className="input" value={createModal.assigned_to as string} onChange={(e) => setCreateModal({ ...createModal, assigned_to: e.target.value })}>
+                  <label className="label">Assign To</label>
+                  <select className="input" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
                     <option value="">Unassigned</option>
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+                    {users.map((u) => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+              )}
+
+              {/* ── 8. Templates ── */}
+              {templates.length > 0 && (
                 <div>
-                  <label className="label">Subscriber (PPPoE ID)</label>
-                  <input className="input font-mono" value={createModal.subscriber as string} onChange={(e) => setCreateModal({ ...createModal, subscriber: e.target.value })} />
+                  <label className="label">Quick fill from template</label>
+                  <div className="flex flex-wrap gap-1">
+                    {templates.map((t) => <button key={t.id} type="button" className="btn-ghost text-xs" onClick={() => applyTemplate(t)}>{t.name}</button>)}
+                  </div>
                 </div>
-                <div>
-                  <label className="label">ONU ID</label>
-                  <input className="input" value={createModal.onu_id as string} onChange={(e) => setCreateModal({ ...createModal, onu_id: e.target.value })} />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" className="btn-secondary" onClick={() => setCreateModal(null)}>Cancel</button>
-                <button type="submit" className="btn-primary">Create</button>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-700">
+                <button type="button" className="btn-secondary" onClick={resetCreateForm}>Cancel</button>
+                <button type="submit" className="btn-primary">Create Ticket</button>
               </div>
             </form>
           </div>
