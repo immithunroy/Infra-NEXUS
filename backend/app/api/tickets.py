@@ -38,6 +38,7 @@ async def list_tickets(
     assigned_to: int | None = None,
     search: str = "",
     subscriber: str = "",
+    olt_id: int | None = None,
     pon_port: str = "",
     date_from: str = "",
     date_to: str = "",
@@ -50,7 +51,7 @@ async def list_tickets(
         items, total = await svc.list_tickets(
             db, user=user, status=status, priority=priority,
             category=category, department=department, assigned_to=assigned_to,
-            search=search, subscriber=subscriber, pon_port=pon_port,
+            search=search, subscriber=subscriber, olt_id=olt_id, pon_port=pon_port,
             date_from=date_from, date_to=date_to,
             sort_by=sort_by, sort_dir=sort_dir,
             page=page, page_size=page_size,

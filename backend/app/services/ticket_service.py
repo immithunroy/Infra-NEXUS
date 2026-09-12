@@ -168,6 +168,7 @@ async def list_tickets(
     assigned_to: int | None = None,
     search: str = "",
     subscriber: str = "",
+    olt_id: int | None = None,
     pon_port: str = "",
     date_from: str = "",
     date_to: str = "",
@@ -206,6 +207,16 @@ async def list_tickets(
     if subscriber:
         q = q.where(Ticket.subscriber.ilike(f"%{subscriber}%"))
         count_q = count_q.where(Ticket.subscriber.ilike(f"%{subscriber}%"))
+    if olt_id is not None:
+        # Filter by OLT via linked ONU
+        onu_ids = (await db.execute(
+            select(Onu.id).where(Onu.olt_id == olt_id)
+        )).scalars().all()
+        if onu_ids:
+            q = q.where(Ticket.onu_id.in_(onu_ids))
+            count_q = count_q.where(Ticket.onu_id.in_(onu_ids))
+        else:
+            return [], 0
     if pon_port:
         # Filter by PON port via linked ONU
         onu_ids = (await db.execute(
@@ -215,7 +226,6 @@ async def list_tickets(
             q = q.where(Ticket.onu_id.in_(onu_ids))
             count_q = count_q.where(Ticket.onu_id.in_(onu_ids))
         else:
-            # No ONUs match — return empty
             return [], 0
     if date_from:
         try:

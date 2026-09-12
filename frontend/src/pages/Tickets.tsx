@@ -62,7 +62,8 @@ interface Filters {
   department: string;
   assigned_to: string;
   search: string;
-  subscriber: string;
+  title: string;
+  olt_id: string;
   pon_port: string;
   date_from: string;
   date_to: string;
@@ -72,7 +73,7 @@ interface Filters {
 
 const defaultFilters: Filters = {
   status: "", priority: "", category: "", department: "",
-  assigned_to: "", search: "", subscriber: "", pon_port: "",
+  assigned_to: "", search: "", title: "", olt_id: "", pon_port: "",
   date_from: "", date_to: "",
   sort_by: "created_at", sort_dir: "desc",
 };
@@ -117,8 +118,9 @@ export default function Tickets() {
   const [templates, setTemplates] = useState<TicketTemplate[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
   const [bulkModal, setBulkModal] = useState(false);
+  const [oltList, setOltList] = useState<{ id: number; name: string; ports: string[] }[]>([]);
+  const [selectedOltPorts, setSelectedOltPorts] = useState<string[]>([]);
 
   /* ── Create modal state ── */
   const [createModal, setCreateModal] = useState(false);
@@ -167,7 +169,8 @@ export default function Tickets() {
     if (filters.department) params.set("department", filters.department);
     if (filters.assigned_to) params.set("assigned_to", filters.assigned_to);
     if (filters.search) params.set("search", filters.search);
-    if (filters.subscriber) params.set("subscriber", filters.subscriber);
+    if (filters.title) params.set("search", filters.title);
+    if (filters.olt_id) params.set("olt_id", filters.olt_id);
     if (filters.pon_port) params.set("pon_port", filters.pon_port);
     if (filters.date_from) params.set("date_from", filters.date_from);
     if (filters.date_to) params.set("date_to", filters.date_to);
@@ -191,6 +194,7 @@ export default function Tickets() {
   useEffect(() => {
     if (isAdmin) api.get<UserOut[]>("/users").then(setUsers).catch(() => {});
     api.get<TicketTemplate[]>("/tickets/templates/list").then(setTemplates).catch(() => {});
+    api.get<{ id: number; name: string; ports: string[] }[]>("/devices/olts").then(setOltList).catch(() => {});
   }, [isAdmin]);
 
   /* ── Subscriber search ── */
@@ -302,7 +306,7 @@ export default function Tickets() {
     } catch (err) { flash(err instanceof Error ? err.message : "Close failed", false); }
   };
 
-  const activeFilterCount = [filters.status, filters.priority, filters.category, filters.department, filters.assigned_to, filters.subscriber, filters.pon_port, filters.date_from, filters.date_to].filter(Boolean).length;
+  const activeFilterCount = [filters.status, filters.priority, filters.category, filters.department, filters.assigned_to, filters.title, filters.olt_id, filters.pon_port, filters.date_from, filters.date_to].filter(Boolean).length;
 
   /* ── Derived stats ── */
   const userTicketMap = new Map<string, number>();
@@ -453,60 +457,102 @@ export default function Tickets() {
         })}
       </div>
 
-      {/* ── Search + Filters ── */}
-      <div className="card p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <input className="input max-w-xs" placeholder="Search tickets (ref, title, subscriber)…" value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} />
-          <button className={`btn-ghost ${showFilters ? "bg-slate-100 dark:bg-slate-800" : ""}`} onClick={() => setShowFilters(!showFilters)}>
-            Filters {activeFilterCount > 0 && <span className="ml-1 rounded-full bg-brand-600 px-1.5 text-[10px] text-white">{activeFilterCount}</span>}
-          </button>
-          {activeFilterCount > 0 && <button className="btn-ghost text-xs text-slate-500" onClick={resetFilters}>Clear</button>}
-          {selected.size > 0 && isAdmin && <button className="btn-secondary text-xs" onClick={() => setBulkModal(true)}>Bulk edit ({selected.size})</button>}
-        </div>
-        {showFilters && (
-          <div className="mt-3 space-y-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-            {/* Row 1: Status / Priority / Category / Department / Assignee */}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {tab === "active" && (
-                <select className="input" value={filters.status} onChange={(e) => updateFilter("status", e.target.value)}>
-                  <option value="">All statuses</option>
-                  {TICKET_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
-                </select>
-              )}
-              <select className="input" value={filters.priority} onChange={(e) => updateFilter("priority", e.target.value)}>
-                <option value="">All priorities</option>
-                {TICKET_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <select className="input" value={filters.category} onChange={(e) => updateFilter("category", e.target.value)}>
-                <option value="">All categories</option>
-                {TICKET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <select className="input" value={filters.department} onChange={(e) => updateFilter("department", e.target.value)}>
-                <option value="">All departments</option>
-                {TICKET_DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-              {isAdmin && (
-                <select className="input" value={filters.assigned_to} onChange={(e) => updateFilter("assigned_to", e.target.value)}>
-                  <option value="">All assignees</option>
-                  {users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
-                </select>
-              )}
-            </div>
-            {/* Row 2: Subscriber / PON Port / Date From / Date To */}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <input className="input" placeholder="Subscriber ID…" value={filters.subscriber} onChange={(e) => updateFilter("subscriber", e.target.value)} />
-              <input className="input" placeholder="PON port (e.g. EPON0/1)…" value={filters.pon_port} onChange={(e) => updateFilter("pon_port", e.target.value)} />
-              <div>
-                <label className="label text-[10px]">From</label>
-                <input type="date" className="input" value={filters.date_from} onChange={(e) => updateFilter("date_from", e.target.value)} />
-              </div>
-              <div>
-                <label className="label text-[10px]">To</label>
-                <input type="date" className="input" value={filters.date_to} onChange={(e) => updateFilter("date_to", e.target.value)} />
-              </div>
-            </div>
+      {/* ── Filters (always visible) ── */}
+      <div className="card p-3 space-y-3">
+        {/* Row 1: Title + Search + Clear + Bulk */}
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex-1 min-w-[160px]">
+            <label className="label text-[10px]">Title</label>
+            <input className="input" placeholder="Ticket title…" value={filters.title} onChange={(e) => updateFilter("title", e.target.value)} />
           </div>
-        )}
+          <div className="flex-1 min-w-[160px]">
+            <label className="label text-[10px]">Search</label>
+            <input className="input" placeholder="Ref, subscriber, tag…" value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} />
+          </div>
+          <div className="flex items-end gap-2">
+            {activeFilterCount > 0 && <button className="btn-ghost text-xs text-slate-500 h-[38px]" onClick={resetFilters}>Clear</button>}
+            {selected.size > 0 && isAdmin && <button className="btn-secondary text-xs h-[38px]" onClick={() => setBulkModal(true)}>Bulk ({selected.size})</button>}
+          </div>
+        </div>
+        {/* Row 2: Status / Priority / Category / Department / Assignee */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div>
+            <label className="label text-[10px]">Status</label>
+            <select className="input" value={filters.status} onChange={(e) => updateFilter("status", e.target.value)}>
+              <option value="">All statuses</option>
+              {TICKET_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label text-[10px]">Priority</label>
+            <select className="input" value={filters.priority} onChange={(e) => updateFilter("priority", e.target.value)}>
+              <option value="">All priorities</option>
+              {TICKET_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label text-[10px]">Category</label>
+            <select className="input" value={filters.category} onChange={(e) => updateFilter("category", e.target.value)}>
+              <option value="">All categories</option>
+              {TICKET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label text-[10px]">Department</label>
+            <select className="input" value={filters.department} onChange={(e) => updateFilter("department", e.target.value)}>
+              <option value="">All departments</option>
+              {TICKET_DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          {isAdmin && (
+            <div>
+              <label className="label text-[10px]">Assignee</label>
+              <select className="input" value={filters.assigned_to} onChange={(e) => updateFilter("assigned_to", e.target.value)}>
+                <option value="">All assignees</option>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+        {/* Row 3: OLT / PON Port / Date From / Date To */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div>
+            <label className="label text-[10px]">OLT</label>
+            <select
+              className="input"
+              value={filters.olt_id}
+              onChange={(e) => {
+                updateFilter("olt_id", e.target.value);
+                updateFilter("pon_port", "");
+                const olt = oltList.find((o) => String(o.id) === e.target.value);
+                setSelectedOltPorts(olt?.ports || []);
+              }}
+            >
+              <option value="">All OLTs</option>
+              {oltList.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label text-[10px]">PON Port</label>
+            <select
+              className="input"
+              value={filters.pon_port}
+              onChange={(e) => updateFilter("pon_port", e.target.value)}
+              disabled={!filters.olt_id}
+            >
+              <option value="">{filters.olt_id ? "All ports" : "Select OLT first"}</option>
+              {selectedOltPorts.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label text-[10px]">Date From</label>
+            <input type="date" className="input" value={filters.date_from} onChange={(e) => updateFilter("date_from", e.target.value)} />
+          </div>
+          <div>
+            <label className="label text-[10px]">Date To</label>
+            <input type="date" className="input" value={filters.date_to} onChange={(e) => updateFilter("date_to", e.target.value)} />
+          </div>
+        </div>
       </div>
 
       {/* ── Ticket Table ── */}
