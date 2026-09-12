@@ -811,9 +811,13 @@ class TicketCreate(BaseModel):
     title: str
     description: str = ""
     priority: str = "normal"
+    category: str = ""
+    department: str = ""
+    tags: str = ""
     assigned_to: int | None = None
     subscriber: str = ""
     onu_id: int | None = None
+    due_at: datetime | None = None
 
 
 class TicketUpdate(BaseModel):
@@ -821,9 +825,14 @@ class TicketUpdate(BaseModel):
     description: str | None = None
     status: str | None = None
     priority: str | None = None
+    category: str | None = None
+    department: str | None = None
+    tags: str | None = None
     assigned_to: int | None = None
     subscriber: str | None = None
     onu_id: int | None = None
+    due_at: datetime | None = None
+    customer_satisfaction: int | None = None
 
 
 class TicketOut(BaseModel):
@@ -832,6 +841,9 @@ class TicketOut(BaseModel):
     description: str
     status: str
     priority: str
+    category: str = ""
+    department: str = ""
+    tags: str = ""
     assigned_to: int | None = None
     assigned_name: str = ""
     created_by: int | None = None
@@ -841,6 +853,87 @@ class TicketOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     resolved_at: datetime | None = None
+    first_response_at: datetime | None = None
+    due_at: datetime | None = None
+    customer_satisfaction: int | None = None
+    is_reopened: bool = False
+    comment_count: int = 0
+
+
+class TicketCommentCreate(BaseModel):
+    body: str
+    is_internal: bool = False
+
+
+class TicketCommentOut(BaseModel):
+    id: int
+    ticket_id: int
+    user_id: int | None = None
+    user_name: str = ""
+    body: str
+    is_internal: bool = False
+    created_at: datetime
+
+
+class TicketActivityOut(BaseModel):
+    id: int
+    ticket_id: int
+    user_id: int | None = None
+    user_name: str = ""
+    action: str
+    field: str = ""
+    old_value: str = ""
+    new_value: str = ""
+    created_at: datetime
+
+
+class TicketTemplateCreate(BaseModel):
+    name: str
+    title: str
+    description: str = ""
+    priority: str = "normal"
+    category: str = ""
+    department: str = ""
+
+
+class TicketTemplateOut(BaseModel):
+    id: int
+    name: str
+    title: str
+    description: str
+    priority: str
+    category: str
+    department: str
+    created_by: int | None = None
+    created_at: datetime
+
+
+class TicketBulkUpdate(BaseModel):
+    ticket_ids: list[int]
+    status: str | None = None
+    priority: str | None = None
+    assigned_to: int | None = None
+    category: str | None = None
+    department: str | None = None
+
+
+class TicketAnalytics(BaseModel):
+    total: int = 0
+    open_count: int = 0
+    in_progress_count: int = 0
+    resolved_count: int = 0
+    closed_count: int = 0
+    sla_breaches: int = 0
+    avg_response_hours: float | None = None
+    avg_resolution_hours: float | None = None
+    avg_satisfaction: float | None = None
+    reopened_count: int = 0
+    by_priority: list[dict] = []
+    by_category: list[dict] = []
+    by_department: list[dict] = []
+    by_assignee: list[dict] = []
+    volume_over_time: list[dict] = []
+    recent_activity: list[dict] = []
 
 
 class AcsDeviceOut(BaseModel):

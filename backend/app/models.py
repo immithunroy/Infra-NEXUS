@@ -75,6 +75,24 @@ class TicketPriority(str, enum.Enum):
     urgent = "urgent"
 
 
+class TicketCategory(str, enum.Enum):
+    installation = "installation"
+    repair = "repair"
+    complaint = "complaint"
+    maintenance = "maintenance"
+    billing = "billing"
+    inquiry = "inquiry"
+    other = "other"
+
+
+class TicketDepartment(str, enum.Enum):
+    field = "field"
+    noc = "noc"
+    billing = "billing"
+    support = "support"
+    other = "other"
+
+
 class LeadStatus(str, enum.Enum):
     new = "new"
     contacted = "contacted"
@@ -616,6 +634,9 @@ class Ticket(Base):
     # Stored as VARCHAR (matching the migration); validated via the enums.
     status: Mapped[str] = mapped_column(String(32), default=TicketStatus.open.value)
     priority: Mapped[str] = mapped_column(String(32), default=TicketPriority.normal.value)
+    category: Mapped[str] = mapped_column(String(32), default="")
+    department: Mapped[str] = mapped_column(String(32), default="")
+    tags: Mapped[str] = mapped_column(Text, default="")  # comma-separated
 
     assigned_to: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
@@ -633,6 +654,61 @@ class Ticket(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_response_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    customer_satisfaction: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5
+    is_reopened: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    comments = relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan")
+    activities = relationship("TicketActivity", back_populates="ticket", cascade="all, delete-orphan")
+
+
+class TicketComment(Base):
+    """A comment on a ticket — either customer-facing or internal note."""
+
+    __tablename__ = "ticket_comments"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    body: Mapped[str] = mapped_column(Text, default="")
+    is_internal: Mapped[bool] = mapped_column(Boolean, default=False)  # internal note vs customer reply
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    ticket = relationship("Ticket", back_populates="comments")
+
+
+class TicketActivity(Base):
+    """Audit log entry for a ticket — tracks every change made."""
+
+    __tablename__ = "ticket_activities"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action: Mapped[str] = mapped_column(String(32), default="")  # created, updated, commented, assigned, status_change, etc.
+    field: Mapped[str] = mapped_column(String(64), default="")  # which field changed
+    old_value: Mapped[str] = mapped_column(Text, default="")
+    new_value: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    ticket = relationship("Ticket", back_populates="activities")
+
+
+class TicketTemplate(Base):
+    """Reusable ticket template / macro for quick ticket creation."""
+
+    __tablename__ = "ticket_templates"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    title: Mapped[str] = mapped_column(String(256), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    priority: Mapped[str] = mapped_column(String(32), default=TicketPriority.normal.value)
+    category: Mapped[str] = mapped_column(String(32), default="")
+    department: Mapped[str] = mapped_column(String(32), default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class AcsDevice(Base):

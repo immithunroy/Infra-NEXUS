@@ -1,76 +1,73 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import Ticket, TicketPriority, TicketStatus, User, UserRole
-from ..schemas import TicketCreate, TicketOut, TicketUpdate
+from ..models import User
+from ..schemas import (
+    TicketCreate, TicketOut, TicketUpdate,
+    TicketCommentCreate, TicketCommentOut,
+    TicketActivityOut,
+    TicketTemplateCreate, TicketTemplateOut,
+    TicketBulkUpdate, TicketAnalytics,
+)
 from ..security import get_current_user, require_write, require_fiber_request, user_role
+from ..services import ticket_service as svc
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"], dependencies=[Depends(get_current_user)])
 
 
-def _status(v: str | None, default: str = TicketStatus.open.value) -> str:
-    if v is None:
-        return default
+class TicketListResponse(BaseModel):
+    items: list[TicketOut]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
+# ── List / Search / Filter ───────────────────────────────────────────────
+
+@router.get("", response_model=TicketListResponse)
+async def list_tickets(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    status: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    department: str | None = None,
+    assigned_to: int | None = None,
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+):
     try:
-        return TicketStatus(v).value
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"Unknown status: {v}")
+        items, total = await svc.list_tickets(
+            db, user=user, status=status, priority=priority,
+            category=category, department=department, assigned_to=assigned_to,
+            search=search, sort_by=sort_by, sort_dir=sort_dir,
+            page=page, page_size=page_size,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    pages = max(1, -(-total // page_size))  # ceil division
+    return TicketListResponse(items=items, total=total, page=page, page_size=page_size, pages=pages)
 
 
-def _priority(v: str | None, default: str = TicketPriority.normal.value) -> str:
-    if v is None:
-        return default
-    try:
-        return TicketPriority(v).value
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"Unknown priority: {v}")
+# ── Get single ticket ────────────────────────────────────────────────────
+
+@router.get("/{ticket_id}", response_model=TicketOut)
+async def get_ticket(ticket_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    ticket = await svc.get_ticket(db, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return await svc.to_out(db, ticket)
 
 
-async def _names(db: AsyncSession, users: list[User]) -> dict[int, str]:
-    return {u.id: u.username for u in users}
+# ── Create ───────────────────────────────────────────────────────────────
 
-
-@router.get("", response_model=list[TicketOut])
-async def list_tickets(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    """List tickets. Non-admins only see the ones assigned to them."""
-    q = select(Ticket).order_by(Ticket.status, Ticket.priority, Ticket.created_at.desc())
-    if user_role(user) != UserRole.admin.value:
-        q = q.where(Ticket.assigned_to == user.id)
-    rows = (await db.execute(q)).scalars().all()
-    user_ids = {t.assigned_to for t in rows} | {t.created_by for t in rows}
-    user_ids.discard(None)
-    unames = {}
-    if user_ids:
-        us = (await db.execute(select(User).where(User.id.in_(user_ids)))).scalars().all()
-        unames = await _names(db, us)
-    out = []
-    for t in rows:
-        out.append(_to_out(t, unames))
-    return out
-
-
-def _to_out(t: Ticket, unames: dict[int, str]) -> TicketOut:
-    return TicketOut(
-        id=t.id,
-        title=t.title,
-        description=t.description,
-        status=t.status,
-        priority=t.priority,
-        assigned_to=t.assigned_to,
-        assigned_name=unames.get(t.assigned_to, "") if t.assigned_to else "",
-        created_by=t.created_by,
-        created_by_name=unames.get(t.created_by, "") if t.created_by else "",
-        subscriber=t.subscriber,
-        onu_id=t.onu_id,
-        created_at=t.created_at,
-        updated_at=t.updated_at,
-        resolved_at=t.resolved_at,
-    )
-
-
-@router.post("", response_model=TicketOut)
+@router.post("", response_model=TicketOut, status_code=201)
 async def create_ticket(
     body: TicketCreate,
     user: User = Depends(require_fiber_request),
@@ -78,29 +75,18 @@ async def create_ticket(
 ):
     if not body.title.strip():
         raise HTTPException(status_code=422, detail="title is required")
-    if body.assigned_to is not None:
-        assignee = await db.get(User, body.assigned_to)
-        if assignee is None:
-            raise HTTPException(status_code=404, detail="Assigned user not found")
-    ticket = Ticket(
-        title=body.title.strip(),
-        description=body.description,
-        priority=_priority(body.priority),
-        assigned_to=body.assigned_to,
-        created_by=user.id,
-        subscriber=body.subscriber or "",
-        onu_id=body.onu_id,
-    )
-    db.add(ticket)
-    await db.commit()
-    await db.refresh(ticket)
-    unames = {user.id: user.username}
-    if ticket.assigned_to:
-        assignee = await db.get(User, ticket.assigned_to)
-        if assignee:
-            unames[assignee.id] = assignee.username
-    return _to_out(ticket, unames)
+    try:
+        ticket = await svc.create_ticket(db, body, user)
+        await db.commit()
+        await db.refresh(ticket)
+        return await svc.to_out(db, ticket)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
+
+# ── Update ───────────────────────────────────────────────────────────────
 
 @router.put("/{ticket_id}", response_model=TicketOut)
 async def update_ticket(
@@ -109,67 +95,138 @@ async def update_ticket(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    ticket = await db.get(Ticket, ticket_id)
+    ticket = await svc.get_ticket(db, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    try:
+        ticket = await svc.update_ticket(db, ticket, body, user)
+        await db.commit()
+        await db.refresh(ticket)
+        return await svc.to_out(db, ticket)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
-    role = user_role(user)
-    is_admin = role == UserRole.admin.value
-    is_assignee = ticket.assigned_to == user.id
-    can_write = role in (UserRole.admin.value, UserRole.global_write.value)
-    if not (is_admin or is_assignee or can_write):
-        raise HTTPException(status_code=403, detail="You can only update tickets assigned to you")
 
-    data = body.model_dump(exclude_unset=True)
-    if "assigned_to" in data and not is_admin:
-        raise HTTPException(status_code=403, detail="Only admins can reassign tickets")
-    if "onu_id" in data and not can_write:
-        raise HTTPException(status_code=403, detail="Only admins/global-write can relink a subscriber")
-    if "title" in data and not can_write:
-        raise HTTPException(status_code=403, detail="Only admins/global-write can change the title")
-
-    if "status" in data:
-        ticket.status = _status(data["status"], ticket.status)
-    if "priority" in data:
-        ticket.priority = _priority(data["priority"], ticket.priority)
-    if "description" in data:
-        ticket.description = data["description"]
-    if "title" in data and can_write:
-        ticket.title = data["title"].strip() or ticket.title
-    if "subscriber" in data and can_write:
-        ticket.subscriber = data["subscriber"] or ""
-    if "onu_id" in data and can_write:
-        ticket.onu_id = data["onu_id"]
-    if "assigned_to" in data and is_admin:
-        if data["assigned_to"] is not None:
-            assignee = await db.get(User, data["assigned_to"])
-            if assignee is None:
-                raise HTTPException(status_code=404, detail="Assigned user not found")
-        ticket.assigned_to = data["assigned_to"]
-
-    from ..utils.time import utcnow
-
-    if ticket.status in (TicketStatus.resolved.value, TicketStatus.closed.value):
-        if ticket.resolved_at is None:
-            ticket.resolved_at = utcnow()
-    elif ticket.status in (TicketStatus.open.value, TicketStatus.in_progress.value):
-        ticket.resolved_at = None
-
-    await db.commit()
-    await db.refresh(ticket)
-    user_ids = {ticket.assigned_to, ticket.created_by}
-    user_ids.discard(None)
-    unames = {}
-    if user_ids:
-        us = (await db.execute(select(User).where(User.id.in_(user_ids)))).scalars().all()
-        unames = await _names(db, us)
-    return _to_out(ticket, unames)
-
+# ── Delete ───────────────────────────────────────────────────────────────
 
 @router.delete("/{ticket_id}", status_code=204)
 async def delete_ticket(ticket_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
-    ticket = await db.get(Ticket, ticket_id)
+    ticket = await svc.get_ticket(db, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    await db.delete(ticket)
+    await svc.delete_ticket(db, ticket)
     await db.commit()
+
+
+# ── Comments ─────────────────────────────────────────────────────────────
+
+@router.get("/{ticket_id}/comments", response_model=list[TicketCommentOut])
+async def list_comments(ticket_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    ticket = await svc.get_ticket(db, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return await svc.list_comments(db, ticket_id)
+
+
+@router.post("/{ticket_id}/comments", response_model=TicketCommentOut, status_code=201)
+async def create_comment(
+    ticket_id: int,
+    body: TicketCommentCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ticket = await svc.get_ticket(db, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if not body.body.strip():
+        raise HTTPException(status_code=422, detail="body is required")
+    comment = await svc.create_comment(db, ticket_id, body, user)
+    await db.commit()
+    await db.refresh(comment)
+    names = await svc._resolve_names(db, {comment.user_id} - {None})
+    return TicketCommentOut(
+        id=comment.id,
+        ticket_id=comment.ticket_id,
+        user_id=comment.user_id,
+        user_name=names.get(comment.user_id, "") if comment.user_id else "",
+        body=comment.body,
+        is_internal=comment.is_internal,
+        created_at=comment.created_at,
+    )
+
+
+# ── Activity log ─────────────────────────────────────────────────────────
+
+@router.get("/{ticket_id}/activities", response_model=list[TicketActivityOut])
+async def list_activities(ticket_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    ticket = await svc.get_ticket(db, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return await svc.list_activities(db, ticket_id)
+
+
+# ── Bulk update ──────────────────────────────────────────────────────────
+
+@router.post("/bulk-update")
+async def bulk_update(
+    body: TicketBulkUpdate,
+    user: User = Depends(require_write),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        count = await svc.bulk_update(db, body, user)
+        await db.commit()
+        return {"updated": count}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+# ── Templates ────────────────────────────────────────────────────────────
+
+@router.get("/templates/list", response_model=list[TicketTemplateOut])
+async def list_templates(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    return await svc.list_templates(db, user)
+
+
+@router.post("/templates", response_model=TicketTemplateOut, status_code=201)
+async def create_template(
+    body: TicketTemplateCreate,
+    user: User = Depends(require_write),
+    db: AsyncSession = Depends(get_db),
+):
+    if not body.name.strip():
+        raise HTTPException(status_code=422, detail="name is required")
+    tmpl = await svc.create_template(db, body, user)
+    await db.commit()
+    await db.refresh(tmpl)
+    return TicketTemplateOut(
+        id=tmpl.id, name=tmpl.name, title=tmpl.title, description=tmpl.description,
+        priority=tmpl.priority, category=tmpl.category, department=tmpl.department,
+        created_by=tmpl.created_by, created_at=tmpl.created_at,
+    )
+
+
+@router.delete("/templates/{template_id}", status_code=204)
+async def delete_template(template_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
+    try:
+        await svc.delete_template(db, template_id)
+        await db.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ── Analytics ────────────────────────────────────────────────────────────
+
+@router.get("/analytics/dashboard", response_model=TicketAnalytics)
+async def ticket_analytics(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    days: int = Query(30, ge=1, le=365),
+):
+    return await svc.get_analytics(db, user=user, days=days)
