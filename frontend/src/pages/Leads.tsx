@@ -576,47 +576,53 @@ export default function Leads() {
 
       {/* ── Charts ───────────────────────────────────────────────────── */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="card p-5">
+        <div className="card flex h-[360px] flex-col p-5">
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
             Status Distribution
           </h3>
-          {statusSegments.length > 0 ? (
-            <DonutChart
-              segments={statusSegments}
-              center={String(dashboard?.total || 0)}
-              sub="total leads"
-            />
-          ) : (
-            <div className="flex h-40 items-center justify-center text-sm text-slate-400 dark:text-slate-500">
-              No leads yet.
-            </div>
-          )}
+          <div className="flex-1 overflow-hidden">
+            {statusSegments.length > 0 ? (
+              <DonutChart
+                segments={statusSegments}
+                center={String(dashboard?.total || 0)}
+                sub="total leads"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400 dark:text-slate-500">
+                No leads yet.
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="card p-5">
+        <div className="card flex h-[360px] flex-col p-5">
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
             Monthly Performance
           </h3>
-          <BarChart
-            data={monthlyChartData}
-            barColors={["#6366f1", "#10b981", "#ef4444"]}
-            labels={["Total", "Successful", "Lost"]}
-          />
+          <div className="flex-1 overflow-hidden">
+            <BarChart
+              data={monthlyChartData}
+              barColors={["#6366f1", "#10b981", "#ef4444"]}
+              labels={["Total", "Successful", "Lost"]}
+            />
+          </div>
         </div>
 
-        <div className="card p-5">
+        <div className="card flex h-[360px] flex-col p-5">
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
             User Performance
           </h3>
-          <HorizontalBarChart
-            data={userPerfData.rows.map((u) => ({
-              label: u.user_name,
-              total: u.total_leads,
-              successful: u.successful,
-              rate: u.conversion_rate,
-            }))}
-            maxVal={userPerfData.maxVal}
-          />
+          <div className="flex-1 overflow-hidden">
+            <HorizontalBarChart
+              data={userPerfData.rows.map((u) => ({
+                label: u.user_name,
+                total: u.total_leads,
+                successful: u.successful,
+                rate: u.conversion_rate,
+              }))}
+              maxVal={userPerfData.maxVal}
+            />
+          </div>
         </div>
       </div>
 
