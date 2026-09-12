@@ -25,7 +25,7 @@ export default function TicketDetail() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const [commentText, setCommentText] = useState("");
-  const [isInternal, setIsInternal] = useState(false);
+  const [commentType, setCommentType] = useState("general");
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [tab, setTab] = useState<"conversation" | "activity">("conversation");
 
@@ -56,9 +56,9 @@ export default function TicketDetail() {
     e.preventDefault();
     if (!id || !commentText.trim()) return;
     try {
-      await api.post(`/tickets/${id}/comments`, { body: commentText, is_internal: isInternal });
+      await api.post(`/tickets/${id}/comments`, { body: commentText, comment_type: commentType });
       setCommentText("");
-      setIsInternal(false);
+      setCommentType("general");
       loadAll();
     } catch (err) {
       flash(err instanceof Error ? err.message : "Failed", false);
@@ -258,10 +258,12 @@ export default function TicketDetail() {
                     onChange={(e) => setCommentText(e.target.value)}
                   />
                   <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-xs text-slate-500">
-                      <input type="checkbox" checked={isInternal} onChange={(e) => setIsInternal(e.target.checked)} className="rounded" />
-                      Internal note (not visible to customer)
-                    </label>
+                    <select className="input w-auto text-xs" value={commentType} onChange={(e) => setCommentType(e.target.value)}>
+                      <option value="general">💬 General</option>
+                      <option value="employee">👤 Employee Note</option>
+                      <option value="closing">✅ Closing</option>
+                      <option value="suggestion">💡 Suggestion</option>
+                    </select>
                     <button type="submit" className="btn-primary text-xs" disabled={!commentText.trim()}>Add comment</button>
                   </div>
                 </form>
@@ -271,18 +273,33 @@ export default function TicketDetail() {
                   <p className="py-8 text-center text-sm text-slate-400">No comments yet</p>
                 ) : (
                   <div className="space-y-3">
-                    {comments.map((c) => (
-                      <div key={c.id} className={`rounded-lg border p-3 ${c.is_internal ? "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/10" : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50"}`}>
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                            {c.user_name || "System"}
-                            {c.is_internal && <span className="ml-2 text-amber-600 dark:text-amber-400">🔒 Internal</span>}
-                          </span>
-                          <span className="text-xs text-slate-400">{fmtTime(c.created_at)}</span>
+                    {comments.map((c) => {
+                      const typeColors: Record<string, string> = {
+                        general: "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50",
+                        employee: "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/10",
+                        closing: "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/10",
+                        suggestion: "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-900/10",
+                      };
+                      const typeLabels: Record<string, string> = {
+                        general: "",
+                        employee: "👤 Employee",
+                        closing: "✅ Closing",
+                        suggestion: "💡 Suggestion",
+                      };
+                      const ct = c.comment_type || (c.is_internal ? "employee" : "general");
+                      return (
+                        <div key={c.id} className={`rounded-lg border p-3 ${typeColors[ct] || typeColors.general}`}>
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                              {c.user_name || "System"}
+                              {typeLabels[ct] && <span className="ml-2">{typeLabels[ct]}</span>}
+                            </span>
+                            <span className="text-xs text-slate-400">{fmtTime(c.created_at)}</span>
+                          </div>
+                          <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{c.body}</p>
                         </div>
-                        <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{c.body}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

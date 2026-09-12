@@ -14,6 +14,14 @@ import { BarChart } from "../components/tickets/Charts";
 import { Pagination } from "../components/Pagination";
 import ActionResultBanner from "../components/ActionResultBanner";
 
+/* ── Comment types ── */
+export const COMMENT_TYPES = [
+  { value: "general", label: "General Comment", color: "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300" },
+  { value: "employee", label: "Employee Note", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
+  { value: "closing", label: "Closing Comment", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
+  { value: "suggestion", label: "Suggestion", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+] as const;
+
 /* ── Predefined trouble types ── */
 const TROUBLE_TYPES = [
   "No Internet",
@@ -54,13 +62,19 @@ interface Filters {
   department: string;
   assigned_to: string;
   search: string;
+  subscriber: string;
+  pon_port: string;
+  date_from: string;
+  date_to: string;
   sort_by: string;
   sort_dir: string;
 }
 
 const defaultFilters: Filters = {
   status: "", priority: "", category: "", department: "",
-  assigned_to: "", search: "", sort_by: "created_at", sort_dir: "desc",
+  assigned_to: "", search: "", subscriber: "", pon_port: "",
+  date_from: "", date_to: "",
+  sort_by: "created_at", sort_dir: "desc",
 };
 
 /* ── Helpers ── */
@@ -153,6 +167,10 @@ export default function Tickets() {
     if (filters.department) params.set("department", filters.department);
     if (filters.assigned_to) params.set("assigned_to", filters.assigned_to);
     if (filters.search) params.set("search", filters.search);
+    if (filters.subscriber) params.set("subscriber", filters.subscriber);
+    if (filters.pon_port) params.set("pon_port", filters.pon_port);
+    if (filters.date_from) params.set("date_from", filters.date_from);
+    if (filters.date_to) params.set("date_to", filters.date_to);
     params.set("sort_by", filters.sort_by);
     params.set("sort_dir", filters.sort_dir);
     params.set("page", String(page));
@@ -284,7 +302,7 @@ export default function Tickets() {
     } catch (err) { flash(err instanceof Error ? err.message : "Close failed", false); }
   };
 
-  const activeFilterCount = [filters.status, filters.priority, filters.category, filters.department, filters.assigned_to].filter(Boolean).length;
+  const activeFilterCount = [filters.status, filters.priority, filters.category, filters.department, filters.assigned_to, filters.subscriber, filters.pon_port, filters.date_from, filters.date_to].filter(Boolean).length;
 
   /* ── Derived stats ── */
   const userTicketMap = new Map<string, number>();
@@ -435,23 +453,26 @@ export default function Tickets() {
         })}
       </div>
 
-      {/* ── Search + Filters (Active tab only) ── */}
-      {tab === "active" && (
-        <div className="card p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <input className="input max-w-xs" placeholder="Search tickets…" value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} />
-            <button className={`btn-ghost ${showFilters ? "bg-slate-100 dark:bg-slate-800" : ""}`} onClick={() => setShowFilters(!showFilters)}>
-              Filters {activeFilterCount > 0 && <span className="ml-1 rounded-full bg-brand-600 px-1.5 text-[10px] text-white">{activeFilterCount}</span>}
-            </button>
-            {activeFilterCount > 0 && <button className="btn-ghost text-xs text-slate-500" onClick={resetFilters}>Clear</button>}
-            {selected.size > 0 && isAdmin && <button className="btn-secondary text-xs" onClick={() => setBulkModal(true)}>Bulk edit ({selected.size})</button>}
-          </div>
-          {showFilters && (
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200 pt-3 sm:grid-cols-5 dark:border-slate-700">
-              <select className="input" value={filters.status} onChange={(e) => updateFilter("status", e.target.value)}>
-                <option value="">All statuses</option>
-                {TICKET_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
-              </select>
+      {/* ── Search + Filters ── */}
+      <div className="card p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <input className="input max-w-xs" placeholder="Search tickets (ref, title, subscriber)…" value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} />
+          <button className={`btn-ghost ${showFilters ? "bg-slate-100 dark:bg-slate-800" : ""}`} onClick={() => setShowFilters(!showFilters)}>
+            Filters {activeFilterCount > 0 && <span className="ml-1 rounded-full bg-brand-600 px-1.5 text-[10px] text-white">{activeFilterCount}</span>}
+          </button>
+          {activeFilterCount > 0 && <button className="btn-ghost text-xs text-slate-500" onClick={resetFilters}>Clear</button>}
+          {selected.size > 0 && isAdmin && <button className="btn-secondary text-xs" onClick={() => setBulkModal(true)}>Bulk edit ({selected.size})</button>}
+        </div>
+        {showFilters && (
+          <div className="mt-3 space-y-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+            {/* Row 1: Status / Priority / Category / Department / Assignee */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {tab === "active" && (
+                <select className="input" value={filters.status} onChange={(e) => updateFilter("status", e.target.value)}>
+                  <option value="">All statuses</option>
+                  {TICKET_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                </select>
+              )}
               <select className="input" value={filters.priority} onChange={(e) => updateFilter("priority", e.target.value)}>
                 <option value="">All priorities</option>
                 {TICKET_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -471,9 +492,22 @@ export default function Tickets() {
                 </select>
               )}
             </div>
-          )}
-        </div>
-      )}
+            {/* Row 2: Subscriber / PON Port / Date From / Date To */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <input className="input" placeholder="Subscriber ID…" value={filters.subscriber} onChange={(e) => updateFilter("subscriber", e.target.value)} />
+              <input className="input" placeholder="PON port (e.g. EPON0/1)…" value={filters.pon_port} onChange={(e) => updateFilter("pon_port", e.target.value)} />
+              <div>
+                <label className="label text-[10px]">From</label>
+                <input type="date" className="input" value={filters.date_from} onChange={(e) => updateFilter("date_from", e.target.value)} />
+              </div>
+              <div>
+                <label className="label text-[10px]">To</label>
+                <input type="date" className="input" value={filters.date_to} onChange={(e) => updateFilter("date_to", e.target.value)} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ── Ticket Table ── */}
       <div className="card overflow-x-auto">
@@ -489,7 +523,7 @@ export default function Tickets() {
               <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                 <tr>
                   {isAdmin && <th className="th w-8"><input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleSelectAll} className="rounded" /></th>}
-                  <th className="th w-12">ID</th>
+                  <th className="th w-12">Ref</th>
                   <th className="th">Title / Subscriber</th>
                   <th className="th">Status</th>
                   <th className="th">Priority</th>
@@ -508,7 +542,7 @@ export default function Tickets() {
                     onClick={() => navigate(`/tickets/${t.id}`)}
                   >
                     {isAdmin && <td className="td" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} className="rounded" /></td>}
-                    <td className="td text-xs text-slate-400">{t.id}</td>
+                    <td className="td text-xs font-mono text-slate-500">{t.ticket_ref || `#${t.id}`}</td>
                     <td className="td">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-slate-800 dark:text-slate-100">{t.title}</span>

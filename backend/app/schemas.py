@@ -847,6 +847,7 @@ class TicketUpdate(BaseModel):
 
 class TicketOut(BaseModel):
     id: int
+    ticket_ref: str = ""
     title: str
     description: str
     status: str
@@ -876,7 +877,8 @@ class TicketOut(BaseModel):
 
 class TicketCommentCreate(BaseModel):
     body: str
-    is_internal: bool = False
+    comment_type: str = "general"  # general|employee|closing|suggestion
+    is_internal: bool = False  # legacy, kept for compat
 
 
 class TicketCommentOut(BaseModel):
@@ -885,6 +887,7 @@ class TicketCommentOut(BaseModel):
     user_id: int | None = None
     user_name: str = ""
     body: str
+    comment_type: str = "general"
     is_internal: bool = False
     created_at: datetime
 

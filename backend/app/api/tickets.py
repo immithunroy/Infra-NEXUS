@@ -37,6 +37,10 @@ async def list_tickets(
     department: str | None = None,
     assigned_to: int | None = None,
     search: str = "",
+    subscriber: str = "",
+    pon_port: str = "",
+    date_from: str = "",
+    date_to: str = "",
     sort_by: str = "created_at",
     sort_dir: str = "desc",
     page: int = Query(1, ge=1),
@@ -46,7 +50,9 @@ async def list_tickets(
         items, total = await svc.list_tickets(
             db, user=user, status=status, priority=priority,
             category=category, department=department, assigned_to=assigned_to,
-            search=search, sort_by=sort_by, sort_dir=sort_dir,
+            search=search, subscriber=subscriber, pon_port=pon_port,
+            date_from=date_from, date_to=date_to,
+            sort_by=sort_by, sort_dir=sort_dir,
             page=page, page_size=page_size,
         )
     except Exception as exc:
@@ -156,6 +162,7 @@ async def create_comment(
         user_id=comment.user_id,
         user_name=names.get(comment.user_id, "") if comment.user_id else "",
         body=comment.body,
+        comment_type=getattr(comment, "comment_type", "general") or "general",
         is_internal=comment.is_internal,
         created_at=comment.created_at,
     )

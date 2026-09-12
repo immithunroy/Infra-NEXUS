@@ -775,6 +775,7 @@ export interface PortReportExport {
 
 export interface Ticket {
   id: number;
+  ticket_ref: string;
   title: string;
   description: string;
   status: string;
@@ -813,6 +814,7 @@ export interface TicketComment {
   user_id: number | null;
   user_name: string;
   body: string;
+  comment_type: string;
   is_internal: boolean;
   created_at: string;
 }

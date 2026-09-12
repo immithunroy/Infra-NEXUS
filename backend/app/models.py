@@ -629,6 +629,7 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_ref: Mapped[str] = mapped_column(String(20), default="", unique=True, index=True)
     title: Mapped[str] = mapped_column(String(256), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     # Stored as VARCHAR (matching the migration); validated via the enums.
@@ -676,7 +677,8 @@ class TicketComment(Base):
     ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     body: Mapped[str] = mapped_column(Text, default="")
-    is_internal: Mapped[bool] = mapped_column(Boolean, default=False)  # internal note vs customer reply
+    comment_type: Mapped[str] = mapped_column(String(32), default="general")  # general|employee|closing|suggestion
+    is_internal: Mapped[bool] = mapped_column(Boolean, default=False)  # legacy field, kept for compat
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     ticket = relationship("Ticket", back_populates="comments")

@@ -23,6 +23,26 @@ from ..utils.time import utcnow
 logger = logging.getLogger("olt_commander.tickets")
 
 # ---------------------------------------------------------------------------
+# Ticket reference ID generation — TT-YYMMDDNNN
+# ---------------------------------------------------------------------------
+
+async def generate_ticket_ref(db: AsyncSession) -> str:
+    """Generate unique ticket reference like TT-260912001."""
+    now = utcnow()
+    prefix = f"TT-{now.strftime('%y%m%d')}"
+    # Count existing tickets created today
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    count = (await db.execute(
+        select(func.count(Ticket.id)).where(
+            and_(Ticket.created_at >= day_start, Ticket.created_at < day_end)
+        )
+    )).scalar() or 0
+    seq = count + 1
+    return f"{prefix}{seq:03d}"
+
+
+# ---------------------------------------------------------------------------
 # Validation helpers
 # ---------------------------------------------------------------------------
 
@@ -81,6 +101,7 @@ async def to_out(db: AsyncSession, t: Ticket, comment_count: int = 0) -> TicketO
     names = await _resolve_names(db, {t.assigned_to, t.created_by} - {None})
     return TicketOut(
         id=t.id,
+        ticket_ref=t.ticket_ref or "",
         title=t.title,
         description=t.description,
         status=t.status,
@@ -146,12 +167,17 @@ async def list_tickets(
     department: str | None = None,
     assigned_to: int | None = None,
     search: str = "",
+    subscriber: str = "",
+    pon_port: str = "",
+    date_from: str = "",
+    date_to: str = "",
     sort_by: str = "created_at",
     sort_dir: str = "desc",
     page: int = 1,
     page_size: int = 25,
 ) -> tuple[list[TicketOut], int]:
     """Return (tickets, total_count) with filtering, search, sorting, pagination."""
+    from ..models import Onu
     q = select(Ticket)
     count_q = select(func.count(Ticket.id))
 
@@ -177,11 +203,40 @@ async def list_tickets(
     if assigned_to is not None:
         q = q.where(Ticket.assigned_to == assigned_to)
         count_q = count_q.where(Ticket.assigned_to == assigned_to)
+    if subscriber:
+        q = q.where(Ticket.subscriber.ilike(f"%{subscriber}%"))
+        count_q = count_q.where(Ticket.subscriber.ilike(f"%{subscriber}%"))
+    if pon_port:
+        # Filter by PON port via linked ONU
+        onu_ids = (await db.execute(
+            select(Onu.id).where(Onu.pon_port.ilike(f"%{pon_port}%"))
+        )).scalars().all()
+        if onu_ids:
+            q = q.where(Ticket.onu_id.in_(onu_ids))
+            count_q = count_q.where(Ticket.onu_id.in_(onu_ids))
+        else:
+            # No ONUs match — return empty
+            return [], 0
+    if date_from:
+        try:
+            dt_from = datetime.fromisoformat(date_from)
+            q = q.where(Ticket.created_at >= dt_from)
+            count_q = count_q.where(Ticket.created_at >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.fromisoformat(date_to)
+            q = q.where(Ticket.created_at <= dt_to)
+            count_q = count_q.where(Ticket.created_at <= dt_to)
+        except ValueError:
+            pass
 
     # Search
     if search:
         like = f"%{search}%"
         search_filter = or_(
+            Ticket.ticket_ref.ilike(like),
             Ticket.title.ilike(like),
             Ticket.description.ilike(like),
             Ticket.subscriber.ilike(like),
@@ -230,7 +285,9 @@ async def get_ticket(db: AsyncSession, ticket_id: int) -> Ticket | None:
 
 
 async def create_ticket(db: AsyncSession, body: TicketCreate, user: User) -> Ticket:
+    ticket_ref = await generate_ticket_ref(db)
     ticket = Ticket(
+        ticket_ref=ticket_ref,
         title=body.title.strip(),
         description=body.description,
         priority=_validate_priority(body.priority),
@@ -402,6 +459,7 @@ async def list_comments(db: AsyncSession, ticket_id: int) -> list[TicketCommentO
             user_id=c.user_id,
             user_name=names.get(c.user_id, "") if c.user_id else "",
             body=c.body,
+            comment_type=getattr(c, "comment_type", "general") or "general",
             is_internal=c.is_internal,
             created_at=c.created_at,
         )
@@ -416,11 +474,12 @@ async def create_comment(
         ticket_id=ticket_id,
         user_id=user.id,
         body=body.body,
-        is_internal=body.is_internal,
+        comment_type=body.comment_type or "general",
+        is_internal=body.is_internal or (body.comment_type == "employee"),
     )
     db.add(comment)
     await db.flush()
-    await log_activity(db, ticket_id, user.id, "commented", "comment", "", body.body[:200])
+    await log_activity(db, ticket_id, user.id, "commented", f"comment({body.comment_type})", "", body.body[:200])
     return comment
 
 
