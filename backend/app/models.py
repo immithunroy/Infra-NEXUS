@@ -656,6 +656,10 @@ class Ticket(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     first_response_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_asap: Mapped[bool] = mapped_column(Boolean, default=False)
+    phone1: Mapped[str] = mapped_column(String(32), default="")
+    phone2: Mapped[str] = mapped_column(String(32), default="")
     customer_satisfaction: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5
     is_reopened: Mapped[bool] = mapped_column(Boolean, default=False)
 

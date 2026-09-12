@@ -1,0 +1,11 @@
+-- Migration 006: tickets v3 — expected_at, is_asap, phone1/phone2
+BEGIN;
+
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS expected_at TIMESTAMPTZ;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_asap BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phone1 VARCHAR(32) NOT NULL DEFAULT '';
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phone2 VARCHAR(32) NOT NULL DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS ix_tickets_expected_at ON tickets(expected_at) WHERE expected_at IS NOT NULL;
+
+COMMIT;

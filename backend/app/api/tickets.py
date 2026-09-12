@@ -111,15 +111,17 @@ async def update_ticket(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-# ── Delete ───────────────────────────────────────────────────────────────
+# ── Close ───────────────────────────────────────────────────────────────
 
-@router.delete("/{ticket_id}", status_code=204)
-async def delete_ticket(ticket_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
+@router.post("/{ticket_id}/close", response_model=TicketOut)
+async def close_ticket(ticket_id: int, user: User = Depends(require_write), db: AsyncSession = Depends(get_db)):
     ticket = await svc.get_ticket(db, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    await svc.delete_ticket(db, ticket)
+    ticket = await svc.close_ticket(db, ticket, user)
     await db.commit()
+    await db.refresh(ticket)
+    return await svc.to_out(db, ticket)
 
 
 # ── Comments ─────────────────────────────────────────────────────────────

@@ -99,9 +99,13 @@ async def to_out(db: AsyncSession, t: Ticket, comment_count: int = 0) -> TicketO
         resolved_at=t.resolved_at,
         first_response_at=t.first_response_at,
         due_at=t.due_at,
+        expected_at=t.expected_at,
+        is_asap=t.is_asap or False,
         customer_satisfaction=t.customer_satisfaction,
         is_reopened=t.is_reopened or False,
         comment_count=comment_count,
+        phone1=getattr(t, "phone1", "") or "",
+        phone2=getattr(t, "phone2", "") or "",
     )
 
 
@@ -238,6 +242,10 @@ async def create_ticket(db: AsyncSession, body: TicketCreate, user: User) -> Tic
         subscriber=body.subscriber or "",
         onu_id=body.onu_id,
         due_at=body.due_at,
+        expected_at=body.expected_at,
+        is_asap=body.is_asap,
+        phone1=body.phone1 or "",
+        phone2=body.phone2 or "",
     )
     db.add(ticket)
     await db.flush()
@@ -331,11 +339,46 @@ async def update_ticket(
             ticket.customer_satisfaction = data["customer_satisfaction"]
             await log_activity(db, ticket.id, user.id, "rated", "customer_satisfaction", old_cs, new_cs)
 
+    if "expected_at" in data:
+        old_ea = str(ticket.expected_at or "")
+        new_ea = str(data["expected_at"] or "")
+        if old_ea != new_ea:
+            ticket.expected_at = data["expected_at"]
+            await log_activity(db, ticket.id, user.id, "updated", "expected_at", old_ea, new_ea)
+
+    if "is_asap" in data and data["is_asap"] is not None:
+        old_asap = str(ticket.is_asap)
+        new_asap = str(data["is_asap"])
+        if old_asap != new_asap:
+            ticket.is_asap = data["is_asap"]
+            await log_activity(db, ticket.id, user.id, "updated", "is_asap", old_asap, new_asap)
+
+    if "phone1" in data:
+        old_p = ticket.phone1 or ""
+        new_p = data["phone1"] or ""
+        if old_p != new_p:
+            ticket.phone1 = new_p
+            await log_activity(db, ticket.id, user.id, "updated", "phone1", old_p, new_p)
+
+    if "phone2" in data:
+        old_p = ticket.phone2 or ""
+        new_p = data["phone2"] or ""
+        if old_p != new_p:
+            ticket.phone2 = new_p
+            await log_activity(db, ticket.id, user.id, "updated", "phone2", old_p, new_p)
+
     return ticket
 
 
-async def delete_ticket(db: AsyncSession, ticket: Ticket) -> None:
-    await db.delete(ticket)
+async def close_ticket(db: AsyncSession, ticket: Ticket, user: User) -> Ticket:
+    """Close a ticket — cannot be deleted, only closed."""
+    if ticket.status == TicketStatus.closed.value:
+        return ticket
+    old_status = ticket.status
+    ticket.status = TicketStatus.closed.value
+    ticket.resolved_at = utcnow()
+    await log_activity(db, ticket.id, user.id, "status_change", "status", old_status, TicketStatus.closed.value)
+    return ticket
 
 
 # ---------------------------------------------------------------------------

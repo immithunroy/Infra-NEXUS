@@ -77,14 +77,14 @@ export default function TicketDetail() {
     }
   };
 
-  const deleteTicket = async () => {
-    if (!id || !confirm("Delete this ticket permanently?")) return;
+  const closeTicket = async () => {
+    if (!id || !confirm("Close this ticket?")) return;
     try {
-      await api.del(`/tickets/${id}`);
-      flash("Ticket deleted");
-      navigate("/tickets");
+      await api.post(`/tickets/${id}/close`);
+      flash("Ticket closed");
+      loadAll();
     } catch (err) {
-      flash(err instanceof Error ? err.message : "Delete failed", false);
+      flash(err instanceof Error ? err.message : "Close failed", false);
     }
   };
 
@@ -108,6 +108,11 @@ export default function TicketDetail() {
   const resolutionTime = ticket.resolved_at
     ? ((new Date(ticket.resolved_at).getTime() - new Date(ticket.created_at).getTime()) / 3600000).toFixed(1)
     : null;
+
+  const elapsedMs = (ticket.resolved_at ? new Date(ticket.resolved_at) : new Date()).getTime() - new Date(ticket.created_at).getTime();
+  const elapsedH = Math.floor(elapsedMs / 3600000);
+  const elapsedM = Math.floor((elapsedMs % 3600000) / 60000);
+  const elapsedStr = elapsedH > 24 ? `${Math.floor(elapsedH / 24)}d ${elapsedH % 24}h` : elapsedH > 0 ? `${elapsedH}h ${elapsedM}m` : `${elapsedM}m`;
 
   return (
     <div className="space-y-4">
@@ -143,7 +148,7 @@ export default function TicketDetail() {
               {editing ? "Cancel" : "Edit"}
             </button>
           )}
-          {isAdmin && <button className="btn-ghost text-xs text-red-600" onClick={deleteTicket}>Delete</button>}
+          {isAdmin && ticket?.status !== "closed" && <button className="btn-ghost text-xs text-red-600" onClick={closeTicket}>Close ticket</button>}
         </div>
       </div>
 
@@ -348,6 +353,12 @@ export default function TicketDetail() {
             <InfoRow label="First Response" value={responseTime ? `${responseTime}h` : "—"} warn={!ticket.first_response_at} />
             <InfoRow label="Resolution" value={resolutionTime ? `${resolutionTime}h` : "—"} />
             <InfoRow label="Due Date" value={ticket.due_at ? fmtTime(ticket.due_at) : "—"} warn={slaWarning} />
+            <InfoRow
+              label="Expected"
+              value={ticket.is_asap ? "⚡ ASAP" : ticket.expected_at ? fmtTime(ticket.expected_at) : "—"}
+              warn={!ticket.is_asap && !ticket.expected_at}
+            />
+            <InfoRow label="Elapsed" value={elapsedStr} />
             {ticket.customer_satisfaction != null && (
               <InfoRow label="Satisfaction" value={`${"★".repeat(ticket.customer_satisfaction)}${"☆".repeat(5 - ticket.customer_satisfaction)} (${ticket.customer_satisfaction}/5)`} />
             )}
@@ -360,6 +371,8 @@ export default function TicketDetail() {
             <InfoRow label="Assigned to" value={ticket.assigned_name || "Unassigned"} />
             <InfoRow label="Subscriber" value={ticket.subscriber || "—"} link={ticket.subscriber ? `/subscribers/${encodeURIComponent(ticket.subscriber)}` : undefined} />
             <InfoRow label="ONU ID" value={ticket.onu_id != null ? String(ticket.onu_id) : "—"} />
+            <InfoRow label="Mobile 1" value={ticket.phone1 || "—"} />
+            <InfoRow label="Mobile 2" value={ticket.phone2 || "—"} />
             <InfoRow label="Department" value={ticket.department || "—"} />
             <InfoRow label="Tags" value={ticket.tags || "—"} />
           </div>

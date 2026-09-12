@@ -202,6 +202,8 @@ async def list_subscribers(
                     tx_power=o.tx_power if o else None,
                     mac_change_count=0,
                     last_seen=o.last_seen if o else None,
+                    phone=o.phone if o else "",
+                    mobile2=o.mobile2 if o else "",
                 )
             )
         return out
@@ -260,6 +262,8 @@ async def list_subscribers(
                 tx_power=o.tx_power,
                 mac_change_count=counts.get(o.id, 0),
                 last_seen=o.last_seen,
+                phone=o.phone or "",
+                mobile2=o.mobile2 or "",
             )
         )
     return out

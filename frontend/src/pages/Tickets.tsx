@@ -42,6 +42,8 @@ interface SubResult {
   rx_power: number | null;
   tx_power: number | null;
   onu_id: number;
+  phone: string;
+  mobile2: string;
 }
 
 /* ── Filters ── */
@@ -86,6 +88,10 @@ export default function Tickets() {
   const writeOk = canWrite(role);
   const isAdmin = canManageUsers(role);
 
+  /* ── Tab state ── */
+  type TabKey = "active" | "history";
+  const [tab, setTab] = useState<TabKey>("active");
+
   /* ── List state ── */
   const [items, setItems] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
@@ -113,6 +119,10 @@ export default function Tickets() {
   const [category, setCategory] = useState("");
   const [department, setDepartment] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
+  const [phone1, setPhone1] = useState("");
+  const [phone2, setPhone2] = useState("");
+  const [expectedAt, setExpectedAt] = useState("");
+  const [isAsap, setIsAsap] = useState(false);
   const subRef = useRef<HTMLDivElement>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -125,11 +135,19 @@ export default function Tickets() {
     setTimeout(() => setNotice(null), 5000);
   };
 
+  /* ── Determine active vs history status params ── */
+  const tabStatusParam = tab === "history" ? "closed" : undefined;
+
   /* ── Data loading ── */
   const loadList = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (filters.status) params.set("status", filters.status);
+    // Tab filtering: active = not closed, history = closed
+    if (tab === "history") {
+      params.set("status", "closed");
+    } else if (filters.status) {
+      params.set("status", filters.status);
+    }
     if (filters.priority) params.set("priority", filters.priority);
     if (filters.category) params.set("category", filters.category);
     if (filters.department) params.set("department", filters.department);
@@ -144,7 +162,7 @@ export default function Tickets() {
       .then((r) => { setItems(r.items); setTotal(r.total); setPages(r.pages); })
       .catch((e) => flash(String(e), false))
       .finally(() => setLoading(false));
-  }, [filters, page]);
+  }, [filters, page, tab]);
 
   const loadAnalytics = useCallback(() => {
     api.get<TicketAnalytics>(`/tickets/analytics/dashboard?days=${analyticsDays}`).then(setAnalytics).catch(() => {});
@@ -210,6 +228,10 @@ export default function Tickets() {
         assigned_to: assignedTo ? Number(assignedTo) : null,
         subscriber: selectedSub?.subscriber || "",
         onu_id: selectedSub?.onu_id || null,
+        phone1,
+        phone2,
+        expected_at: isAsap ? null : (expectedAt ? new Date(expectedAt).toISOString() : null),
+        is_asap: isAsap,
       });
       flash("Ticket created");
       resetCreateForm();
@@ -230,6 +252,10 @@ export default function Tickets() {
     setCategory("");
     setDepartment("");
     setAssignedTo("");
+    setPhone1("");
+    setPhone2("");
+    setExpectedAt("");
+    setIsAsap(false);
   };
 
   const applyTemplate = (tmpl: TicketTemplate) => {
@@ -244,6 +270,18 @@ export default function Tickets() {
     setSelectedSub(sub);
     setSubSearch(sub.subscriber);
     setSubDropdown(false);
+    setPhone1(sub.phone || "");
+    setPhone2(sub.mobile2 || "");
+  };
+
+  /* ── Close ticket ── */
+  const closeTicket = async (id: number) => {
+    try {
+      await api.post(`/tickets/${id}/close`);
+      flash("Ticket closed");
+      loadList();
+      loadAnalytics();
+    } catch (err) { flash(err instanceof Error ? err.message : "Close failed", false); }
   };
 
   const activeFilterCount = [filters.status, filters.priority, filters.category, filters.department, filters.assigned_to].filter(Boolean).length;
@@ -376,50 +414,75 @@ export default function Tickets() {
         </div>
       )}
 
-      {/* ── Search + Filters ── */}
-      <div className="card p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <input className="input max-w-xs" placeholder="Search tickets…" value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} />
-          <button className={`btn-ghost ${showFilters ? "bg-slate-100 dark:bg-slate-800" : ""}`} onClick={() => setShowFilters(!showFilters)}>
-            Filters {activeFilterCount > 0 && <span className="ml-1 rounded-full bg-brand-600 px-1.5 text-[10px] text-white">{activeFilterCount}</span>}
-          </button>
-          {activeFilterCount > 0 && <button className="btn-ghost text-xs text-slate-500" onClick={resetFilters}>Clear</button>}
-          {selected.size > 0 && isAdmin && <button className="btn-secondary text-xs" onClick={() => setBulkModal(true)}>Bulk edit ({selected.size})</button>}
-        </div>
-        {showFilters && (
-          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200 pt-3 sm:grid-cols-5 dark:border-slate-700">
-            <select className="input" value={filters.status} onChange={(e) => updateFilter("status", e.target.value)}>
-              <option value="">All statuses</option>
-              {TICKET_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
-            </select>
-            <select className="input" value={filters.priority} onChange={(e) => updateFilter("priority", e.target.value)}>
-              <option value="">All priorities</option>
-              {TICKET_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <select className="input" value={filters.category} onChange={(e) => updateFilter("category", e.target.value)}>
-              <option value="">All categories</option>
-              {TICKET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select className="input" value={filters.department} onChange={(e) => updateFilter("department", e.target.value)}>
-              <option value="">All departments</option>
-              {TICKET_DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-            {isAdmin && (
-              <select className="input" value={filters.assigned_to} onChange={(e) => updateFilter("assigned_to", e.target.value)}>
-                <option value="">All assignees</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
-              </select>
-            )}
-          </div>
-        )}
+      {/* ── Tab Bar ── */}
+      <div className="flex border-b border-slate-200 dark:border-slate-700">
+        {(["active", "history"] as const).map((key) => {
+          const count = key === "active" ? total : undefined;
+          return (
+            <button
+              key={key}
+              className={`relative px-4 py-2 text-sm font-medium transition-colors ${
+                tab === key
+                  ? "text-brand-600 dark:text-brand-400"
+                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+              onClick={() => { setTab(key); setPage(1); setSelected(new Set()); }}
+            >
+              {key === "active" ? "Active Tickets" : "History"}
+              {tab === key && <span className="absolute inset-x-0 -bottom-px h-0.5 bg-brand-600 dark:bg-brand-400" />}
+            </button>
+          );
+        })}
       </div>
+
+      {/* ── Search + Filters (Active tab only) ── */}
+      {tab === "active" && (
+        <div className="card p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <input className="input max-w-xs" placeholder="Search tickets…" value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} />
+            <button className={`btn-ghost ${showFilters ? "bg-slate-100 dark:bg-slate-800" : ""}`} onClick={() => setShowFilters(!showFilters)}>
+              Filters {activeFilterCount > 0 && <span className="ml-1 rounded-full bg-brand-600 px-1.5 text-[10px] text-white">{activeFilterCount}</span>}
+            </button>
+            {activeFilterCount > 0 && <button className="btn-ghost text-xs text-slate-500" onClick={resetFilters}>Clear</button>}
+            {selected.size > 0 && isAdmin && <button className="btn-secondary text-xs" onClick={() => setBulkModal(true)}>Bulk edit ({selected.size})</button>}
+          </div>
+          {showFilters && (
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200 pt-3 sm:grid-cols-5 dark:border-slate-700">
+              <select className="input" value={filters.status} onChange={(e) => updateFilter("status", e.target.value)}>
+                <option value="">All statuses</option>
+                {TICKET_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+              </select>
+              <select className="input" value={filters.priority} onChange={(e) => updateFilter("priority", e.target.value)}>
+                <option value="">All priorities</option>
+                {TICKET_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <select className="input" value={filters.category} onChange={(e) => updateFilter("category", e.target.value)}>
+                <option value="">All categories</option>
+                {TICKET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select className="input" value={filters.department} onChange={(e) => updateFilter("department", e.target.value)}>
+                <option value="">All departments</option>
+                {TICKET_DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              {isAdmin && (
+                <select className="input" value={filters.assigned_to} onChange={(e) => updateFilter("assigned_to", e.target.value)}>
+                  <option value="">All assignees</option>
+                  {users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Ticket Table ── */}
       <div className="card overflow-x-auto">
         {loading ? (
           <div className="flex h-40 items-center justify-center text-sm text-slate-400">Loading…</div>
         ) : items.length === 0 ? (
-          <div className="flex h-40 items-center justify-center text-sm text-slate-400">No tickets found</div>
+          <div className="flex h-40 items-center justify-center text-sm text-slate-400">
+            {tab === "active" ? "No active tickets" : "No closed tickets"}
+          </div>
         ) : (
           <>
             <table className="w-full text-sm">
@@ -432,8 +495,9 @@ export default function Tickets() {
                   <th className="th">Priority</th>
                   <th className="th hidden lg:table-cell">Category</th>
                   <th className="th hidden md:table-cell">Assigned</th>
-                  <th className="th hidden xl:table-cell">Created</th>
+                  <th className="th hidden xl:table-cell">Expected</th>
                   <th className="th hidden xl:table-cell">Elapsed</th>
+                  <th className="th w-20">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -449,6 +513,7 @@ export default function Tickets() {
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-slate-800 dark:text-slate-100">{t.title}</span>
                         {t.is_reopened && <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">reopened</span>}
+                        {t.is_asap && <span className="badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">ASAP</span>}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                         {t.subscriber && (
@@ -456,6 +521,7 @@ export default function Tickets() {
                             {t.subscriber}
                           </button>
                         )}
+                        {t.phone1 && <span className="text-slate-400">📞 {t.phone1}</span>}
                         {t.description && <span className="max-w-xs truncate">{t.description}</span>}
                       </div>
                     </td>
@@ -463,8 +529,25 @@ export default function Tickets() {
                     <td className="td"><PriorityBadge priority={t.priority} /></td>
                     <td className="td hidden lg:table-cell"><CategoryBadge category={t.category} /></td>
                     <td className="td hidden md:table-cell text-slate-600 dark:text-slate-300">{t.assigned_name || "—"}</td>
-                    <td className="td hidden xl:table-cell text-xs text-slate-500">{fmtTimeShort(t.created_at)}</td>
+                    <td className="td hidden xl:table-cell text-xs text-slate-500">
+                      {t.is_asap ? (
+                        <span className="font-bold text-red-600 dark:text-red-400">ASAP</span>
+                      ) : t.expected_at ? (
+                        <span>{fmtTimeShort(t.expected_at)}</span>
+                      ) : "—"}
+                    </td>
                     <td className="td hidden xl:table-cell text-xs text-slate-500">{elapsed(t.created_at, t.resolved_at)}</td>
+                    <td className="td" onClick={(e) => e.stopPropagation()}>
+                      {t.status !== "closed" && writeOk && (
+                        <button
+                          className="text-xs text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                          onClick={() => { if (confirm(`Close ticket #${t.id}?`)) closeTicket(t.id); }}
+                          title="Close ticket"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -536,7 +619,19 @@ export default function Tickets() {
                 </div>
               )}
 
-              {/* ── 3. Trouble Type ── */}
+              {/* ── 3. Mobile Numbers (auto-filled from subscriber) ── */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Mobile 1</label>
+                  <input className="input font-mono" placeholder="Primary mobile" value={phone1} onChange={(e) => setPhone1(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Mobile 2</label>
+                  <input className="input font-mono" placeholder="Secondary mobile" value={phone2} onChange={(e) => setPhone2(e.target.value)} />
+                </div>
+              </div>
+
+              {/* ── 4. Trouble Type ── */}
               <div>
                 <label className="label">Trouble Type</label>
                 <select className="input" value={troubleType} onChange={(e) => setTroubleType(e.target.value)}>
@@ -545,7 +640,7 @@ export default function Tickets() {
                 </select>
               </div>
 
-              {/* ── 4. Custom Title (if Other or empty) ── */}
+              {/* ── 5. Custom Title (if Other or empty) ── */}
               {(!troubleType || troubleType === "Other") && (
                 <div>
                   <label className="label">Ticket Title</label>
@@ -553,13 +648,37 @@ export default function Tickets() {
                 </div>
               )}
 
-              {/* ── 5. Description ── */}
+              {/* ── 6. Description ── */}
               <div>
                 <label className="label">Description</label>
                 <textarea className="input min-h-[80px]" placeholder="Describe the issue…" value={description} onChange={(e) => setDescription(e.target.value)} />
               </div>
 
-              {/* ── 6. Priority / Category / Department ── */}
+              {/* ── 7. Expected Date/Time + ASAP ── */}
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="label">Expected Resolution</label>
+                  <input
+                    type="datetime-local"
+                    className="input"
+                    value={expectedAt}
+                    onChange={(e) => setExpectedAt(e.target.value)}
+                    disabled={isAsap}
+                  />
+                </div>
+                <div className="flex items-center gap-2 pb-0.5">
+                  <input
+                    type="checkbox"
+                    id="asap-check"
+                    className="rounded"
+                    checked={isAsap}
+                    onChange={(e) => { setIsAsap(e.target.checked); if (e.target.checked) setExpectedAt(""); }}
+                  />
+                  <label htmlFor="asap-check" className="text-sm font-medium text-slate-700 dark:text-slate-300">ASAP</label>
+                </div>
+              </div>
+
+              {/* ── 8. Priority / Category / Department ── */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="label">Priority</label>
@@ -583,7 +702,7 @@ export default function Tickets() {
                 </div>
               </div>
 
-              {/* ── 7. Assign To ── */}
+              {/* ── 9. Assign To ── */}
               {isAdmin && (
                 <div>
                   <label className="label">Assign To</label>
@@ -594,7 +713,7 @@ export default function Tickets() {
                 </div>
               )}
 
-              {/* ── 8. Templates ── */}
+              {/* ── 10. Templates ── */}
               {templates.length > 0 && (
                 <div>
                   <label className="label">Quick fill from template</label>

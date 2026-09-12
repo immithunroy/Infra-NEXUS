@@ -579,6 +579,8 @@ class SubscriberSummary(BaseModel):
     tx_power: float | None = None
     mac_change_count: int = 0
     last_seen: datetime | None = None
+    phone: str = ""
+    mobile2: str = ""
 
 
 class RemotePort(BaseModel):
@@ -818,6 +820,10 @@ class TicketCreate(BaseModel):
     subscriber: str = ""
     onu_id: int | None = None
     due_at: datetime | None = None
+    expected_at: datetime | None = None
+    is_asap: bool = False
+    phone1: str = ""
+    phone2: str = ""
 
 
 class TicketUpdate(BaseModel):
@@ -832,7 +838,11 @@ class TicketUpdate(BaseModel):
     subscriber: str | None = None
     onu_id: int | None = None
     due_at: datetime | None = None
+    expected_at: datetime | None = None
+    is_asap: bool | None = None
     customer_satisfaction: int | None = None
+    phone1: str | None = None
+    phone2: str | None = None
 
 
 class TicketOut(BaseModel):
@@ -855,9 +865,13 @@ class TicketOut(BaseModel):
     resolved_at: datetime | None = None
     first_response_at: datetime | None = None
     due_at: datetime | None = None
+    expected_at: datetime | None = None
+    is_asap: bool = False
     customer_satisfaction: int | None = None
     is_reopened: bool = False
     comment_count: int = 0
+    phone1: str = ""
+    phone2: str = ""
 
 
 class TicketCommentCreate(BaseModel):

@@ -473,6 +473,8 @@ export interface SubscriberSummary {
   tx_power: number | null;
   mac_change_count: number;
   last_seen: string | null;
+  phone: string;
+  mobile2: string;
 }
 
 export interface SubscriberProfile {
@@ -791,9 +793,13 @@ export interface Ticket {
   resolved_at: string | null;
   first_response_at: string | null;
   due_at: string | null;
+  expected_at: string | null;
+  is_asap: boolean;
   customer_satisfaction: number | null;
   is_reopened: boolean;
   comment_count: number;
+  phone1: string;
+  phone2: string;
 }
 
 export const TICKET_STATUSES = ["open", "in_progress", "resolved", "closed"];
