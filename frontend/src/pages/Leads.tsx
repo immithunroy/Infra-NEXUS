@@ -70,8 +70,8 @@ function DonutChart({
   const C = 2 * Math.PI * R;
   let offset = 0;
   return (
-    <div className="flex items-center gap-6">
-      <div className="relative h-40 w-40 shrink-0">
+    <div className="flex h-full items-center gap-6">
+      <div className="relative h-48 w-48 shrink-0">
         <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
           <circle
             cx={50}
@@ -135,7 +135,7 @@ function BarChart({
 }) {
   if (data.length === 0) {
     return (
-      <div className="flex h-48 items-center justify-center text-sm text-slate-400 dark:text-slate-500">
+      <div className="flex h-full items-center justify-center text-sm text-slate-400 dark:text-slate-500">
         No data yet.
       </div>
     );
@@ -146,8 +146,8 @@ function BarChart({
   const groupWidth = 60;
   const barWidth = Math.min(12, (groupWidth - barCount * 2) / barCount);
   const svgW = data.length * groupWidth + 40;
-  const svgH = 160;
-  const plotH = 130;
+  const svgH = 220;
+  const plotH = 180;
   const padTop = 10;
   const padLeft = 36;
   const padBottom = 24;
@@ -160,7 +160,7 @@ function BarChart({
   });
 
   return (
-    <div className="overflow-x-auto">
+    <div className="flex h-full flex-col justify-center overflow-x-auto">
       <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full" style={{ minWidth: svgW }}>
         {yLines.map((t, i) => (
           <g key={i}>
@@ -231,7 +231,7 @@ function HorizontalBarChart({
 }) {
   if (data.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-slate-400 dark:text-slate-500">
+      <div className="flex h-full items-center justify-center text-sm text-slate-400 dark:text-slate-500">
         No data yet.
       </div>
     );
@@ -243,7 +243,7 @@ function HorizontalBarChart({
   const svgH = data.length * (barH + gap) + 10;
 
   return (
-    <div className="overflow-x-auto">
+    <div className="flex h-full flex-col justify-center overflow-x-auto">
       <svg viewBox={`0 0 400 ${svgH}`} className="w-full" style={{ minWidth: 400 }}>
         {data.map((d, i) => {
           const y = i * (barH + gap) + 5;
@@ -263,7 +263,7 @@ function HorizontalBarChart({
           );
         })}
       </svg>
-      <div className="mt-1 flex gap-3">
+      <div className="mt-2 flex gap-3">
         <span className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
           <span className="h-2.5 w-2.5 rounded-full bg-indigo-400 opacity-40" /> Total Leads
         </span>
