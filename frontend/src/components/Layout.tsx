@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { api, setToken } from "../api/client";
-import { canManageUsers, canApprove, ROLE_LABELS, UserOut, PendingCount } from "../api/types";
+import { canManageUsers, canApprove, UserOut, PendingCount } from "../api/types";
 import { useTheme } from "../theme";
 import GlobalSearch from "./GlobalSearch";
 
@@ -32,10 +32,12 @@ export default function Layout() {
   const [navOpen, setNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [roleLabels, setRoleLabels] = useState<Record<string, string>>({});
   const isMapPage = location.pathname === "/fiber-map" || location.pathname === "/google-map";
 
   useEffect(() => {
     api.get<UserOut>("/auth/me").then(setUser).catch(() => undefined);
+    api.get<Record<string, string>>("/roles/labels").then(setRoleLabels).catch(() => {});
     if (canApprove(user?.role)) {
       api.get<PendingCount>("/approvals/pending-count").then(d => setPendingCount(d.total)).catch(() => {});
     }
@@ -46,7 +48,7 @@ export default function Layout() {
     navigate("/login");
   };
 
-  const roleLabel = user ? ROLE_LABELS[user.role] || user.role : "";
+  const roleLabel = user ? roleLabels[user.role] || user.role : "";
   const isAdmin = user?.role === "admin";
 
   return (

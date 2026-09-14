@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api/client";
-import { ROLE_LABELS, ROLE_OPTIONS, UserOut, canManageUsers } from "../api/types";
+import { UserOut, canManageUsers } from "../api/types";
 import { useUserRole } from "../lib/role";
 import ActionResultBanner from "../components/ActionResultBanner";
 import { fmtTimeShort } from "../lib/time";
@@ -26,7 +26,7 @@ const emptyForm: FormState = {
   is_active: true,
 };
 
-const roleBadge: Record<string, string> = {
+const ROLE_COLORS: Record<string, string> = {
   admin: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
   global_write: "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
   global_read: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
@@ -34,13 +34,7 @@ const roleBadge: Record<string, string> = {
   field_team: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
 };
 
-const roleDesc: Record<string, string> = {
-  admin: "Full access incl. user management",
-  global_write: "Read + write everywhere except user management",
-  global_read: "Read-only access",
-  noc: "Read + network operations (scan / test / down detection)",
-  field_team: "Read + update address & GPS only",
-};
+const DEFAULT_COLOR = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
 
 interface SyncResult {
   created: number;
@@ -72,9 +66,11 @@ export default function Users() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
-  // Roles state
+  // Dynamic role data from API
   const [roles, setRoles] = useState<Role[]>([]);
   const [permGroups, setPermGroups] = useState<PermissionGroups>({});
+  const [roleLabels, setRoleLabels] = useState<Record<string, string>>({});
+  const [roleDescriptions, setRoleDescriptions] = useState<Record<string, string>>({});
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [creatingRole, setCreatingRole] = useState(false);
 
@@ -95,6 +91,15 @@ export default function Users() {
       ]);
       setRoles(rolesData);
       setPermGroups(permsData);
+      // Build dynamic maps from API data
+      const labels: Record<string, string> = {};
+      const descs: Record<string, string> = {};
+      for (const r of rolesData) {
+        labels[r.name] = r.label || r.name;
+        descs[r.name] = r.description;
+      }
+      setRoleLabels(labels);
+      setRoleDescriptions(descs);
     } catch (e) {
       flash(String(e), false);
     }
@@ -150,7 +155,7 @@ export default function Users() {
   const quickRoleChange = async (u: UserOut, newRole: string) => {
     try {
       await api.put(`/users/${u.id}`, { role: newRole });
-      flash(`${u.username} role changed to ${ROLE_LABELS[newRole] || newRole}`);
+      flash(`${u.username} role changed to ${roleLabels[newRole] || newRole}`);
       loadUsers();
     } catch (err) {
       flash(err instanceof Error ? err.message : "Role change failed", false);
@@ -325,12 +330,12 @@ export default function Users() {
       {tab === "accounts" && (
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {ROLE_OPTIONS.map((r) => (
-              <div key={r} className="card p-4">
+            {roles.filter((r) => r.is_active).map((r) => (
+              <div key={r.name} className="card p-4">
                 <div className="flex items-center gap-2">
-                  <span className={`badge ${roleBadge[r]}`}>{ROLE_LABELS[r]}</span>
+                  <span className={`badge ${ROLE_COLORS[r.name] || DEFAULT_COLOR}`}>{r.label || r.name}</span>
                 </div>
-                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{roleDesc[r]}</p>
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{r.description}</p>
               </div>
             ))}
           </div>
@@ -363,17 +368,17 @@ export default function Users() {
                     <td className="td">
                       {canManageUsers(role) && u.id !== 1 ? (
                         <select
-                          className={`text-xs rounded px-1.5 py-0.5 border-0 font-medium cursor-pointer ${roleBadge[u.role] || roleBadge.global_read}`}
+                          className={`text-xs rounded px-1.5 py-0.5 border-0 font-medium cursor-pointer ${ROLE_COLORS[u.role] || DEFAULT_COLOR}`}
                           value={u.role}
                           onChange={(e) => quickRoleChange(u, e.target.value)}
                         >
-                          {ROLE_OPTIONS.map((r) => (
-                            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                          {roles.filter((r) => r.is_active).map((r) => (
+                            <option key={r.name} value={r.name}>{r.label || r.name}</option>
                           ))}
                         </select>
                       ) : (
-                        <span className={`badge ${roleBadge[u.role] || roleBadge.global_read}`}>
-                          {ROLE_LABELS[u.role] || u.role}
+                        <span className={`badge ${ROLE_COLORS[u.role] || DEFAULT_COLOR}`}>
+                          {roleLabels[u.role] || u.role}
                         </span>
                       )}
                     </td>
@@ -452,7 +457,7 @@ export default function Users() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className={`badge ${roleBadge[r.name] || "bg-slate-100 text-slate-600"}`}>
+                    <span className={`badge ${ROLE_COLORS[r.name] || DEFAULT_COLOR}`}>
                       {r.label || r.name}
                     </span>
                     {r.is_system && (
@@ -539,11 +544,11 @@ export default function Users() {
               <div>
                 <label className="label">Role</label>
                 <select className="input" value={modal.role} onChange={(e) => setModal({ ...modal, role: e.target.value })}>
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                  {roles.filter((r) => r.is_active).map((r) => (
+                    <option key={r.name} value={r.name}>{r.label || r.name}</option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{roleDesc[modal.role]}</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{roleDescriptions[modal.role]}</p>
               </div>
               {modal.id && modal.id !== 1 && (
                 <div className="flex items-center gap-3">

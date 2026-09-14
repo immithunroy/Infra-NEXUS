@@ -101,6 +101,15 @@ async def list_permissions(user=Depends(require_admin)):
     return PERMISSION_GROUPS
 
 
+@router.get("/labels")
+async def role_labels(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+    """Return {name: label} mapping for all active roles. Any authenticated user can call this."""
+    rows = (await db.execute(
+        select(Role).where(Role.is_active == True).order_by(Role.id)
+    )).scalars().all()
+    return {r.name: r.label or r.name for r in rows}
+
+
 @router.get("", response_model=list[RoleOut])
 async def list_roles(db: AsyncSession = Depends(get_db), user=Depends(require_admin)):
     rows = (await db.execute(select(Role).order_by(Role.id))).scalars().all()
