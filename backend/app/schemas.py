@@ -295,6 +295,11 @@ class OnuUpdate(BaseModel):
     landmark: str | None = None
 
 
+class OnuBindRequest(BaseModel):
+    """Request body for PUT /api/onus/{onu_id}/bind"""
+    subscriber: str
+
+
 class OnuOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

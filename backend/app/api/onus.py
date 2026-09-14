@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from ..database import get_db
 from ..drivers.bdcom import BdcomCliDriver
 from ..models import OLTDevice, Onu, OnuSource, Ticket, TicketStatus, User
-from ..schemas import OnuCreate, OnuOut, OnuPortControl, OnuUpdate
+from ..schemas import OnuBindRequest, OnuCreate, OnuOut, OnuPortControl, OnuUpdate
 from ..security import get_current_user, require_gps_write, require_write, user_role
 from ..services.mac_vendor import vendor_map
 from ..utils.status import display_status
@@ -114,6 +114,25 @@ async def create_onu(body: OnuCreate, user: User = Depends(require_write), db: A
         raise HTTPException(status_code=404, detail="OLT not found")
     onu = Onu(olt_id=body.olt_id, source=OnuSource.manual, **body.model_dump(exclude={"olt_id"}))
     db.add(onu)
+    await db.commit()
+    await db.refresh(onu, attribute_names=["olt"])
+    return _to_out(onu)
+
+
+@router.put("/{onu_id}/bind", response_model=OnuOut)
+async def bind_onu(
+    onu_id: int,
+    body: OnuBindRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bind an ONU to a subscriber (PPPoE username)."""
+    onu = await _load_onu(db, onu_id)
+    subscriber = body.subscriber.strip()
+    if not subscriber:
+        raise HTTPException(status_code=422, detail="Subscriber name is required")
+    onu.subscriber = subscriber
+    onu.bound = True
     await db.commit()
     await db.refresh(onu, attribute_names=["olt"])
     return _to_out(onu)
