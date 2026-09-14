@@ -25,6 +25,9 @@ export interface UserUpdate {
   username?: string;
   password?: string;
   role?: string;
+  full_name?: string;
+  email?: string;
+  is_active?: boolean;
 }
 
 export const ROLE_LABELS: Record<string, string> = {

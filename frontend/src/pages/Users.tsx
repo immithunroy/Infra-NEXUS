@@ -3,7 +3,6 @@ import { api } from "../api/client";
 import { ROLE_LABELS, ROLE_OPTIONS, UserOut, canManageUsers } from "../api/types";
 import { useUserRole } from "../lib/role";
 import ActionResultBanner from "../components/ActionResultBanner";
-import WarningBanner from "../components/WarningBanner";
 import { fmtTimeShort } from "../lib/time";
 
 interface FormState {
@@ -11,9 +10,19 @@ interface FormState {
   username: string;
   password: string;
   role: string;
+  full_name: string;
+  email: string;
+  is_active: boolean;
 }
 
-const emptyForm: FormState = { username: "", password: "", role: "global_read" };
+const emptyForm: FormState = {
+  username: "",
+  password: "",
+  role: "global_read",
+  full_name: "",
+  email: "",
+  is_active: true,
+};
 
 const roleBadge: Record<string, string> = {
   admin: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
@@ -62,11 +71,14 @@ export default function Users() {
     if (!modal) return;
     try {
       if (modal.id) {
-        await api.put(`/users/${modal.id}`, {
-          username: modal.username || undefined,
-          role: modal.role,
-          ...(modal.password ? { password: modal.password } : {}),
-        });
+        const payload: Record<string, unknown> = {};
+        if (modal.username) payload.username = modal.username;
+        if (modal.role) payload.role = modal.role;
+        if (modal.full_name !== undefined) payload.full_name = modal.full_name;
+        if (modal.email !== undefined) payload.email = modal.email;
+        if (modal.is_active !== undefined) payload.is_active = modal.is_active;
+        if (modal.password) payload.password = modal.password;
+        await api.put(`/users/${modal.id}`, payload);
         flash("User updated");
       } else {
         await api.post("/users", {
@@ -91,6 +103,26 @@ export default function Users() {
       load();
     } catch (err) {
       flash(err instanceof Error ? err.message : "Delete failed", false);
+    }
+  };
+
+  const quickRoleChange = async (u: UserOut, newRole: string) => {
+    try {
+      await api.put(`/users/${u.id}`, { role: newRole });
+      flash(`${u.username} role changed to ${ROLE_LABELS[newRole] || newRole}`);
+      load();
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Role change failed", false);
+    }
+  };
+
+  const toggleActive = async (u: UserOut) => {
+    try {
+      await api.put(`/users/${u.id}`, { is_active: u.is_active === false });
+      flash(`${u.username} ${u.is_active === false ? "activated" : "deactivated"}`);
+      load();
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Status change failed", false);
     }
   };
 
@@ -125,21 +157,19 @@ export default function Users() {
         </div>
         <div className="flex items-center gap-2">
           {canManageUsers(role) && (
-            <button
-              className="btn-secondary text-sm"
-              onClick={syncHrm}
-              disabled={syncing}
-            >
+            <button className="btn-secondary text-sm" onClick={syncHrm} disabled={syncing}>
               {syncing ? "Syncing…" : "🔄 Sync from HRM"}
             </button>
           )}
-          {canManageUsers(role) && <button className="btn-primary" onClick={() => setModal({ ...emptyForm })}>+ Add user</button>}
+          {canManageUsers(role) && (
+            <button className="btn-primary" onClick={() => setModal({ ...emptyForm })}>
+              + Add user
+            </button>
+          )}
         </div>
       </header>
 
-      {notice && (
-        <ActionResultBanner ok={notice.ok} message={notice.text} onDismiss={() => setNotice(null)} />
-      )}
+      {notice && <ActionResultBanner ok={notice.ok} message={notice.text} onDismiss={() => setNotice(null)} />}
 
       {syncResult && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
@@ -189,15 +219,44 @@ export default function Users() {
                 <td className="td hidden md:table-cell text-slate-600 dark:text-slate-400">{u.full_name || "—"}</td>
                 <td className="td hidden lg:table-cell text-slate-500 text-xs">{u.email || "—"}</td>
                 <td className="td">
-                  <span className={`badge ${roleBadge[u.role] || roleBadge.global_read}`}>
-                    {ROLE_LABELS[u.role] || u.role}
-                  </span>
+                  {canManageUsers(role) && u.id !== 1 ? (
+                    <select
+                      className={`text-xs rounded px-1.5 py-0.5 border-0 font-medium cursor-pointer ${roleBadge[u.role] || roleBadge.global_read}`}
+                      value={u.role}
+                      onChange={(e) => quickRoleChange(u, e.target.value)}
+                    >
+                      {ROLE_OPTIONS.map((r) => (
+                        <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={`badge ${roleBadge[u.role] || roleBadge.global_read}`}>
+                      {ROLE_LABELS[u.role] || u.role}
+                    </span>
+                  )}
                 </td>
                 <td className="td hidden sm:table-cell">
-                  {u.is_active === false ? (
-                    <span className="badge bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">inactive</span>
+                  {canManageUsers(role) && u.id !== 1 ? (
+                    <button
+                      className={`inline-flex items-center gap-1.5 text-xs font-medium cursor-pointer transition-colors ${
+                        u.is_active === false
+                          ? "text-slate-400 hover:text-slate-600"
+                          : "text-emerald-600 hover:text-emerald-800"
+                      }`}
+                      onClick={() => toggleActive(u)}
+                      title={u.is_active === false ? "Click to activate" : "Click to deactivate"}
+                    >
+                      <span className={`inline-block w-2 h-2 rounded-full ${u.is_active === false ? "bg-slate-300" : "bg-emerald-500"}`} />
+                      {u.is_active === false ? "inactive" : "active"}
+                    </button>
                   ) : (
-                    <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">active</span>
+                    <span className={`badge ${
+                      u.is_active === false
+                        ? "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    }`}>
+                      {u.is_active === false ? "inactive" : "active"}
+                    </span>
                   )}
                 </td>
                 <td className="td hidden xl:table-cell text-xs text-slate-400">
@@ -207,47 +266,142 @@ export default function Users() {
                   <div className="flex gap-1">
                     <button
                       className="btn-ghost"
-                      onClick={() => setModal({ id: u.id, username: u.username, password: "", role: u.role })}
+                      onClick={() =>
+                        setModal({
+                          id: u.id,
+                          username: u.username,
+                          password: "",
+                          role: u.role,
+                          full_name: u.full_name || "",
+                          email: u.email || "",
+                          is_active: u.is_active,
+                        })
+                      }
                     >
                       Edit
                     </button>
-                    <button className="btn-ghost text-red-600" onClick={() => remove(u)}>Remove</button>
+                    {u.id !== 1 && (
+                      <button className="btn-ghost text-red-600" onClick={() => remove(u)}>
+                        Remove
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
             ))}
-            {users.length === 0 && <tr><td className="td text-slate-500" colSpan={7}>No users yet.</td></tr>}
+            {users.length === 0 && (
+              <tr>
+                <td className="td text-slate-500" colSpan={7}>
+                  No users yet.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setModal(null)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">
               {modal.id ? `Edit user · ${modal.username}` : "Add user"}
             </h2>
-            <form onSubmit={submit} className="space-y-3">
-              <div>
-                <label className="label">Username</label>
-                <input className="input" value={modal.username} onChange={(e) => setModal({ ...modal, username: e.target.value })} required />
+            <form onSubmit={submit} className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label">Username</label>
+                  <input
+                    className="input"
+                    value={modal.username}
+                    onChange={(e) => setModal({ ...modal, username: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">
+                    Password {modal.id && <span className="text-slate-400">(leave blank to keep)</span>}
+                  </label>
+                  <input
+                    type="password"
+                    className="input"
+                    value={modal.password}
+                    onChange={(e) => setModal({ ...modal, password: e.target.value })}
+                    minLength={modal.id ? undefined : 6}
+                    required={!modal.id}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="label">Password {modal.id && <span className="text-slate-400">(leave blank to keep)</span>}</label>
-                <input type="password" className="input" value={modal.password} onChange={(e) => setModal({ ...modal, password: e.target.value })} minLength={modal.id ? undefined : 6} required={!modal.id} />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label">Full Name</label>
+                  <input
+                    className="input"
+                    value={modal.full_name}
+                    onChange={(e) => setModal({ ...modal, full_name: e.target.value })}
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+                <div>
+                  <label className="label">Email</label>
+                  <input
+                    type="email"
+                    className="input"
+                    value={modal.email}
+                    onChange={(e) => setModal({ ...modal, email: e.target.value })}
+                    placeholder="e.g. john@company.com"
+                  />
+                </div>
               </div>
+
               <div>
                 <label className="label">Role</label>
-                <select className="input" value={modal.role} onChange={(e) => setModal({ ...modal, role: e.target.value })}>
+                <select
+                  className="input"
+                  value={modal.role}
+                  onChange={(e) => setModal({ ...modal, role: e.target.value })}
+                >
                   {ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </option>
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{roleDesc[modal.role]}</p>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-                <button type="submit" className="btn-primary">Save</button>
+
+              {modal.id && modal.id !== 1 && (
+                <div className="flex items-center gap-3">
+                  <label className="label mb-0">Active</label>
+                  <button
+                    type="button"
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      modal.is_active ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
+                    onClick={() => setModal({ ...modal, is_active: !modal.is_active })}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        modal.is_active ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">
+                    {modal.is_active ? "Active — user can log in" : "Inactive — user cannot log in"}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                <button type="button" className="btn-secondary" onClick={() => setModal(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  {modal.id ? "Save changes" : "Create user"}
+                </button>
               </div>
             </form>
           </div>
