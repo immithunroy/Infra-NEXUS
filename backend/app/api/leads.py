@@ -75,7 +75,7 @@ async def list_leads(
     is_admin = role in (UserRole.admin.value, UserRole.global_write.value)
     stmt = select(Lead)
     if not is_admin:
-        stmt = stmt.where(Lead.assigned_to == user.id)
+        stmt = stmt.where((Lead.assigned_to == user.id) | (Lead.created_by == user.id))
     if status:
         stmt = stmt.where(Lead.status == status)
     if assigned_to:
@@ -145,7 +145,7 @@ async def leads_count(
     is_admin = role in (UserRole.admin.value, UserRole.global_write.value)
     stmt = select(func.count(Lead.id))
     if not is_admin:
-        stmt = stmt.where(Lead.assigned_to == user.id)
+        stmt = stmt.where((Lead.assigned_to == user.id) | (Lead.created_by == user.id))
     if status:
         stmt = stmt.where(Lead.status == status)
     if assigned_to:
@@ -190,7 +190,7 @@ async def lead_dashboard(
     is_admin = role in (UserRole.admin.value, UserRole.global_write.value)
     base = select(Lead)
     if not is_admin:
-        base = base.where(Lead.assigned_to == user.id)
+        base = base.where((Lead.assigned_to == user.id) | (Lead.created_by == user.id))
     if date_from:
         try:
             base = base.where(Lead.created_at >= datetime.fromisoformat(date_from))
@@ -289,7 +289,7 @@ async def monthly_summary(
     is_admin = role in (UserRole.admin.value, UserRole.global_write.value)
     base = select(Lead)
     if not is_admin:
-        base = base.where(Lead.assigned_to == user.id)
+        base = base.where((Lead.assigned_to == user.id) | (Lead.created_by == user.id))
     if date_from:
         try:
             base = base.where(Lead.created_at >= datetime.fromisoformat(date_from))
@@ -399,7 +399,7 @@ async def get_lead(
         raise HTTPException(status_code=404, detail="Lead not found")
     role = user_role(user)
     is_admin = role in (UserRole.admin.value, UserRole.global_write.value)
-    if not is_admin and lead.assigned_to != user.id:
+    if not is_admin and lead.assigned_to != user.id and lead.created_by != user.id:
         raise HTTPException(status_code=403, detail="You can only view leads assigned to you")
     umap = await _user_map(db)
     return _to_out(lead, umap)
@@ -452,7 +452,7 @@ async def update_lead(
         raise HTTPException(status_code=404, detail="Lead not found")
     role = user_role(user)
     is_admin = role in (UserRole.admin.value, UserRole.global_write.value)
-    if not is_admin and lead.assigned_to != user.id:
+    if not is_admin and lead.assigned_to != user.id and lead.created_by != user.id:
         raise HTTPException(status_code=403, detail="You can only update leads assigned to you")
     data = body.model_dump(exclude_unset=True)
     for field, value in data.items():

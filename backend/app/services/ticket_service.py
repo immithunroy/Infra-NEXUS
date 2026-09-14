@@ -184,9 +184,9 @@ async def list_tickets(
 
     # Role-based visibility
     role = user_role(user)
-    if role != UserRole.admin.value:
-        q = q.where(Ticket.assigned_to == user.id)
-        count_q = count_q.where(Ticket.assigned_to == user.id)
+    if role != UserRole.admin.value and role != UserRole.global_write.value:
+        q = q.where((Ticket.assigned_to == user.id) | (Ticket.created_by == user.id))
+        count_q = count_q.where((Ticket.assigned_to == user.id) | (Ticket.created_by == user.id))
 
     # Filters
     if status:
@@ -609,8 +609,8 @@ async def get_analytics(
     since = utcnow() - timedelta(days=days)
 
     base_filter = [Ticket.created_at >= since]
-    if user and user_role(user) != UserRole.admin.value:
-        base_filter.append(Ticket.assigned_to == user.id)
+    if user and user_role(user) not in (UserRole.admin.value, UserRole.global_write.value):
+        base_filter.append((Ticket.assigned_to == user.id) | (Ticket.created_by == user.id))
 
     # Status counts
     status_rows = (
