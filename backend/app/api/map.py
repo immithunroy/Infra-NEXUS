@@ -18,9 +18,9 @@ router = APIRouter(prefix="/api/map", tags=["map"], dependencies=[Depends(get_cu
 class MapConfig(BaseModel):
     google_maps_api_key: str
 
-# Default center for ONUs without GPS: scatter around this point.
-CITY_LAT = 22.80117038571286
-CITY_LNG = 90.30111252073529
+# Default center for ONUs without GPS: scatter around this point (Shahid Abdur Rob Serniabad Stadium).
+CITY_LAT = 22.6864556
+CITY_LNG = 90.3681778
 _RADIUS_M = 500
 
 
