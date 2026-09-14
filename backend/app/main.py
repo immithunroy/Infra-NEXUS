@@ -2,7 +2,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import select
@@ -114,7 +114,7 @@ APK_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "app.apk")
 async def download_apk():
     real = os.path.realpath(APK_PATH)
     if not os.path.isfile(real):
-        return {"error": "APK not found"}, 404
+        raise HTTPException(status_code=404, detail="APK not found")
     return FileResponse(real, media_type="application/vnd.android.package-archive", filename="InfraNexus.apk")
 
 

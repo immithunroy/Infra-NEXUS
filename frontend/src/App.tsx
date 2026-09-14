@@ -59,6 +59,7 @@ export default function App() {
       <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/download" element={<ApkDownload />} />
           <Route
             element={
               <RequireAuth>
@@ -76,7 +77,6 @@ export default function App() {
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/tickets/:id" element={<TicketDetail />} />
             <Route path="/leads" element={<Leads />} />
-            <Route path="/download" element={<ApkDownload />} />
             <Route path="/acs" element={<Acs />} />
             <Route path="/live-downs" element={<LiveDowns />} />
             <Route path="/fiber-map" element={<FiberMap />} />
