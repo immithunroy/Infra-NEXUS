@@ -26,6 +26,11 @@ class UserOut(BaseModel):
     username: str
     role: str = "admin"
     is_admin: bool
+    full_name: str = ""
+    email: str = ""
+    hrm_id: str = ""
+    last_synced_at: datetime | None = None
+    is_active: bool = True
 
 
 class UserCreate(BaseModel):
@@ -39,6 +44,9 @@ class UserUpdate(BaseModel):
     password: str | None = None
     role: str | None = None
     is_admin: bool | None = None
+    full_name: str | None = None
+    email: str | None = None
+    is_active: bool | None = None
 
 
 class OLTDeviceBase(BaseModel):

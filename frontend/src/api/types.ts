@@ -8,6 +8,11 @@ export interface UserOut {
   username: string;
   role: string;
   is_admin: boolean;
+  full_name: string;
+  email: string;
+  hrm_id: string;
+  last_synced_at: string | null;
+  is_active: boolean;
 }
 
 export interface UserCreate {

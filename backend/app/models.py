@@ -127,6 +127,11 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(256))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.admin)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=True)
+    full_name: Mapped[str] = mapped_column(String(128), default="")
+    email: Mapped[str] = mapped_column(String(128), default="")
+    hrm_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

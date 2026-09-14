@@ -101,6 +101,7 @@ def get_scheduler_status() -> list[dict[str, Any]]:
         {"id": "acs_poll", "name": "ACS Poll", "desc": "Queue TR-069 monitoring jobs for online CPEs"},
         {"id": "olt_write_all", "name": "OLT Config Save", "desc": "Persist running config to flash on all OLTs"},
         {"id": "mac_vendor_sync", "name": "MAC Vendor Sync", "desc": "Update MAC vendor OUI database from external API"},
+        {"id": "hrm_user_sync", "name": "HRM User Sync", "desc": "Sync employees from HRM to Nexus users"},
     ]
     for jdef in jobs_def:
         job = _scheduler.get_job(jdef["id"])
@@ -414,6 +415,20 @@ async def _cleanup_tj_reservations():
         logger.error("TJ reservation cleanup failed: %s", e)
 
 
+async def _sync_hrm_users_job() -> None:
+    """Scheduled job: sync users from HRM database."""
+    _track_job("hrm_user_sync")
+    try:
+        from .hrm_sync import sync_hrm_users
+        async with SessionLocal() as session:
+            result = await sync_hrm_users(session)
+            logger.info("HRM sync job: %s", result.get("message", ""))
+        _finish_job("hrm_user_sync", True)
+    except Exception as exc:
+        logger.exception("HRM sync job failed: %s", exc)
+        _finish_job("hrm_user_sync", False, str(exc)[:500])
+
+
 async def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -484,6 +499,15 @@ async def start_scheduler() -> AsyncIOScheduler:
         _write_all_olts,
         CronTrigger(hour=3, minute=0),
         id="olt_write_all",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
+    # HRM user sync — daily at 06:00 BDT
+    scheduler.add_job(
+        _sync_hrm_users_job,
+        CronTrigger(hour=6, minute=0),
+        id="hrm_user_sync",
         replace_existing=True,
         misfire_grace_time=300,
     )

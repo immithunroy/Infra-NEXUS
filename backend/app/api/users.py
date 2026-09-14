@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,3 +91,20 @@ async def delete_user(user_id: int, user: User = Depends(require_admin), db: Asy
         raise HTTPException(status_code=404, detail="User not found")
     await db.delete(target)
     await db.commit()
+
+
+# ── HRM Sync ─────────────────────────────────────────────────────────────
+
+class SyncHrmResponse(BaseModel):
+    created: int
+    updated: int
+    deactivated: int
+    message: str
+
+
+@router.post("/sync-hrm", response_model=SyncHrmResponse)
+async def sync_hrm(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """Sync users from HRM database. Creates new users as read-only, updates existing."""
+    from ..services.hrm_sync import sync_hrm_users
+    result = await sync_hrm_users(db)
+    return SyncHrmResponse(**result)
