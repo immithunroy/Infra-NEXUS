@@ -21,15 +21,15 @@ class MapConfig(BaseModel):
 # Default center for ONUs without GPS: scatter around this point (Shahid Abdur Rob Serniabad Stadium).
 CITY_LAT = 22.6864556
 CITY_LNG = 90.3681778
-_RADIUS_M = 150
+_RADIUS_M = 50
 
 
 def _scatterGPS(lat: float, lng: float, onu_id: int) -> tuple[float, float]:
     """Deterministic scatter within _Radius_M of center using onu_id as seed."""
     h = int(hashlib.md5(str(onu_id).encode()).hexdigest()[:8], 16)
     angle = (h % 3600) / 10.0  # 0-359.9 degrees
-    # vary radius: 50-150 m
-    r = 50 + (h % 451)
+    # vary radius: 10-50 m
+    r = 10 + (h % 41)
     dlat = r * math.cos(math.radians(angle)) / 111320
     dlng = r * math.sin(math.radians(angle)) / (111320 * math.cos(math.radians(lat)))
     return round(lat + dlat, 6), round(lng + dlng, 6)
@@ -48,7 +48,7 @@ async def map_points(db: AsyncSession = Depends(get_db)):
     """ONUs for the network map.
 
     ONUs with GPS are placed at their real location.
-    ONUs without GPS are scattered within 150 m of the city center (stadium)
+    ONUs without GPS are scattered within 50 m of the city center (stadium)
     so they are visible; once an employee adds coordinates they move to the
     actual spot.
     """
