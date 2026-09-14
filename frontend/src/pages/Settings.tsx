@@ -5,7 +5,7 @@ import { useUserRole } from "../lib/role";
 import ActionResultBanner from "../components/ActionResultBanner";
 import { setTimezone, fmtTimeInZone, getTimezone } from "../lib/time";
 
-type Tab = "general" | "users" | "backup" | "google" | "communication";
+type Tab = "general" | "users" | "backup" | "google" | "communication" | "ai_chat";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "general", label: "General" },
@@ -13,6 +13,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "backup", label: "Backup & Restore" },
   { key: "google", label: "Google Map API" },
   { key: "communication", label: "Communication" },
+  { key: "ai_chat", label: "AI Chat" },
 ];
 
 export default function Settings() {
@@ -457,6 +458,149 @@ export default function Settings() {
           </section>
         </div>
       )}
+
+      {/* ═══ AI CHAT SETTINGS ═══ */}
+      {tab === "ai_chat" && (
+        <AiChatSettings />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AI Chat Settings sub-component
+// ---------------------------------------------------------------------------
+
+function AiChatSettings() {
+  const [provider, setProvider] = useState("openrouter");
+  const [model, setModel] = useState("meta-llama/llama-3.1-8b-instruct:free");
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeySet, setApiKeySet] = useState(false);
+  const [models, setModels] = useState<Record<string, { id: string; label: string }[]>>({});
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [showKey, setShowKey] = useState(false);
+
+  useEffect(() => {
+    import("../api/client").then(({ chatApi }) => {
+      chatApi.getConfig().then((cfg: any) => {
+        setProvider(cfg.provider || "openrouter");
+        setModel(cfg.model || "");
+        setApiKeySet(cfg.api_key_set || false);
+      }).catch(() => {});
+      chatApi.getModels().then((list: any) => {
+        const map: Record<string, { id: string; label: string }[]> = {};
+        (list || []).forEach((p: any) => { map[p.provider] = p.models; });
+        setModels(map);
+      }).catch(() => {});
+    });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const { chatApi } = await import("../api/client");
+      await chatApi.updateConfig({
+        provider,
+        model,
+        ...(apiKey ? { api_key: apiKey } : {}),
+      });
+      if (apiKey) setApiKeySet(true);
+      setMsg({ ok: true, text: "AI Chat settings saved." });
+    } catch (e: any) {
+      setMsg({ ok: false, text: e?.message || "Failed to save" });
+    }
+    setSaving(false);
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const { chatApi } = await import("../api/client");
+      const session = await chatApi.createSession();
+      const reply = await chatApi.sendMessage(session.id, "Hello, are you working? List the number of OLTs in the system.");
+      setTestResult(reply.content || "No response");
+      await chatApi.deleteSession(session.id);
+    } catch (e: any) {
+      setTestResult(`Error: ${e?.message || "Failed"}`);
+    }
+    setTesting(false);
+  };
+
+  const currentModels = models[provider] || [];
+
+  return (
+    <div className="space-y-4">
+      <section className="card p-5">
+        <h2 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">AI Chat Agent</h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+          Configure the AI provider for the chat assistant. Free models are available through OpenRouter, Groq, and Google AI Studio.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="label">Provider</label>
+            <select value={provider} onChange={(e) => { setProvider(e.target.value); setModel(""); }} className="input">
+              <option value="openrouter">OpenRouter (100+ models, many free)</option>
+              <option value="groq">Groq (Free, fast inference)</option>
+              <option value="google">Google AI Studio (Gemini, free tier)</option>
+              <option value="openai">OpenAI (GPT-4o, paid)</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Model</label>
+            <select value={model} onChange={(e) => setModel(e.target.value)} className="input">
+              <option value="">Select a model...</option>
+              {currentModels.map((m: any) => (
+                <option key={m.id || m[0]} value={m.id || m[0]}>{m.label || m[1]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">API Key {apiKeySet && <span className="text-green-600">(configured)</span>}</label>
+            <div className="flex gap-2">
+              <input
+                type={showKey ? "text" : "password"}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={apiKeySet ? "Enter new key to update..." : "Enter API key..."}
+                className="input flex-1"
+              />
+              <button onClick={() => setShowKey(!showKey)} className="btn-secondary px-3 text-xs">
+                {showKey ? "Hide" : "Show"}
+              </button>
+            </div>
+            <div className="mt-1 text-[11px] text-slate-400">
+              {provider === "openrouter" && "Get a free key at https://openrouter.ai/keys"}
+              {provider === "groq" && "Get a free key at https://console.groq.com/keys"}
+              {provider === "google" && "Get a free key at https://aistudio.google.com/apikey"}
+              {provider === "openai" && "Get a key at https://platform.openai.com/api-keys"}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleSave} className="btn-primary px-4 py-2 text-sm" disabled={saving || !model}>
+              {saving ? "Saving..." : "Save Settings"}
+            </button>
+            <button onClick={handleTest} className="btn-secondary px-4 py-2 text-sm" disabled={testing || !apiKeySet}>
+              {testing ? "Testing..." : "Test Connection"}
+            </button>
+          </div>
+          {msg && (
+            <div className={`rounded px-3 py-2 text-xs ${msg.ok ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"}`}>
+              {msg.text}
+            </div>
+          )}
+          {testResult && (
+            <div className="rounded border border-slate-200 dark:border-slate-700 p-3 text-xs">
+              <div className="font-medium mb-1 text-slate-700 dark:text-slate-300">Test Response:</div>
+              <div className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{testResult}</div>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

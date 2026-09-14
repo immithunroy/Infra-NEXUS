@@ -1392,3 +1392,36 @@ export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
   field_visit: "Field Visit",
   other: "Other",
 };
+
+// ---------------------------------------------------------------------------
+// AI Chat
+// ---------------------------------------------------------------------------
+
+export interface ChatSession {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface ChatMessage {
+  id: number;
+  session_id: number;
+  role: "user" | "assistant" | "system";
+  content: string;
+  sql_query: string | null;
+  row_count: number | null;
+  created_at: string;
+}
+
+export interface ChatConfig {
+  provider: string;
+  model: string;
+  api_key_set: boolean;
+}
+
+export interface AiModel {
+  provider: string;
+  models: { id: string; label: string }[];
+}

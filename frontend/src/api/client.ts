@@ -130,3 +130,20 @@ export async function uploadPhoto(
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// AI Chat API
+// ---------------------------------------------------------------------------
+
+export const chatApi = {
+  getConfig: () => api.get<import("./types").ChatConfig>("/chat/config"),
+  updateConfig: (cfg: { provider?: string; model?: string; api_key?: string }) =>
+    api.put<import("./types").ChatConfig>("/chat/config", cfg),
+  getModels: () => api.get<import("./types").AiModel[]>("/chat/models"),
+  getSessions: () => api.get<import("./types").ChatSession[]>("/chat/sessions"),
+  createSession: () => api.post<import("./types").ChatSession>("/chat/sessions"),
+  getMessages: (id: number) => api.get<import("./types").ChatMessage[]>(`/chat/sessions/${id}`),
+  sendMessage: (id: number, content: string) =>
+    api.post<import("./types").ChatMessage>(`/chat/sessions/${id}/messages`, { content }),
+  deleteSession: (id: number) => api.del(`/chat/sessions/${id}`),
+};

@@ -4,6 +4,7 @@ import { api, setToken } from "../api/client";
 import { canManageUsers, canApprove, UserOut, PendingCount } from "../api/types";
 import { useTheme } from "../theme";
 import GlobalSearch from "./GlobalSearch";
+import ChatWidget from "./ChatWidget";
 
 const links = [
   { to: "/", label: "Dashboard", icon: "M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" },
@@ -248,6 +249,7 @@ export default function Layout() {
           </footer>
         )}
       </div>
+      <ChatWidget />
     </div>
   );
 }
