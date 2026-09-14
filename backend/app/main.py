@@ -107,7 +107,7 @@ async def health():
     return {"status": "ok"}
 
 
-APK_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "app.apk")
+APK_PATH = "/app/app.apk"
 
 
 @app.get("/api/app/download")

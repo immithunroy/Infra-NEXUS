@@ -38,6 +38,7 @@ services:
       TZ: UTC
     volumes:
       - nexus_uploads:/app/uploads
+      - ./app.apk:/app/app.apk:ro
     depends_on:
       db:
         condition: service_healthy
