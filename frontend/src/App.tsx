@@ -25,6 +25,7 @@ import Subscribers from "./pages/Subscribers";
 import Tickets from "./pages/Tickets";
 import TicketDetail from "./pages/TicketDetail";
 import Users from "./pages/Users";
+import Roles from "./pages/Roles";
 import { Component, ErrorInfo, ReactNode } from "react";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -82,6 +83,7 @@ export default function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/routing" element={<Routing />} />
             <Route path="/users" element={<Users />} />
+            <Route path="/roles" element={<Roles />} />
             <Route path="/scans" element={<Scans />} />
             <Route path="/schedule-jobs" element={<ScheduleJobs />} />
             <Route path="/settings" element={<Settings />} />

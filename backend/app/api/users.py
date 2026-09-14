@@ -77,6 +77,12 @@ async def update_user(
         if len(body.password) < 6:
             raise HTTPException(status_code=422, detail="Password must be at least 6 characters")
         target.password_hash = hash_password(body.password)
+    if body.full_name is not None:
+        target.full_name = body.full_name
+    if body.email is not None:
+        target.email = body.email
+    if body.is_active is not None:
+        target.is_active = body.is_active
     await db.commit()
     await db.refresh(target)
     return target

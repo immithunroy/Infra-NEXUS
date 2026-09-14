@@ -1,4 +1,5 @@
 import enum
+import json
 from datetime import datetime
 
 from sqlalchemy import (
@@ -59,6 +60,30 @@ class UserRole(str, enum.Enum):
     global_write = "global_write"
     noc = "noc"
     field_team = "field_team"
+
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(128), default="")
+    description: Mapped[str] = mapped_column(String(256), default="")
+    permissions: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of permission keys
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)  # built-in roles can't be deleted
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def permission_list(self) -> list[str]:
+        try:
+            return json.loads(self.permissions)
+        except Exception:
+            return []
+
+    def has_permission(self, perm: str) -> bool:
+        perms = self.permission_list
+        return perm in perms or "*.*" in perms
 
 
 class TicketStatus(str, enum.Enum):

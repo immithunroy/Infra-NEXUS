@@ -151,3 +151,37 @@ def role_in(*roles: UserRole) -> Callable:
         return user
 
     return _check
+
+
+# ---------------------------------------------------------------------------
+# Dynamic permission system — checks against the `roles` table.
+# Falls back to hardcoded role checks if role not found in DB.
+# ---------------------------------------------------------------------------
+
+async def _get_user_permissions(user: User, db: AsyncSession) -> list[str]:
+    """Load the role's permissions from the roles table."""
+    from .models import Role
+    role_name = user_role(user)
+    result = await db.execute(select(Role).where(Role.name == role_name))
+    role = result.scalar_one_or_none()
+    if role is None:
+        return ["*.*"] if role_name == "admin" else []
+    return role.permission_list
+
+
+def require_permission(perm: str) -> Callable:
+    """FastAPI dependency — check that the current user has `perm` permission."""
+
+    async def _check(
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        # Admin always has all permissions
+        if user_role(user) == "admin":
+            return user
+        perms = await _get_user_permissions(user, db)
+        if perm in perms or "*.*" in perms:
+            return user
+        raise _denied()
+
+    return _check
