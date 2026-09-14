@@ -12,6 +12,7 @@ import GoogleMap from "./pages/GoogleMap";
 import LiveDowns from "./pages/LiveDowns";
 import Login from "./pages/Login";
 import Leads from "./pages/Leads";
+import ApkDownload from "./pages/ApkDownload";
 import NocApprovals from "./pages/NocApprovals";
 import Onus from "./pages/Onus";
 import OnuProfile from "./pages/OnuProfile";
@@ -75,6 +76,7 @@ export default function App() {
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/tickets/:id" element={<TicketDetail />} />
             <Route path="/leads" element={<Leads />} />
+            <Route path="/download" element={<ApkDownload />} />
             <Route path="/acs" element={<Acs />} />
             <Route path="/live-downs" element={<LiveDowns />} />
             <Route path="/fiber-map" element={<FiberMap />} />

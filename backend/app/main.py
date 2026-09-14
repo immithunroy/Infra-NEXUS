@@ -1,8 +1,10 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 
 from .api import acs, auth, bindings, dashboard, devices, downs, fiber, fiber_approvals, leads, map, noc_pop, onus, photos, reports, roles, search, subscribers, tickets, users, approvals
@@ -103,6 +105,17 @@ app.include_router(leads.router)
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+APK_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "app.apk")
+
+
+@app.get("/api/app/download")
+async def download_apk():
+    real = os.path.realpath(APK_PATH)
+    if not os.path.isfile(real):
+        return {"error": "APK not found"}, 404
+    return FileResponse(real, media_type="application/vnd.android.package-archive", filename="InfraNexus.apk")
 
 
 @app.get("/api/scheduler/status")
