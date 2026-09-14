@@ -16,14 +16,16 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - nexus_internal
+      nexus_internal:
+        aliases:
+          - nexus-db
 
   backend:
     build: ./backend
     container_name: infra-nexus-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://olt:oltpassword@db:5432/infra_nexus
+      DATABASE_URL: postgresql+asyncpg://olt:oltpassword@nexus-db:5432/infra_nexus
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: admin123
@@ -41,6 +43,7 @@ services:
         condition: service_healthy
     networks:
       - nexus_internal
+      - hrm_default
 
   frontend:
     build: ./frontend
@@ -62,4 +65,6 @@ networks:
   nexus_internal:
     driver: bridge
   proxy_npm_network:
+    external: true
+  hrm_default:
     external: true
