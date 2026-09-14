@@ -12,6 +12,7 @@ from .database import SessionLocal, init_db
 from .models import Setting, User
 from .security import hash_password
 from .services.scheduler import start_scheduler, stop_scheduler, get_scheduler_status
+from .services.hrm_listener import start_hrm_listener, stop_hrm_listener
 from .utils.time import set_app_tz
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -58,7 +59,9 @@ async def lifespan(app: FastAPI):
     await _seed_admin()
     await _load_app_timezone()
     scheduler = await start_scheduler()
+    await start_hrm_listener()
     yield
+    await stop_hrm_listener()
     stop_scheduler()
 
 
