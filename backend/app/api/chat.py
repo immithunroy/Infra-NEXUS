@@ -96,7 +96,13 @@ async def update_chat_config(
 
 @router.get("/models", response_model=list[ModelsByProvider])
 async def list_models(user: User = Depends(require_admin)):
-    return [ModelsByProvider(provider=p, models=m) for p, m in FREE_MODELS.items()]
+    return [
+        ModelsByProvider(
+            provider=p,
+            models=[{"id": m[0], "label": m[1]} for m in models],
+        )
+        for p, models in FREE_MODELS.items()
+    ]
 
 
 # ---------------------------------------------------------------------------
