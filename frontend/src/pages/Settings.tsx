@@ -473,7 +473,7 @@ export default function Settings() {
 
 function AiChatSettings() {
   const [provider, setProvider] = useState("openrouter");
-  const [model, setModel] = useState("meta-llama/llama-3.1-8b-instruct:free");
+  const [model, setModel] = useState("openrouter/free");
   const [apiKey, setApiKey] = useState("");
   const [apiKeySet, setApiKeySet] = useState(false);
   const [models, setModels] = useState<Record<string, { id: string; label: string }[]>>({});

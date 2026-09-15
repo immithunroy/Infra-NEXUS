@@ -86,10 +86,14 @@ PROVIDER_BASE_URLS = {
 
 FREE_MODELS = {
     "openrouter": [
-        ("meta-llama/llama-3.1-8b-instruct:free", "Llama 3.1 8B (Free)"),
-        ("mistralai/mistral-7b-instruct:free", "Mistral 7B (Free)"),
-        ("qwen/qwen-2-7b-instruct:free", "Qwen 2 7B (Free)"),
-        ("google/gemma-2-9b-it:free", "Gemma 2 9B (Free)"),
+        ("openrouter/free", "Free Auto-Router (Recommended)"),
+        ("nvidia/nemotron-3-ultra-550b-a55b:free", "Nemotron 3 Ultra 550B (Free)"),
+        ("nvidia/nemotron-3-super-120b-a12b:free", "Nemotron 3 Super 120B (Free)"),
+        ("google/gemma-4-31b-it:free", "Gemma 4 31B (Free)"),
+        ("cohere/north-mini-code:free", "North Mini Code (Free)"),
+        ("nvidia/nemotron-3-nano-30b-a3b:free", "Nemotron 3 Nano 30B (Free)"),
+        ("poolside/laguna-s-2.1:free", "Laguna S 2.1 (Free)"),
+        ("poolside/laguna-xs-2.1:free", "Laguna XS 2.1 (Free)"),
     ],
     "groq": [
         ("llama-3.1-8b-instant", "Llama 3.1 8B Instant"),
@@ -187,7 +191,7 @@ async def _get_provider_config(db: AsyncSession) -> dict:
     settings = {s.key: s.value for s in result.scalars().all()}
     return {
         "provider": settings.get("ai_provider", "openrouter"),
-        "model": settings.get("ai_model", "meta-llama/llama-3.1-8b-instruct:free"),
+        "model": settings.get("ai_model", "openrouter/free"),
         "api_key": settings.get("ai_api_key", ""),
     }
 

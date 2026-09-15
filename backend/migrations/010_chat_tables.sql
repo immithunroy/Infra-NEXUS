@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id
 -- Seed AI settings (empty — admin fills in via Settings page)
 INSERT INTO settings (key, value) VALUES
     ('ai_provider', 'openrouter'),
-    ('ai_model', 'meta-llama/llama-3.1-8b-instruct:free'),
+    ('ai_model', 'openrouter/free'),
     ('ai_api_key', '')
 ON CONFLICT (key) DO NOTHING;
 

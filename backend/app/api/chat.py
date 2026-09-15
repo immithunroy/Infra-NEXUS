@@ -73,7 +73,7 @@ async def get_chat_config(user: User = Depends(require_admin), db: AsyncSession 
     api_key = settings.get("ai_api_key", "")
     return ChatConfigOut(
         provider=settings.get("ai_provider", "openrouter"),
-        model=settings.get("ai_model", "meta-llama/llama-3.1-8b-instruct:free"),
+        model=settings.get("ai_model", "openrouter/free"),
         api_key_set=bool(api_key),
     )
 
