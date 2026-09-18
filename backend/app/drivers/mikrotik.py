@@ -62,6 +62,7 @@ class FirewallAddressList:
 
 @dataclass
 class BgpRouteInfo:
+    pass
 
 
 class MikrotikDriver:
