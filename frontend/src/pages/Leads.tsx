@@ -1,5 +1,4 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import {
   Lead, LeadDashboard, UserLeadPerformance, MonthlySummary,
@@ -347,7 +346,6 @@ const RevenueIcon = () => (
 export default function Leads() {
   const { role, user } = useUserRole();
   const isAdmin = role === "admin" || role === "global_write";
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [dashboard, setDashboard] = useState<LeadDashboard | null>(null);
@@ -438,22 +436,6 @@ export default function Leads() {
     loadLeads();
     loadCount();
   }, [loadLeads, loadCount]);
-
-  // Auto-open modal when lat/lng params are present (from map right-click)
-  useEffect(() => {
-    const lat = searchParams.get("lat");
-    const lng = searchParams.get("lng");
-    if (lat && lng) {
-      setModal({
-        status: "new",
-        priority: "normal",
-        lead_source: "other",
-        latitude: Number(lat),
-        longitude: Number(lng),
-      });
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams]);
 
   /* ── actions ──────────────────────────────────────────────────────── */
 
