@@ -199,6 +199,8 @@ class MikrotikDriver:
                 api.close()
             except Exception:
                 pass
+        if not list_names:
+            return all_entries
         return [e for e in all_entries if e.get("list", "") in list_names]
 
     async def collect_firewall_address_lists(self, list_names: list[str]) -> list[FirewallAddressList]:

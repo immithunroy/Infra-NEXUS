@@ -339,6 +339,36 @@ async def refresh_subscriber_tags(db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.get("/tags/debug")
+async def debug_address_lists(db: AsyncSession = Depends(get_db)):
+    """Debug: return ALL firewall address-list entries from all MikroTik devices."""
+    from ..drivers.mikrotik import MikrotikDriver
+    devices = (
+        await db.execute(
+            select(MikrotikDevice).where(MikrotikDevice.enabled == True)  # noqa: E712
+        )
+    ).scalars().all()
+    out = []
+    for device in devices:
+        try:
+            driver = MikrotikDriver(device)
+            raw = await driver.collect_firewall_address_lists([])
+            # Empty list_names = fetch all
+            all_names = set()
+            for entry in raw:
+                all_names.add(entry.list_name)
+            out.append({
+                "device": device.name,
+                "ip": device.ip,
+                "total_entries": len(raw),
+                "list_names": sorted(all_names),
+                "entries": [{"list": e.list_name, "address": e.address, "comment": e.comment} for e in raw[:50]],
+            })
+        except Exception as exc:
+            out.append({"device": device.name, "ip": device.ip, "error": str(exc)})
+    return out
+
+
 @router.post("/remote/probe")
 async def probe_remote_access(body: RemoteProbeRequest):
     """Probe a batch of IPs for remote management pages (8080/80/443/8443)."""
