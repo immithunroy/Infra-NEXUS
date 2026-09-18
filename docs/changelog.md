@@ -9,10 +9,19 @@
 ### Added
 - **OTC (One-Time Charge) field** on leads — new `otc` column in `leads` table, added to `LeadCreate`, `LeadUpdate`, `LeadOut` schemas, and `Lead` TypeScript interface
 - **Google Map right-click "Add Lead"** — new context menu item navigates to `/leads?lat=X&lng=Y`, auto-opens lead creation modal with coordinates pre-filled
+- **Multi-subscriber ONU support** — new `onu_subscribers` table (many-to-many: ONU ↔ Subscriber); `mac_binding.py` now populates it for all PPPoE sessions sharing the same MAC; `list_subscribers` checks both `Onu.subscriber` and `onu_subscribers` for `onu_binded` status
+- **Subscriber list OLT/PORT column clickable** — clicking OLT name or PON port navigates to ONU profile when `onu_id > 0`
 
 ### Changed
 - **Lead form label "Service Charge" renamed to "MRC"** — in modal, table header, detail view, and KPI label ("MRC Revenue")
 - **Lead assignment dropdown shows full name** — `_user_map()` in `leads.py` now selects `User.full_name` (falls back to `username`); frontend fetches `full_name` and displays it in both modal and inline dropdowns
+- **Subscriber list now sourced from MikroTik secrets** — `GET /api/subscribers` queries `subscribers` table instead of `onus` table; every PPPoE secret appears immediately on next scan regardless of ONU binding; tabs changed from "active/unbound/disabled" to "connected/disconnected/disabled"; new response fields: `connected`, `onu_binded`
+
+### Database
+- New table `onu_subscribers` — many-to-many: ONU ↔ PPPoE subscriber (supports multiple subscribers behind one ONU via switch)
+
+### API
+- `GET /api/subscribers` — new params: `status=connected|disconnected|disabled`, `sort=subscriber|status`; new response fields: `connected` (bool), `onu_binded` (bool)
 
 ---
 

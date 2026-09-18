@@ -230,24 +230,24 @@ export default function OnuProfile() {
         )}
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-          <InfoBox label="Serial" value={onu.serial} mono />
+          <InfoBox label="Subscriber" value={<SubscriberLink subscriber={onu.subscriber} />} />
           <InfoBox label="MAC" value={<MacCell mac={onu.last_mac || onu.mac} vendor={onu.mac_vendor} />} />
           <InfoBox label="PON Port" value={onu.pon_port} mono />
           <InfoBox label="ONU ID" value={String(onu.onu_id)} mono />
-          <InfoBox label="VLAN" value={onu.vlan > 0 ? String(onu.vlan) : "—"} mono />
           <InfoBox label="RX Power" value={onu.rx_power != null ? `${onu.rx_power} dBm` : "—"} danger={onu.rx_power != null && onu.rx_power < -25} />
           <InfoBox label="TX Power" value={onu.tx_power != null ? `${onu.tx_power} dBm` : "—"} />
           <InfoBox label="Distance" value={onu.distance != null ? `${Math.round(onu.distance * 1000).toLocaleString()} m` : "—"} />
+          <InfoBox label="Mikrotik IP" value={onu.mikrotik_ip || "—"} />
+          <InfoBox label="Last Seen" value={onu.last_seen ? fmtTime(onu.last_seen) : "—"} />
+          <InfoBox label="State" value={onu.state} />
+          <InfoBox label="Serial" value={onu.serial} mono />
+          <InfoBox label="VLAN" value={onu.vlan > 0 ? String(onu.vlan) : "—"} mono />
           <InfoBox label="Vendor" value={onu.vendor || "—"} />
           <InfoBox label="Software" value={onu.sw_version || "—"} />
           <InfoBox label="LAN Port" value={onu.lan_status ? (onu.lan_status === "up" ? "Up" : "Down") : "—"} danger={onu.lan_status === "down"} />
           <InfoBox label="BW Down" value={onu.bw_in != null ? `${(onu.bw_in / 1000000).toFixed(1)} Mbps` : "—"} />
           <InfoBox label="BW Up" value={onu.bw_out != null ? `${(onu.bw_out / 1000000).toFixed(1)} Mbps` : "—"} />
           <InfoBox label="Source" value={onu.source} />
-          <InfoBox label="Subscriber" value={<SubscriberLink subscriber={onu.subscriber} />} />
-          <InfoBox label="Mikrotik IP" value={onu.mikrotik_ip || "—"} />
-          <InfoBox label="Last Seen" value={onu.last_seen ? fmtTime(onu.last_seen) : "—"} />
-          <InfoBox label="State" value={onu.state} />
         </div>
       </div>
 

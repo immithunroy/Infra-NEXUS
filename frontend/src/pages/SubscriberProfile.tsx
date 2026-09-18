@@ -750,7 +750,13 @@ export default function SubscriberProfilePage() {
 
       {/* ── Info strip ── */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
-        <span><span className="text-slate-400">OLT</span> <span className="font-medium">{profile.olt_name}</span> <span className="font-mono text-slate-400">{profile.pon_port || "—"}</span></span>
+        {profile.onu_id > 0 ? (
+          <Link to={`/onus/${profile.onu_id}`} className="text-blue-600 hover:underline dark:text-blue-400">
+            <span className="text-slate-400">OLT</span> <span className="font-medium">{profile.olt_name}</span> <span className="font-mono">{profile.pon_port || "—"}</span>
+          </Link>
+        ) : (
+          <span><span className="text-slate-400">OLT</span> <span className="font-medium">{profile.olt_name}</span> <span className="font-mono text-slate-400">{profile.pon_port || "—"}</span></span>
+        )}
         <span className="text-slate-300 dark:text-slate-600">|</span>
         <span className="font-mono font-medium">{profile.last_mac || "—"}</span>
         {profile.mac_vendor && <span className="text-[10px] font-semibold uppercase text-brand-600 dark:text-brand-400">{profile.mac_vendor}</span>}

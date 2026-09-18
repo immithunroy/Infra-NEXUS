@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { SubscriberSummary } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
@@ -8,10 +8,11 @@ import StatusBadge from "../components/StatusBadge";
 import { RemoteAccessButton } from "../components/RemoteAccess";
 import { Pagination, usePagination } from "../components/Pagination";
 
-type TabKey = "active" | "unbound" | "disabled";
+type TabKey = "all" | "connected" | "disconnected" | "disabled";
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "active", label: "Subscribers" },
-  { key: "unbound", label: "Unbound" },
+  { key: "all", label: "All Subscribers" },
+  { key: "connected", label: "Connected" },
+  { key: "disconnected", label: "Disconnected" },
   { key: "disabled", label: "Disabled / Expired" },
 ];
 
@@ -19,7 +20,7 @@ export default function Subscribers() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<SubscriberSummary[]>([]);
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<TabKey>("active");
+  const [tab, setTab] = useState<TabKey>("all");
   const [sortCol, setSortCol] = useState<string>("subscriber");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(true);
@@ -30,7 +31,7 @@ export default function Subscribers() {
     setLoading(true);
     const params: Record<string, string> = { limit: "1000" };
     if (q) params.q = q;
-    if (tab) params.status = tab;
+    if (tab !== "all") params.status = tab;
     params.sort = sortCol;
     params.order = sortDir;
     api
@@ -57,13 +58,17 @@ export default function Subscribers() {
     return <span className="ml-1 text-brand-600 dark:text-brand-400">{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
 
+  const openProfile = (s: SubscriberSummary) => {
+    navigate(`/subscribers/${encodeURIComponent(s.subscriber)}`);
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Subscribers</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            One row per PPPoE subscriber bound to an ONU. Click to open the profile with optical history and MAC changes.
+            One row per PPPoE subscriber synced from MikroTik. Click to open the profile with optical history and MAC changes.
           </p>
         </div>
         <span className="badge bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">{rows.length} subscribers</span>
@@ -105,7 +110,7 @@ export default function Subscribers() {
               <th className="th">OLT / Port</th>
               <th className="th">Name</th>
               <th className="th">Current MAC</th>
-              <th className="th">State</th>
+              <th className="th">Status</th>
               <th className="th">Remote/ACS</th>
               <th className="th">RX / TX</th>
               <th className="th">MAC changes</th>
@@ -114,15 +119,28 @@ export default function Subscribers() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
             {slice.map((s, i) => (
               <tr
-                key={s.onu_id}
-                onClick={() => navigate(`/subscribers/${encodeURIComponent(s.subscriber)}`)}
+                key={s.subscriber}
+                onClick={() => openProfile(s)}
                 className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
               >
                 <td className="td text-xs text-slate-400">{page * pageSize + i + 1}</td>
                 <td className="td"><SubscriberLink subscriber={s.subscriber} /></td>
                 <td className="td">
-                  <div>{s.olt_name}</div>
-                  <div className="font-mono text-xs text-slate-500">{s.pon_port || "—"}</div>
+                  {s.onu_id > 0 ? (
+                    <Link
+                      to={`/onus/${s.onu_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      <div>{s.olt_name || "—"}</div>
+                      <div className="font-mono text-xs">{s.pon_port || "—"}</div>
+                    </Link>
+                  ) : (
+                    <>
+                      <div>{s.olt_name || <span className="text-slate-400">—</span>}</div>
+                      <div className="font-mono text-xs text-slate-500">{s.pon_port || "—"}</div>
+                    </>
+                  )}
                 </td>
                 <td className="td">{s.onu_name || <span className="text-slate-400">—</span>}</td>
                 <td className="td"><MacCell mac={s.last_mac} vendor={s.mac_vendor} /></td>
@@ -131,7 +149,7 @@ export default function Subscribers() {
                 </td>
                 <td className="td">
                   <div className="flex flex-col items-start gap-1" onClick={(e) => e.stopPropagation()}>
-                    <RemoteAccessButton ip={s.mikrotik_ip} label="remote" />
+                    {s.mikrotik_ip && <RemoteAccessButton ip={s.mikrotik_ip} label="remote" />}
                     <button
                       type="button"
                       title={s.acs_device_id ? "Open router in ACS" : "No ACS (TR-069) router registered — open ACS list"}
@@ -172,11 +190,13 @@ export default function Subscribers() {
             {rows.length === 0 && (
               <tr>
                 <td className="td" colSpan={9}>
-                  {loading ? "Loading…" : tab === "active"
-                    ? "No subscribers yet. Run a Mikrotik scan and a binding pass — subscribers appear once their MAC is matched."
-                    : tab === "unbound"
-                    ? "No unbound subscribers."
-                    : "No disabled/expired subscribers."}
+                  {loading ? "Loading…" : tab === "connected"
+                    ? "No connected subscribers. Subscribers appear here once their PPPoE session is active."
+                    : tab === "disconnected"
+                    ? "No disconnected subscribers."
+                    : tab === "disabled"
+                    ? "No disabled/expired subscribers."
+                    : "No subscribers yet. Run a MikroTik scan — subscribers appear once their PPPoE secrets are synced."}
                 </td>
               </tr>
             )}

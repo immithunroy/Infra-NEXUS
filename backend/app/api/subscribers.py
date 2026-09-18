@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import AcsDevice, AcsParameter, MikrotikDevice, Onu, OnuMacHistory, OnuTelemetry, PppActiveEntry, Ticket, TicketStatus, User
+from ..models import AcsDevice, AcsParameter, MikrotikDevice, Onu, OnuMacHistory, OnuSubscriber, OnuTelemetry, PppActiveEntry, Subscriber, Ticket, TicketStatus, User
 from ..utils.time import utcnow
 from ..security import get_current_user, user_role
 from ..services.mac_vendor import vendor_map
@@ -95,175 +95,219 @@ def _telemetry_points(rows: list[OnuTelemetry]) -> list[TelemetryPoint]:
 @router.get("", response_model=list[SubscriberSummary])
 async def list_subscribers(
     q: str | None = Query(default=None),
-    status: str | None = Query(default=None, description="active|unbound|disabled"),
-    sort: str | None = Query(default=None, description="subscriber|state|bound|last_seen"),
+    status: str | None = Query(default=None, description="connected|disconnected|disabled"),
+    sort: str | None = Query(default=None, description="subscriber|status"),
     order: str = Query(default="asc", description="asc|desc"),
     limit: int = Query(default=500, le=2000),
     db: AsyncSession = Depends(get_db),
 ):
-    """List subscribers (ONUs carrying a PPPoE username).
+    """List subscribers sourced from MikroTik PPPoE secrets.
+
+    Every secret synced by the periodic scan appears here immediately,
+    regardless of whether a PPPoE session is active or an ONU is bound.
 
     status filter:
-      - omitted/all: all ONUs with a PPPoE username (backward compat)
-      - active: currently bound (Onu.bound == True)
-      - unbound: has PPPoE username but not bound
+      - omitted/all: all non-deleted secrets
+      - connected: currently has an active PPPoE session
+      - disconnected: secret exists but no active session, not disabled
       - disabled: subscriber marked as disabled/billing-expired
     """
-    from ..models import Subscriber as SubscriberModel
-
+    # Source of truth: subscribers table (MikroTik secrets)
     sel = (
-        select(Onu)
-        .options(selectinload(Onu.olt))
-        .where(Onu.subscriber != "")
+        select(Subscriber)
+        .where(Subscriber.is_deleted == False)  # noqa: E712
     )
 
     # Status filtering
-    if status == "active":
-        sel = sel.where(Onu.bound == True)  # noqa: E712
-    elif status == "unbound":
-        sel = sel.where(Onu.bound == False)  # noqa: E712
+    if status == "disabled":
+        sel = sel.where(Subscriber.disabled == True)  # noqa: E712
+    elif status == "connected":
+        # Only secrets that have an active PPPoE session
+        active_subq = (
+            select(PppActiveEntry.subscriber)
+            .group_by(PppActiveEntry.subscriber)
+            .subquery()
+        )
+        sel = sel.where(Subscriber.pppoe_username.in_(select(active_subq.c.subscriber)))
+    elif status == "disconnected":
+        # Secrets without active session, not disabled
+        active_subq = (
+            select(PppActiveEntry.subscriber)
+            .group_by(PppActiveEntry.subscriber)
+            .subquery()
+        )
+        sel = sel.where(
+            Subscriber.disabled == False,  # noqa: E712
+            ~Subscriber.pppoe_username.in_(select(active_subq.c.subscriber)),
+        )
 
     # Text search
     if q:
         like = f"%{q}%"
-        sel = sel.where(
-            Onu.subscriber.ilike(like)
-            | Onu.name.ilike(like)
-            | Onu.pon_port.ilike(like)
-            | Onu.last_mac.ilike(like)
-        )
+        sel = sel.where(Subscriber.pppoe_username.ilike(like))
 
     # Sorting
-    sort_col = Onu.subscriber
-    if sort == "state":
-        sort_col = Onu.state
-    elif sort == "bound":
-        sort_col = Onu.bound
-    elif sort == "last_seen":
-        sort_col = Onu.last_seen
-
-    if order == "desc":
-        sel = sel.order_by(sort_col.desc())
+    if sort == "status":
+        sel = sel.order_by(Subscriber.disabled.desc(), Subscriber.pppoe_username.asc())
     else:
-        sel = sel.order_by(sort_col.asc())
+        sel = sel.order_by(Subscriber.pppoe_username.desc() if order == "desc" else Subscriber.pppoe_username.asc())
 
     sel = sel.limit(limit)
+    subs = (await db.execute(sel)).scalars().all()
 
-    # Disabled tab: query subscribers table directly (disabled accounts may not have ONUs)
-    if status == "disabled":
-        sub_sel = (
-            select(SubscriberModel)
-            .where(SubscriberModel.disabled == True, SubscriberModel.is_deleted == False)  # noqa: E712
+    if not subs:
+        return []
+
+    usernames = [s.pppoe_username for s in subs]
+
+    # Find active PPPoE sessions for these subscribers
+    active_sessions = (
+        await db.execute(
+            select(PppActiveEntry.subscriber, PppActiveEntry.mac, PppActiveEntry.ip, PppActiveEntry.interface)
+            .where(PppActiveEntry.subscriber.in_(usernames))
+            .group_by(PppActiveEntry.subscriber, PppActiveEntry.mac, PppActiveEntry.ip, PppActiveEntry.interface)
         )
-        if q:
-            like = f"%{q}%"
-            sub_sel = sub_sel.where(SubscriberModel.pppoe_username.ilike(like))
-        if order == "desc":
-            sub_sel = sub_sel.order_by(SubscriberModel.pppoe_username.desc())
-        else:
-            sub_sel = sub_sel.order_by(SubscriberModel.pppoe_username.asc())
-        sub_sel = sub_sel.limit(limit)
-        subs = (await db.execute(sub_sel)).scalars().all()
+    ).all()
+    active_map: dict[str, dict] = {}
+    for row in active_sessions:
+        active_map[row.subscriber] = {"mac": row.mac, "ip": row.ip, "interface": row.interface}
 
-        # Try to match with ONUs
-        sub_usernames = [s.pppoe_username for s in subs]
-        onu_map: dict[str, Onu] = {}
-        if sub_usernames:
-            onus_match = (
-                await db.execute(
-                    select(Onu).options(selectinload(Onu.olt)).where(Onu.subscriber.in_(sub_usernames))
-                )
-            ).scalars().all()
-            onu_map = {o.subscriber: o for o in onus_match}
+    # Find matching ONUs for these subscribers via two paths:
+    # 1. Onu.subscriber (primary subscriber, backward compat)
+    # 2. onu_subscribers table (multi-subscriber ONUs via switch)
+    onu_rows = (
+        await db.execute(
+            select(Onu).options(selectinload(Onu.olt)).where(Onu.subscriber.in_(usernames))
+        )
+    ).scalars().all()
+    onu_map: dict[str, Onu] = {o.subscriber: o for o in onu_rows}
 
-        vendors = await vendor_map(db, [onu_map[u].last_mac for u in sub_usernames if u in onu_map])
-        acs_by_onu = await _acs_map(db)
-        out: list[SubscriberSummary] = []
-        for s in subs:
-            o = onu_map.get(s.pppoe_username)
-            state = (o.state.value if hasattr(o.state, "value") else str(o.state)) if o else "inactive"
-            out.append(
-                SubscriberSummary(
-                    subscriber=s.pppoe_username,
-                    onu_id=o.id if o else 0,
-                    onu_name=o.name if o else "",
-                    olt_name=o.olt.name if o and o.olt else "",
-                    pon_port=o.pon_port if o else "",
-                    last_mac=o.last_mac if o else "",
-                    mac_vendor=vendors.get((o.last_mac if o else "").lower(), ""),
-                    mikrotik_ip=o.mikrotik_ip if o else "",
-                    state=state,
-                    bound=o.bound if o else False,
-                    down_reason=o.down_reason if o else "",
-                    status="disabled",
-                    disabled=True,
-                    acs_device_id=acs_by_onu.get(o.id) if o else None,
-                    rx_power=o.rx_power if o else None,
-                    tx_power=o.tx_power if o else None,
-                    mac_change_count=0,
-                    last_seen=o.last_seen if o else None,
-                    phone=o.phone if o else "",
-                    mobile2=o.mobile2 if o else "",
-                )
+    # Check onu_subscribers for additional bindings
+    onu_sub_rows = (
+        await db.execute(
+            select(OnuSubscriber.onu_id, OnuSubscriber.pppoe_username)
+            .where(OnuSubscriber.pppoe_username.in_(usernames))
+        )
+    ).all()
+    # Map: pppoe_username -> onu_id (from onu_subscribers)
+    onu_sub_map: dict[str, int] = {}
+    onu_ids_from_sub = set()
+    for row in onu_sub_rows:
+        onu_sub_map[row.pppoe_username] = row.onu_id
+        onu_ids_from_sub.add(row.onu_id)
+
+    # Fetch ONUs that are only in onu_subscribers (not in onu_map yet)
+    extra_onu_ids = onu_ids_from_sub - {o.id for o in onu_rows}
+    if extra_onu_ids:
+        extra_onus = (
+            await db.execute(
+                select(Onu).options(selectinload(Onu.olt)).where(Onu.id.in_(extra_onu_ids))
             )
-        return out
-    onus = (await db.execute(sel)).scalars().all()
+        ).scalars().all()
+        for o in extra_onus:
+            onu_map.setdefault(o.subscriber, o)  # Don't overwrite existing
 
+    # Combine all onu_ids for MAC history and vendor lookup
+    all_onu_ids = list({o.id for o in onu_rows} | onu_ids_from_sub)
     counts: dict[int, int] = {}
-    if onus:
+    if all_onu_ids:
         rows = (
             await db.execute(
                 select(OnuMacHistory.onu_id, func.count())
-                .where(OnuMacHistory.onu_id.in_([o.id for o in onus]))
+                .where(OnuMacHistory.onu_id.in_(all_onu_ids))
                 .group_by(OnuMacHistory.onu_id)
             )
         ).all()
         counts = {onu_id: c for onu_id, c in rows}
 
-    vendors = await vendor_map(db, [o.last_mac for o in onus])
+    # MAC vendor lookup — collect MACs from all ONUs involved
+    macs = []
+    for oid in all_onu_ids:
+        onu_obj = next((o for o in onu_rows if o.id == oid), None)
+        if onu_obj and onu_obj.last_mac:
+            macs.append(onu_obj.last_mac)
+    for s in active_sessions:
+        if s.mac:
+            macs.append(s.mac)
+    vendors = await vendor_map(db, macs) if macs else {}
 
-    # Check disabled status from subscribers table
-    disabled_set: set[str] = set()
-    if onus:
-        sub_usernames = [o.subscriber for o in onus]
-        disabled_rows = (
-            await db.execute(
-                select(SubscriberModel.pppoe_username).where(
-                    SubscriberModel.pppoe_username.in_(sub_usernames),
-                    SubscriberModel.disabled == True,  # noqa: E712
-                    SubscriberModel.is_deleted == False,  # noqa: E712
-                )
-            )
-        ).scalars().all()
-        disabled_set = set(disabled_rows)
+    # ACS mapping
+    acs_by_onu = await _acs_map(db)
+
+    # Build onu_id lookup for each subscriber (check both maps)
+    def _get_onu(uname: str) -> Onu | None:
+        # Direct ONU match (primary subscriber)
+        if uname in onu_map:
+            return onu_map[uname]
+        # onu_subscribers table match
+        if uname in onu_sub_map:
+            oid = onu_sub_map[uname]
+            # Find the Onu object from extra_onus or onu_rows
+            for o in onu_rows:
+                if o.id == oid:
+                    return o
+        return None
 
     out: list[SubscriberSummary] = []
-    acs_by_onu = await _acs_map(db)
-    for o in onus:
-        state = o.state.value if hasattr(o.state, "value") else str(o.state)
-        is_disabled = o.subscriber in disabled_set
+    for s in subs:
+        uname = s.pppoe_username
+        o = _get_onu(uname)
+        act = active_map.get(uname)
+
+        # Determine status
+        is_connected = act is not None
+        is_disabled = s.disabled
+        onu_bind = o is not None
+
+        if is_disabled:
+            display = "disabled"
+        elif is_connected:
+            display = "connected"
+        elif onu_bind:
+            state_val = (o.state.value if hasattr(o.state, "value") else str(o.state)) if o else "unknown"
+            display = state_val
+        else:
+            display = "disconnected"
+
+        # MAC: prefer active session MAC, fall back to ONU MAC
+        mac = act["mac"] if act else (o.last_mac if o else "")
+
+        # MikroTik IP from ONU, or look up from device
+        mikrotik_ip = ""
+        if o and o.mikrotik_ip:
+            mikrotik_ip = o.mikrotik_ip
+        elif s.mikrotik_device_id:
+            dev = await db.get(MikrotikDevice, s.mikrotik_device_id)
+            if dev:
+                mikrotik_ip = dev.ip
+
+        rx_power = o.rx_power if o else None
+        tx_power = o.tx_power if o else None
+
         out.append(
             SubscriberSummary(
-                subscriber=o.subscriber,
-                onu_id=o.id,
-                onu_name=o.name,
-                olt_name=o.olt.name if o.olt else "",
-                pon_port=o.pon_port,
-                last_mac=o.last_mac,
-                mac_vendor=vendors.get(o.last_mac.lower(), ""),
-                mikrotik_ip=o.mikrotik_ip or "",
-                state=state,
-                bound=o.bound,
-                down_reason=o.down_reason or "",
-                status=display_status(state, o.bound, o.down_reason or "", disabled=is_disabled),
+                subscriber=uname,
+                onu_id=o.id if o else 0,
+                onu_name=o.name if o else "",
+                olt_name=o.olt.name if o and o.olt else "",
+                pon_port=o.pon_port if o else "",
+                last_mac=mac,
+                mac_vendor=vendors.get(mac.lower(), ""),
+                mikrotik_ip=mikrotik_ip,
+                state=(o.state.value if hasattr(o.state, "value") else str(o.state)) if o else "",
+                bound=o.bound if o else False,
+                down_reason=(o.down_reason or "") if o else "",
+                status=display,
                 disabled=is_disabled,
-                acs_device_id=acs_by_onu.get(o.id),
-                rx_power=o.rx_power,
-                tx_power=o.tx_power,
-                mac_change_count=counts.get(o.id, 0),
-                last_seen=o.last_seen,
-                phone=o.phone or "",
-                mobile2=o.mobile2 or "",
+                connected=is_connected,
+                onu_binded=onu_bind,
+                acs_device_id=acs_by_onu.get(o.id) if o else None,
+                rx_power=rx_power,
+                tx_power=tx_power,
+                mac_change_count=counts.get(o.id, 0) if o else 0,
+                last_seen=o.last_seen if o else (s.last_seen_at),
+                phone=(o.phone or "") if o else "",
+                mobile2=(o.mobile2 or "") if o else "",
             )
         )
     return out

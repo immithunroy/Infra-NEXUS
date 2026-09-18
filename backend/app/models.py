@@ -411,6 +411,26 @@ class Binding(Base):
     )
 
 
+class OnuSubscriber(Base):
+    """Many-to-many: ONU ↔ PPPoE subscriber.
+
+    Supports multiple subscribers behind one ONU (via switch).
+    Populated by mac_binding when a MAC matches an ONU and
+    multiple PPPoE sessions share that MAC.
+    """
+
+    __tablename__ = "onu_subscribers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    onu_id: Mapped[int] = mapped_column(ForeignKey("onus.id", ondelete="CASCADE"), index=True)
+    pppoe_username: Mapped[str] = mapped_column(String(128), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("onu_id", "pppoe_username", name="uq_onu_pppoe"),
+    )
+
+
 class ScanLog(Base):
     __tablename__ = "scan_logs"
 

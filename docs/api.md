@@ -520,8 +520,9 @@ Search across ONUs, OLTs, and Mikrotiks.
 
 #### GET `/api/subscribers`
 
-List subscribers (ONUs with PPPoE username).  
-**Query:** `q=<search>`, `limit=50`
+List subscribers sourced from MikroTik PPPoE secrets. Every secret synced by the periodic scan appears immediately, regardless of whether a PPPoE session is active or an ONU is bound.  
+**Query:** `q=<search>`, `status=connected|disconnected|disabled`, `sort=subscriber|status`, `order=asc|desc`, `limit=500`  
+**Response fields include:** `connected` (bool — active PPPoE session), `onu_binded` (bool — has matching ONU), `disabled` (bool — billing expired)
 
 #### POST `/api/subscribers/remote/probe`
 

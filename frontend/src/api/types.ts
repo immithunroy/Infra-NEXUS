@@ -476,6 +476,8 @@ export interface SubscriberSummary {
   down_reason: string;
   status: string;
   disabled: boolean;
+  connected: boolean;
+  onu_binded: boolean;
   acs_device_id: number | null;
   rx_power: number | null;
   tx_power: number | null;

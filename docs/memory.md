@@ -321,3 +321,37 @@ tar -czf photos_$(date +%Y%m%d).tar.gz /app/uploads/approval-photos/
 - Geographic outage heatmaps
 - Multi-tenant support
 - Webhook notifications
+
+---
+
+## 7. Key Architecture Decisions
+
+### 7.1 Subscriber List Source of Truth
+
+**Date:** 2026-09-18
+
+**Decision:** Changed subscriber list endpoint to query from `subscribers` table (MikroTik secrets) instead of `onus` table.
+
+**Previous behavior:** Subscribers only appeared in the UI when an ONU record had a matching MAC bound to an active PPPoE session. This required two conditions: (1) MikroTik scan, (2) MAC binding match.
+
+**New behavior:** Every PPPoE secret synced from MikroTik appears in the UI immediately on the next scan, regardless of ONU binding or PPPoE connection status.
+
+**Reason:** Operators need to see all provisioned subscribers, not just those currently connected. A subscriber created on MikroTik (via WinBox) should be visible in the web UI without requiring an active connection.
+
+**Impact:** `GET /api/subscribers` now queries `subscribers` table as source of truth, LEFT JOINs with `ppp_active_entries` (connection status) and `onus` (ONU binding). Response includes new fields: `connected` (bool), `onu_binded` (bool). Tabs changed from "active/unbound/disabled" to "connected/disconnected/disabled".
+
+### 7.2 Multi-Subscriber ONU Support
+
+**Date:** 2026-09-18
+
+**Decision:** Added `onu_subscribers` table (many-to-many: ONU ↔ Subscriber) to support multiple subscribers behind one ONU via switch.
+
+**Problem:** When multiple subscribers share one ONU (via switch), they all have the same MAC address. The original `mac_binding.py` stored only one session per MAC in `active_by_mac`, so only one subscriber got bound to the ONU. Other subscribers appeared as "disconnected" even though they were physically connected.
+
+**Solution:** 
+1. New `onu_subscribers` table with `UNIQUE(onu_id, pppoe_username)` constraint
+2. `mac_binding.py` now stores ALL sessions per MAC (list, not single tuple)
+3. When a MAC matches an ONU, ALL matching subscribers are added to `onu_subscribers`
+4. `list_subscribers` checks both `Onu.subscriber` (backward compat) and `onu_subscribers` for `onu_binded` status
+
+**Impact:** All subscribers behind the same ONU now correctly show `onu_binded = true` and the OLT/PORT column links to the ONU profile.

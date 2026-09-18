@@ -36,6 +36,7 @@ erDiagram
     onus ||--o{ onu_mac_history : has
     onus ||--o{ acs_devices : registered
     onus ||--o{ tickets : linked
+    onus ||--o{ onu_subscribers : has_many
     
     cables ||--o{ cable_segments : has
     cables ||--o{ splices : cable_a
@@ -282,7 +283,20 @@ erDiagram
 
 **Constraints:** `UNIQUE(mac, olt_id)`
 
-### 2.12 `scan_logs`
+### 2.12 `onu_subscribers`
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PK, auto-increment | Row ID |
+| `onu_id` | INTEGER | FK → onus.id, CASCADE, indexed | ONU |
+| `pppoe_username` | VARCHAR(128) | indexed | PPPoE username (subscriber ID) |
+| `created_at` | TIMESTAMPTZ | SERVER DEFAULT now() | Creation timestamp |
+
+**Constraints:** `UNIQUE(onu_id, pppoe_username)`
+
+**Purpose:** Many-to-many relationship between ONUs and PPPoE subscribers. Supports multiple subscribers behind one ONU (via switch). Populated by `mac_binding.py` when a MAC matches an ONU and multiple PPPoE sessions share that MAC.
+
+### 2.13 `scan_logs`
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
