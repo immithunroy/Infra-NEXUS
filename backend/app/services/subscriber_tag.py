@@ -16,8 +16,9 @@ from ..models import MikrotikDevice, PppActiveEntry, Subscriber
 
 logger = logging.getLogger("subscriber_tag")
 
-# Address list names to collect
-TAG_LISTS = ("multi", "suspect")
+# Address list names to collect (case-sensitive — must match MikroTik list names exactly)
+TAG_LISTS = ("Multi-Router", "suspect")
+TAG_LISTS_PREFIX = ("suspect",)  # Also match list names starting with "suspect" (e.g. ipv4-mid-range-suspect)
 
 
 @dataclass
@@ -58,20 +59,22 @@ async def collect_and_tag(session: AsyncSession) -> list[TagResult]:
     for device in devices:
         try:
             driver = MikrotikDriver(device)
-            entries = await driver.collect_firewall_address_lists(list(TAG_LISTS))
+            # Fetch ALL address-list entries, then filter locally by name/prefix
+            all_entries = await driver.collect_firewall_address_lists([])
             multi_count = 0
             suspect_count = 0
-            for entry in entries:
+            for entry in all_entries:
                 # Normalize IP: strip CIDR notation if present
                 ip = entry.address.split("/")[0].strip()
                 if not ip:
                     continue
-                if entry.list_name == "multi":
-                    all_multi_ips.add(ip)
-                    multi_count += 1
-                elif entry.list_name == "suspect":
-                    all_suspect_ips.add(ip)
-                    suspect_count += 1
+                if entry.list_name in TAG_LISTS or any(entry.list_name.startswith(p) for p in TAG_LISTS_PREFIX):
+                    if entry.list_name == "Multi-Router":
+                        all_multi_ips.add(ip)
+                        multi_count += 1
+                    else:
+                        all_suspect_ips.add(ip)
+                        suspect_count += 1
             results.append(TagResult(
                 device_name=device.name,
                 multi_ips=multi_count,
