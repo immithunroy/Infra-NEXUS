@@ -57,7 +57,7 @@ DB_SCHEMA = """
 - acs_devices: id, serial_number, manufacturer, model_name, subscriber, online, last_inform, last_cpu, last_mem_used, last_rx_rate, last_tx_rate
 
 ### Leads (Sales)
-- leads: id, customer_name, mobile_primary, status (new/contacted/converted/lost), assigned_to FK, package_name, created_at
+- leads: id, customer_name, mobile_primary, status (new/contacted/converted/lost), assigned_to FK, package_name, service_charge, otc, created_at
 
 ### Organization
 - pops: id, name, address

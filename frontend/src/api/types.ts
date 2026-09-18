@@ -1289,6 +1289,7 @@ export interface Lead {
   ward: string;
   package_name: string;
   service_charge: number | null;
+  otc: number | null;
   lead_source: string;
   assigned_to: number | null;
   assigned_to_name: string;

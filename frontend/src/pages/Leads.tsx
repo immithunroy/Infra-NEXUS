@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import {
   Lead, LeadDashboard, UserLeadPerformance, MonthlySummary,
@@ -346,6 +347,7 @@ const RevenueIcon = () => (
 export default function Leads() {
   const { role, user } = useUserRole();
   const isAdmin = role === "admin" || role === "global_write";
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [dashboard, setDashboard] = useState<LeadDashboard | null>(null);
@@ -359,7 +361,7 @@ export default function Leads() {
   const [showAddPackage, setShowAddPackage] = useState(false);
   const [newPackageName, setNewPackageName] = useState("");
   const [newPackagePrice, setNewPackagePrice] = useState("");
-  const [users, setUsers] = useState<{ id: number; username: string }[]>([]);
+  const [users, setUsers] = useState<{ id: number; username: string; full_name: string }[]>([]);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
@@ -429,13 +431,29 @@ export default function Leads() {
     loadMonthly();
     api.get<string[]>("/leads/wards/list").then(setWards).catch(() => undefined);
     api.get<string[]>("/leads/packages/list").then(setPackages).catch(() => undefined);
-    api.get<{ id: number; username: string }[]>("/users").then(setUsers).catch(() => undefined);
+    api.get<{ id: number; username: string; full_name: string }[]>("/users").then(setUsers).catch(() => undefined);
   }, [loadDashboard, loadUserPerf, loadMonthly]);
 
   useEffect(() => {
     loadLeads();
     loadCount();
   }, [loadLeads, loadCount]);
+
+  // Auto-open modal when lat/lng params are present (from map right-click)
+  useEffect(() => {
+    const lat = searchParams.get("lat");
+    const lng = searchParams.get("lng");
+    if (lat && lng) {
+      setModal({
+        status: "new",
+        priority: "normal",
+        lead_source: "other",
+        latitude: Number(lat),
+        longitude: Number(lng),
+      });
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   /* ── actions ──────────────────────────────────────────────────────── */
 
@@ -451,6 +469,7 @@ export default function Leads() {
         ward: modal.ward || "",
         package_name: modal.package_name || "",
         service_charge: modal.service_charge ? Number(modal.service_charge) : null,
+        otc: modal.otc ? Number(modal.otc) : null,
         lead_source: modal.lead_source || "other",
         assigned_to: modal.assigned_to ? Number(modal.assigned_to) : null,
         status: modal.status || "new",
@@ -594,7 +613,7 @@ export default function Leads() {
           <Kpi label="Successful" value={dashboard.successful} icon={<SuccessIcon />} accent="from-green-400 to-green-600" />
           <Kpi label="Lost" value={dashboard.lost} icon={<LostIcon />} accent="from-red-400 to-red-600" />
           <Kpi label="Conversion" value={`${dashboard.conversion_rate}%`} icon={<ConversionIcon />} accent="from-indigo-400 to-indigo-600" />
-          <Kpi label="Service Revenue" value={fmtCurrency(dashboard.total_service_charge)} icon={<RevenueIcon />} accent="from-emerald-400 to-emerald-600" />
+          <Kpi label="MRC Revenue" value={fmtCurrency(dashboard.total_service_charge)} icon={<RevenueIcon />} accent="from-emerald-400 to-emerald-600" />
         </div>
       )}
 
@@ -756,7 +775,7 @@ export default function Leads() {
                 <th className="th">Mobile</th>
                 <th className="th">Area / Road</th>
                 <th className="th">Package</th>
-                <th className="th">Service Charge</th>
+                <th className="th">MRC</th>
                 <th className="th">Assigned To</th>
                 <th className="th">Status</th>
                 <th className="th">Expected Date</th>
@@ -790,7 +809,7 @@ export default function Leads() {
                     >
                       <option value="">Unassigned</option>
                       {users.map((u) => (
-                        <option key={u.id} value={u.id}>{u.username}</option>
+                        <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
                       ))}
                     </select>
                   </td>
@@ -915,7 +934,7 @@ export default function Leads() {
                 <th className="th">Pending</th>
                 <th className="th">Lost</th>
                 <th className="th">Conversion %</th>
-                <th className="th">Service Charge</th>
+                <th className="th">MRC</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -1059,13 +1078,23 @@ export default function Leads() {
                   )}
                 </div>
                 <div>
-                  <label className="label">Service Charge (৳)</label>
+                  <label className="label">MRC (৳)</label>
                   <input
                     className="input"
                     type="number"
                     min={0}
                     value={modal.service_charge ?? ""}
                     onChange={(e) => setModal({ ...modal, service_charge: e.target.value ? Number(e.target.value) : null })}
+                  />
+                </div>
+                <div>
+                  <label className="label">OTC (৳)</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min={0}
+                    value={modal.otc ?? ""}
+                    onChange={(e) => setModal({ ...modal, otc: e.target.value ? Number(e.target.value) : null })}
                   />
                 </div>
                 <div>
@@ -1089,7 +1118,7 @@ export default function Leads() {
                   >
                     <option value="">Unassigned</option>
                     {users.map((u) => (
-                      <option key={u.id} value={u.id}>{u.username}</option>
+                      <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
                     ))}
                   </select>
                 </div>

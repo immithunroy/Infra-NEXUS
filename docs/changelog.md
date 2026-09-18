@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-09-18
+
+### Added
+- **OTC (One-Time Charge) field** on leads — new `otc` column in `leads` table, added to `LeadCreate`, `LeadUpdate`, `LeadOut` schemas, and `Lead` TypeScript interface
+- **Google Map right-click "Add Lead"** — new context menu item navigates to `/leads?lat=X&lng=Y`, auto-opens lead creation modal with coordinates pre-filled
+
+### Changed
+- **Lead form label "Service Charge" renamed to "MRC"** — in modal, table header, detail view, and KPI label ("MRC Revenue")
+- **Lead assignment dropdown shows full name** — `_user_map()` in `leads.py` now selects `User.full_name` (falls back to `username`); frontend fetches `full_name` and displays it in both modal and inline dropdowns
+
+---
+
 ## 2026-09-02
 
 ### Fixed

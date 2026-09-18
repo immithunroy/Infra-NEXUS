@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useJsApiLoader } from "@react-google-maps/api";
+import { useNavigate } from "react-router-dom";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
 import TjDetailPanel from "../components/TjDetailPanel";
@@ -144,6 +145,7 @@ function TjSearchSelect({ label, tjBoxes, value, onChange, excludeId }: {
 }
 
 export default function GoogleMap() {
+  const navigate = useNavigate();
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [apiKeyLoading, setApiKeyLoading] = useState(true);
   const [apiKeyError, setApiKeyError] = useState("");
@@ -819,6 +821,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         { label: "Feasibility Check", kind: "feas", color: "#22c55e" },
         { label: "Add TJ Box", kind: "tj", color: "#6366f1" },
         { label: "Add Link", kind: "cable", color: "#ef4444" },
+        { label: "Add Lead", kind: "lead", color: "#f59e0b" },
       ];
       for (const item of items) {
         const btn = document.createElement("button");
@@ -831,6 +834,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           if (item.kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); }
           else if (item.kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 8, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
           else if (item.kind === "cable") { setShowForm("cable"); }
+          else if (item.kind === "lead") { navigate(`/leads?lat=${lat}&lng=${lng}`); }
         };
         menu.appendChild(btn);
       }
@@ -888,6 +892,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         { label: "Feasibility Check", kind: "feas" },
         { label: "Add TJ Box", kind: "tj" },
         { label: "Add Link", kind: "cable" },
+        { label: "Add Lead", kind: "lead" },
       ];
       for (const item of items) {
         const btn = document.createElement("button");
@@ -900,6 +905,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           if (item.kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); }
           else if (item.kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 8, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
           else if (item.kind === "cable") { setShowForm("cable"); }
+          else if (item.kind === "lead") { navigate(`/leads?lat=${lat}&lng=${lng}`); }
         };
         menu.appendChild(btn);
       }

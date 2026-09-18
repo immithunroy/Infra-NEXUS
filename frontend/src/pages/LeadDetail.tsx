@@ -107,7 +107,8 @@ export default function LeadDetailPanel({
               <Row label="Road / Area">{lead.road_area || "—"}</Row>
               <Row label="Ward">{lead.ward || "—"}</Row>
               <Row label="Package">{lead.package_name || "—"}</Row>
-              <Row label="Service Charge">{fmtCurrency(lead.service_charge)}</Row>
+              <Row label="MRC">{fmtCurrency(lead.service_charge)}</Row>
+              <Row label="OTC">{fmtCurrency(lead.otc)}</Row>
               <Row label="Lead Source">{LEAD_SOURCE_LABELS[lead.lead_source as keyof typeof LEAD_SOURCE_LABELS] || lead.lead_source}</Row>
               <Row label="Assigned To">{lead.assigned_to_name || "—"}</Row>
               <Row label="Expected Connection Date">{lead.expected_connection_date ? fmtTime(lead.expected_connection_date) : "—"}</Row>

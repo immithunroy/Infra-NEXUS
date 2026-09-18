@@ -23,6 +23,7 @@ def _to_out(lead: Lead, users: dict[int, str]) -> LeadOut:
         ward=lead.ward,
         package_name=lead.package_name,
         service_charge=lead.service_charge,
+        otc=lead.otc,
         lead_source=lead.lead_source,
         assigned_to=lead.assigned_to,
         assigned_to_name=users.get(lead.assigned_to, "") if lead.assigned_to else "",
@@ -46,8 +47,8 @@ def _to_out(lead: Lead, users: dict[int, str]) -> LeadOut:
 
 
 async def _user_map(db: AsyncSession) -> dict[int, str]:
-    rows = (await db.execute(select(User.id, User.username))).all()
-    return {r[0]: r[1] for r in rows}
+    rows = (await db.execute(select(User.id, User.username, User.full_name))).all()
+    return {r[0]: (r[2] or r[1]) for r in rows}
 
 
 # ── CRUD ────────────────────────────────────────────────────────────────
@@ -419,6 +420,7 @@ async def create_lead(
         ward=body.ward.strip(),
         package_name=body.package_name.strip(),
         service_charge=body.service_charge,
+        otc=body.otc,
         lead_source=body.lead_source,
         assigned_to=body.assigned_to,
         status=body.status or "new",

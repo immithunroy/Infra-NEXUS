@@ -1051,6 +1051,7 @@ class Lead(Base):
     ward: Mapped[str] = mapped_column(String(64), default="")
     package_name: Mapped[str] = mapped_column(String(128), default="")
     service_charge: Mapped[float | None] = mapped_column(nullable=True)
+    otc: Mapped[float | None] = mapped_column(nullable=True)
     lead_source: Mapped[str] = mapped_column(String(64), default="walk_in")
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(32), default="new", index=True)

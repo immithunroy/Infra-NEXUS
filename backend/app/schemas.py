@@ -1604,6 +1604,7 @@ class LeadCreate(BaseModel):
     ward: str = ""
     package_name: str = ""
     service_charge: float | None = None
+    otc: float | None = None
     lead_source: str = "walk_in"
     assigned_to: int | None = None
     status: str = "new"
@@ -1638,6 +1639,7 @@ class LeadUpdate(BaseModel):
     ward: str | None = None
     package_name: str | None = None
     service_charge: float | None = None
+    otc: float | None = None
     lead_source: str | None = None
     assigned_to: int | None = None
     status: str | None = None
@@ -1675,6 +1677,7 @@ class LeadOut(BaseModel):
     ward: str = ""
     package_name: str = ""
     service_charge: float | None = None
+    otc: float | None = None
     lead_source: str = "walk_in"
     assigned_to: int | None = None
     assigned_to_name: str = ""
