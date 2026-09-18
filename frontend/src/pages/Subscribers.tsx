@@ -11,7 +11,7 @@ import { Pagination, usePagination } from "../components/Pagination";
 
 type TabKey = "all" | "connected" | "disconnected" | "disabled";
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "all", label: "All Subscribers" },
+  { key: "all", label: "All" },
   { key: "connected", label: "Connected" },
   { key: "disconnected", label: "Disconnected" },
   { key: "disabled", label: "Disabled / Expired" },
@@ -30,7 +30,7 @@ export default function Subscribers() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    const params: Record<string, string> = { limit: "1000" };
+    const params: Record<string, string> = { limit: "2000" };
     if (q) params.q = q;
     if (tab !== "all") params.status = tab;
     params.sort = sortCol;
@@ -72,7 +72,10 @@ export default function Subscribers() {
             One row per PPPoE subscriber synced from MikroTik. Click to open the profile with optical history and MAC changes.
           </p>
         </div>
-        <span className="badge bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">{rows.length} subscribers</span>
+        <div className="text-right">
+          <span className="text-3xl font-extrabold text-brand-600 dark:text-brand-400">{rows.length}</span>
+          <span className="ml-2 text-sm text-slate-500 dark:text-slate-400">subscribers</span>
+        </div>
       </header>
 
       {/* Tabs */}
@@ -88,6 +91,9 @@ export default function Subscribers() {
             }`}
           >
             {t.label}
+            {tab === t.key && (
+              <span className="ml-2 text-lg font-extrabold text-brand-600 dark:text-brand-400">{rows.length}</span>
+            )}
           </button>
         ))}
       </div>
@@ -126,7 +132,14 @@ export default function Subscribers() {
                 className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
               >
                 <td className="td text-xs text-slate-400">{page * pageSize + i + 1}</td>
-                <td className="td"><SubscriberLink subscriber={s.subscriber} /></td>
+                <td className="td">
+                  <SubscriberLink subscriber={s.subscriber} />
+                  {s.onu_sub_count > 1 && (
+                    <span className="ml-1.5 inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                      {s.onu_sub_count} on ONU
+                    </span>
+                  )}
+                </td>
                 <td className="td">
                   {s.onu_id > 0 ? (
                     <Link
@@ -155,6 +168,11 @@ export default function Subscribers() {
                 <td className="td">
                   <div className="flex flex-col items-start gap-1" onClick={(e) => e.stopPropagation()}>
                     {s.mikrotik_ip && <RemoteAccessButton ip={s.mikrotik_ip} label="remote" />}
+                    {s.onu_sub_count > 1 && (
+                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        {s.onu_sub_count}× subscribers
+                      </span>
+                    )}
                     <button
                       type="button"
                       title={s.acs_device_id ? "Open router in ACS" : "No ACS (TR-069) router registered — open ACS list"}

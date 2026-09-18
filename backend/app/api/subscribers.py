@@ -233,6 +233,7 @@ async def list_subscribers(
     # Combine all onu_ids for MAC history and vendor lookup
     all_onu_ids = list({o.id for o in onu_rows} | onu_ids_from_sub)
     counts: dict[int, int] = {}
+    onu_sub_counts: dict[int, int] = {}
     if all_onu_ids:
         rows = (
             await db.execute(
@@ -242,6 +243,20 @@ async def list_subscribers(
             )
         ).all()
         counts = {onu_id: c for onu_id, c in rows}
+
+        # Count subscribers per ONU (from onu_subscribers junction table)
+        sub_count_rows = (
+            await db.execute(
+                select(OnuSubscriber.onu_id, func.count())
+                .where(OnuSubscriber.onu_id.in_(all_onu_ids))
+                .group_by(OnuSubscriber.onu_id)
+            )
+        ).all()
+        onu_sub_counts = {onu_id: c for onu_id, c in sub_count_rows}
+        # Add 1 for the primary subscriber (Onu.subscriber) if it exists
+        for o in onu_rows:
+            if o.subscriber:
+                onu_sub_counts[o.id] = onu_sub_counts.get(o.id, 0) + 1
 
     # MAC vendor lookup — collect MACs from all ONUs involved
     macs = []
@@ -332,6 +347,7 @@ async def list_subscribers(
                 last_seen=o.last_seen if o else (s.last_seen_at),
                 phone=(o.phone or "") if o else "",
                 mobile2=(o.mobile2 or "") if o else "",
+                onu_sub_count=onu_sub_counts.get(o.id, 0) if o else 0,
             )
         )
     return out

@@ -486,6 +486,7 @@ export interface SubscriberSummary {
   last_seen: string | null;
   phone: string;
   mobile2: string;
+  onu_sub_count: number;
 }
 
 export interface SubscriberProfile {

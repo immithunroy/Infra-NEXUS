@@ -597,6 +597,7 @@ class SubscriberSummary(BaseModel):
     last_seen: datetime | None = None
     phone: str = ""
     mobile2: str = ""
+    onu_sub_count: int = 0
 
 
 class RemotePort(BaseModel):
