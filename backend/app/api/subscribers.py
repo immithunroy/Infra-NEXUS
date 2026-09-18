@@ -45,6 +45,29 @@ async def _acs_map(db: AsyncSession) -> dict[int, int]:
     ).all()
     return {onu_id: dev_id for onu_id, dev_id in rows}
 
+
+async def _resolve_onu(db: AsyncSession, subscriber: str):
+    """Find ONU for a subscriber. Checks Onu.subscriber first, then onu_subscribers junction table."""
+    onu = (
+        await db.execute(
+            select(Onu).options(selectinload(Onu.olt)).where(Onu.subscriber == subscriber)
+        )
+    ).scalars().first()
+    if onu is not None:
+        return onu
+    onu_id = (
+        await db.execute(
+            select(OnuSubscriber.onu_id).where(OnuSubscriber.pppoe_username == subscriber)
+        )
+    ).scalar_one_or_none()
+    if onu_id is None:
+        return None
+    return (
+        await db.execute(
+            select(Onu).options(selectinload(Onu.olt)).where(Onu.id == onu_id)
+        )
+    ).scalars().first()
+
 # Largest delta between two byte counters for which a bandwidth rate is still
 # meaningful. Beyond this the sample pair spans too long to represent live use.
 _MAX_RATE_DT_SECONDS = 1800
@@ -379,9 +402,7 @@ async def probe_remote_access(body: RemoteProbeRequest):
 @router.get("/{subscriber}/remote", response_model=RemoteAccess)
 async def subscriber_remote(subscriber: str, db: AsyncSession = Depends(get_db)):
     """Probe a single subscriber's current IP for remote access."""
-    onu = (
-        await db.execute(select(Onu).where(Onu.subscriber == subscriber))
-    ).scalars().first()
+    onu = await _resolve_onu(db, subscriber)
     if onu is None:
         raise HTTPException(status_code=404, detail="Subscriber not found")
     ip = (onu.mikrotik_ip or "").strip()
@@ -400,9 +421,7 @@ async def subscriber_wifi(subscriber: str, db: AsyncSession = Depends(get_db)):
     otherwise reads the WiFi config directly from the router's web admin using
     the Cudy or TP-Link protocol (whichever management port is open).
     """
-    onu = (
-        await db.execute(select(Onu).where(Onu.subscriber == subscriber))
-    ).scalars().first()
+    onu = await _resolve_onu(db, subscriber)
     if onu is None:
         raise HTTPException(status_code=404, detail="Subscriber not found")
 
@@ -453,9 +472,7 @@ async def subscriber_telemetry(
     Returns raw 5-min samples for recent data, hourly averages for 7-30d,
     daily averages for 30d-1y. Max ~500 points per response.
     """
-    onu = (
-        await db.execute(select(Onu.id).where(Onu.subscriber == subscriber))
-    ).scalars().first()
+    onu = await _resolve_onu(db, subscriber)
     if onu is None:
         raise HTTPException(status_code=404, detail="Subscriber not found")
 
@@ -463,7 +480,7 @@ async def subscriber_telemetry(
     rows = (
         await db.execute(
             select(OnuTelemetry)
-            .where(OnuTelemetry.onu_id == onu, OnuTelemetry.sampled_at >= since)
+            .where(OnuTelemetry.onu_id == onu.id, OnuTelemetry.sampled_at >= since)
             .order_by(OnuTelemetry.sampled_at)
         )
     ).scalars().all()
@@ -677,11 +694,7 @@ async def subscriber_profile(
     user: User = Depends(get_current_user),
 ):
     """Full subscriber profile: current state + optical history + MAC changes."""
-    onu = (
-        await db.execute(
-            select(Onu).options(selectinload(Onu.olt)).where(Onu.subscriber == subscriber)
-        )
-    ).scalars().first()
+    onu = await _resolve_onu(db, subscriber)
 
     # Fetch tag from subscribers table
     sub_record = (
@@ -896,7 +909,7 @@ async def start_traffic_monitor(
         await asyncio.sleep(0.5)
 
     # Find the subscriber's ONU to get mikrotik_ip (which is actually the PPPoE IP)
-    onu = (await db.execute(select(Onu).where(Onu.subscriber == subscriber))).scalars().first()
+    onu = await _resolve_onu(db, subscriber)
     if not onu:
         raise HTTPException(status_code=404, detail="Subscriber not found")
 
