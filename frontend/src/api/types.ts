@@ -193,6 +193,7 @@ export interface Onu {
   email: string;
   last_seen: string | null;
   created_at: string;
+  subscribers: string[];
 }
 
 export interface Binding {

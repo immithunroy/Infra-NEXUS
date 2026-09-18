@@ -339,6 +339,7 @@ class OnuOut(BaseModel):
     email: str = ""
     last_seen: datetime | None
     created_at: datetime
+    subscribers: list[str] = []
 
 
 class TestResult(BaseModel):

@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from ..database import get_db
 from ..drivers.bdcom import BdcomCliDriver
-from ..models import OLTDevice, Onu, OnuSource, Ticket, TicketStatus, User
+from ..models import OLTDevice, Onu, OnuSource, OnuSubscriber, Ticket, TicketStatus, User
 from ..schemas import OnuBindRequest, OnuCreate, OnuOut, OnuPortControl, OnuUpdate
 from ..security import get_current_user, require_gps_write, require_write, user_role
 from ..services.mac_vendor import vendor_map
@@ -68,24 +68,52 @@ async def list_onus(
     res = await db.execute(q)
     rows = res.scalars().all()
     vendors = await vendor_map(db, [onu.last_mac or onu.mac for onu in rows])
-    out = [_to_out(onu) for onu in rows]
+
+    # Fetch all subscribers for these ONUs from onu_subscribers table
+    onu_ids = [o.id for o in rows]
+    sub_map: dict[int, list[str]] = {}
+    if onu_ids:
+        sub_rows = (
+            await db.execute(
+                select(OnuSubscriber.onu_id, OnuSubscriber.pppoe_username)
+                .where(OnuSubscriber.onu_id.in_(onu_ids))
+            )
+        ).all()
+        for row in sub_rows:
+            sub_map.setdefault(row.onu_id, []).append(row.pppoe_username)
+
+    out = [_to_out(onu, sub_map.get(onu.id, [])) for onu in rows]
     for onu, item in zip(rows, out):
         item.mac_vendor = vendors.get((onu.last_mac or onu.mac).lower(), "")
     return out
 
 
-def _to_out(onu: Onu) -> OnuOut:
+def _to_out(onu: Onu, extra_subscribers: list[str] | None = None) -> OnuOut:
     out = OnuOut.model_validate(onu)
     out.olt_name = onu.olt.name if onu.olt else ""
     out.down_reason = onu.down_reason or ""
     out.status = display_status(out.state, out.bound, out.down_reason)
+    # Build subscribers list: primary + extras from onu_subscribers
+    subs = []
+    if onu.subscriber:
+        subs.append(onu.subscriber)
+    if extra_subscribers:
+        for s in extra_subscribers:
+            if s not in subs:
+                subs.append(s)
+    out.subscribers = subs
     return out
 
 
 @router.get("/{onu_id}", response_model=OnuOut)
 async def get_onu(onu_id: int, db: AsyncSession = Depends(get_db)):
     onu = await _load_onu(db, onu_id)
-    return _to_out(onu)
+    sub_rows = (
+        await db.execute(
+            select(OnuSubscriber.pppoe_username).where(OnuSubscriber.onu_id == onu.id)
+        )
+    ).scalars().all()
+    return _to_out(onu, list(sub_rows))
 
 
 @router.post("/{onu_id}/check-status")
