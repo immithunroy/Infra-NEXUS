@@ -1,5 +1,4 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import {
   Lead, LeadDashboard, UserLeadPerformance, MonthlySummary,
@@ -347,8 +346,6 @@ const RevenueIcon = () => (
 export default function Leads() {
   const { role, user } = useUserRole();
   const isAdmin = role === "admin" || role === "global_write";
-  const location = useLocation();
-  const navigate = useNavigate();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [dashboard, setDashboard] = useState<LeadDashboard | null>(null);
@@ -439,16 +436,6 @@ export default function Leads() {
     loadLeads();
     loadCount();
   }, [loadLeads, loadCount]);
-
-  useEffect(() => {
-    const p = new URLSearchParams(location.search);
-    const lat = p.get("lat");
-    const lng = p.get("lng");
-    if (lat && lng) {
-      setModal({ status: "new", priority: "normal", lead_source: "other", latitude: Number(lat), longitude: Number(lng) });
-      navigate("/leads", { replace: true });
-    }
-  }, [location.search]);
 
   /* ── actions ──────────────────────────────────────────────────────── */
 
