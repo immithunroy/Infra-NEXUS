@@ -778,7 +778,7 @@ async def subscriber_profile(
     )
     state = onu.state.value if hasattr(onu.state, "value") else str(onu.state)
     return SubscriberProfile(
-        subscriber=onu.subscriber,
+        subscriber=subscriber,
         onu_id=onu.id,
         onu_name=onu.name,
         olt_name=onu.olt.name if onu.olt else "",
