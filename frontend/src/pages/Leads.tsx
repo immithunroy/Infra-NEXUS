@@ -453,7 +453,7 @@ export default function Leads() {
       });
       setSearchParams({}, { replace: true });
     }
-  }, []);
+  }, [searchParams]);
 
   /* ── actions ──────────────────────────────────────────────────────── */
 
