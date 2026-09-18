@@ -677,7 +677,7 @@ export default function SubscriberProfilePage() {
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    if (!profile) return;
+    if (!profile || !profile.onu_id) return;
     setSaving(true);
     try {
       const lat = form.gps_lat.trim() ? Number(form.gps_lat) : null;
@@ -1041,7 +1041,7 @@ export default function SubscriberProfilePage() {
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-4">
             <div className="lg:col-span-3"><label className="label">Note</label><input className="input text-xs" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></div>
             <div className="flex items-end justify-end">
-              <button type="submit" className="btn-primary py-1 text-xs" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+              <button type="submit" className="btn-primary py-1 text-xs" disabled={saving || !profile.onu_id}>{saving ? "Saving…" : profile.onu_id ? "Save" : "No ONU"}</button>
             </div>
           </div>
         </form>

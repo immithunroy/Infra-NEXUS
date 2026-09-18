@@ -682,8 +682,6 @@ async def subscriber_profile(
             select(Onu).options(selectinload(Onu.olt)).where(Onu.subscriber == subscriber)
         )
     ).scalars().first()
-    if onu is None:
-        raise HTTPException(status_code=404, detail="Subscriber not found")
 
     # Fetch tag from subscribers table
     sub_record = (
@@ -691,9 +689,45 @@ async def subscriber_profile(
             select(Subscriber).where(Subscriber.pppoe_username == subscriber)
         )
     ).scalar_one_or_none()
-    sub_tag = sub_record.tag if sub_record else ""
+
+    if onu is None and sub_record is None:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
 
     role = user_role(user)
+
+    # Subscriber exists in MikroTik but has no ONU — return basic profile
+    if onu is None:
+        return SubscriberProfile(
+            subscriber=sub_record.pppoe_username,
+            onu_id=0,
+            onu_name="",
+            olt_name="",
+            pon_port="",
+            serial="",
+            last_mac="",
+            mac_vendor="",
+            mikrotik_ip="",
+            state="",
+            bound=False,
+            can_edit_gps=role in ("admin", "global_write"),
+            down_reason="",
+            status="no_onu",
+            tag=sub_record.tag or "",
+            acs_device_id=None,
+            address="",
+            gps_lat=None,
+            gps_lng=None,
+            gps_accuracy=None,
+            phone="",
+            email="",
+            note="",
+            telemetry=[],
+            mac_history=[],
+            last_seen=sub_record.last_seen_at,
+        )
+
+    sub_tag = sub_record.tag if sub_record else ""
+
     can_edit = role in ("admin", "global_write")
     if not can_edit:
         assigned = (

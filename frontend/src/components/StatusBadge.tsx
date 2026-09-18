@@ -9,6 +9,7 @@ const statusBadge: Record<string, string> = {
   disconnected: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   disabled: "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400",
   unknown: "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400",
+  no_onu: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
 };
 
 const statusLabel: Record<string, string> = {
@@ -22,6 +23,7 @@ const statusLabel: Record<string, string> = {
   disconnected: "Disconnected",
   disabled: "Disabled",
   unknown: "Unknown",
+  no_onu: "No ONU",
 };
 
 export default function StatusBadge({ status }: { status: string }) {

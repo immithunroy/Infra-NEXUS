@@ -615,7 +615,7 @@ class RemoteAccess(BaseModel):
 
 class SubscriberProfile(BaseModel):
     subscriber: str
-    onu_id: int
+    onu_id: int = 0
     onu_name: str = ""
     olt_name: str = ""
     pon_port: str = ""
