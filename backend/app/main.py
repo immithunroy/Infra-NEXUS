@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -122,3 +123,46 @@ async def download_apk():
 @app.get("/api/scheduler/status")
 async def scheduler_status():
     return get_scheduler_status()
+
+
+@app.get("/api/scheduler/health")
+async def scheduler_health():
+    """Return health status of all scheduled jobs.
+
+    A job is considered unhealthy if:
+    - status is 'failed'
+    - last_run is older than expected interval + grace period
+    - error is non-empty
+    """
+    from datetime import timedelta
+    from .services.scheduler import get_scheduler_status
+    from .utils.time import utcnow
+
+    jobs = get_scheduler_status()
+    now = utcnow()
+    unhealthy = []
+    for job in jobs:
+        issues = []
+        if job.get("status") == "failed":
+            issues.append(f"Last run failed: {job.get('error', 'unknown error')}")
+        if job.get("error"):
+            issues.append(f"Error: {job['error']}")
+        last_run = job.get("last_run")
+        if last_run and job.get("enabled"):
+            try:
+                lr = datetime.fromisoformat(last_run.replace("Z", "+00:00"))
+                age = now - lr.astimezone(now.tzinfo) if lr.tzinfo else now - lr
+                # Flag if last run is > 30 min ago for interval jobs
+                if age > timedelta(minutes=30):
+                    issues.append(f"Last run was {int(age.total_seconds() / 60)} min ago")
+            except (ValueError, TypeError):
+                pass
+        if issues:
+            unhealthy.append({"id": job["id"], "name": job["name"], "issues": issues})
+
+    return {
+        "healthy": len(unhealthy) == 0,
+        "total_jobs": len(jobs),
+        "unhealthy_count": len(unhealthy),
+        "unhealthy": unhealthy,
+    }

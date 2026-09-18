@@ -102,6 +102,7 @@ def get_scheduler_status() -> list[dict[str, Any]]:
         {"id": "olt_write_all", "name": "OLT Config Save", "desc": "Persist running config to flash on all OLTs"},
         {"id": "mac_vendor_sync", "name": "MAC Vendor Sync", "desc": "Update MAC vendor OUI database from external API"},
         {"id": "hrm_user_sync", "name": "HRM User Sync", "desc": "Sync employees from HRM to Nexus users"},
+        {"id": "cleanup_stale_scans", "name": "Stale Scan Cleanup", "desc": "Auto-fail scans stuck >10 min"},
     ]
     for jdef in jobs_def:
         job = _scheduler.get_job(jdef["id"])
@@ -415,6 +416,37 @@ async def _cleanup_tj_reservations():
         logger.error("TJ reservation cleanup failed: %s", e)
 
 
+async def _cleanup_stale_scans():
+    """Auto-fail any scan_logs stuck in 'running' state for more than 10 minutes.
+
+    This prevents APScheduler's max_instances=1 from blocking future scan
+    executions when a previous scan hangs (e.g. network timeout, SSH hang).
+    """
+    from sqlalchemy import update
+    from ..models import ScanLog
+    stale_cutoff = utcnow() - timedelta(minutes=10)
+    try:
+        async with SessionLocal() as session:
+            result = await session.execute(
+                update(ScanLog)
+                .where(ScanLog.status == "running")
+                .where(ScanLog.started_at < stale_cutoff)
+                .values(
+                    status="failed",
+                    message="Auto-failed: scan stuck for >10 minutes (likely network/SSH hang)",
+                    finished_at=utcnow(),
+                )
+            )
+            if result.rowcount > 0:
+                logger.warning("Auto-failed %d stale scan(s) stuck in running state", result.rowcount)
+                # Persist error to job state
+                _finish_job("cleanup_stale_scans", True, f"Cleaned {result.rowcount} stale scans")
+            await session.commit()
+    except Exception as e:
+        logger.error("Stale scan cleanup failed: %s", e)
+        _finish_job("cleanup_stale_scans", False, str(e)[:500])
+
+
 async def _sync_hrm_users_job() -> None:
     """Scheduled job: sync users from HRM database."""
     _track_job("hrm_user_sync")
@@ -517,6 +549,15 @@ async def start_scheduler() -> AsyncIOScheduler:
         _cleanup_tj_reservations,
         IntervalTrigger(minutes=5),
         id="cleanup_tj_reservations",
+        replace_existing=True,
+        misfire_grace_time=30,
+    )
+
+    # Stale scan cleanup — every 5 minutes (auto-fail scans stuck >10 min)
+    scheduler.add_job(
+        _cleanup_stale_scans,
+        IntervalTrigger(minutes=5),
+        id="cleanup_stale_scans",
         replace_existing=True,
         misfire_grace_time=30,
     )
