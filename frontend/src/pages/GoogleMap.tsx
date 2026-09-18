@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useJsApiLoader } from "@react-google-maps/api";
+import { useNavigate } from "react-router-dom";
 import ActionResultBanner from "../components/ActionResultBanner";
 import PhotoGallery from "../components/PhotoGallery";
 import TjDetailPanel from "../components/TjDetailPanel";
@@ -144,6 +145,7 @@ function TjSearchSelect({ label, tjBoxes, value, onChange, excludeId }: {
 }
 
 export default function GoogleMap() {
+  const navigate = useNavigate();
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [apiKeyLoading, setApiKeyLoading] = useState(true);
   const [apiKeyError, setApiKeyError] = useState("");
@@ -216,7 +218,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
   const [cableForm, setCableForm] = useState<Partial<Cable>>({});
   const [tjForm, setTjForm] = useState<Partial<TjBox>>({});
   const [splitterForm, setSplitterForm] = useState<Partial<Splitter>>({});
-  const [leadForm, setLeadForm] = useState<{ customer_name: string; mobile_primary: string; package_name: string; service_charge: number | null; otc: number | null; notes: string; latitude: number | null; longitude: number | null }>({ customer_name: "", mobile_primary: "", package_name: "", service_charge: null, otc: null, notes: "", latitude: null, longitude: null });
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editKind, setEditKind] = useState<string>("");
@@ -649,28 +650,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
     } catch (e) { setError(String(e)); }
   };
 
-  const saveLead = async () => {
-    if (!leadForm.customer_name?.trim()) { setError("Customer Name is required"); return; }
-    if (!leadForm.mobile_primary?.trim()) { setError("Mobile Primary is required"); return; }
-    try {
-      await api.post("/leads", {
-        customer_name: leadForm.customer_name,
-        mobile_primary: leadForm.mobile_primary,
-        package_name: leadForm.package_name,
-        service_charge: leadForm.service_charge,
-        otc: leadForm.otc,
-        notes: leadForm.notes,
-        latitude: leadForm.latitude,
-        longitude: leadForm.longitude,
-        status: "new",
-        priority: "normal",
-        lead_source: "map",
-      });
-      flash("Lead created");
-      setShowForm(null); setLeadForm({ customer_name: "", mobile_primary: "", package_name: "", service_charge: null, otc: null, notes: "", latitude: null, longitude: null });
-    } catch (e) { setError(String(e)); }
-  };
-
   const deleteItem = async (kind: string, id: number) => {
     let msg = "Delete?";
     if (kind === "tj") {
@@ -855,7 +834,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           if (item.kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); }
           else if (item.kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 8, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
           else if (item.kind === "cable") { setShowForm("cable"); }
-          else if (item.kind === "lead") { setLeadForm({ customer_name: "", mobile_primary: "", package_name: "", service_charge: null, otc: null, notes: "", latitude: lat, longitude: lng }); setShowForm("lead"); }
+          else if (item.kind === "lead") { navigate(`/leads?lat=${lat}&lng=${lng}`); }
         };
         menu.appendChild(btn);
       }
@@ -926,7 +905,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
           if (item.kind === "feas") { setFeasLat(String(lat)); setFeasLng(String(lng)); setFeasCheckOpen(true); }
           else if (item.kind === "tj") { setTjForm({ name: "", box_type: "regular_tj", tj_port: 8, capacity: 4, tray_count: 1, lat, lng }); setShowForm("tj"); }
           else if (item.kind === "cable") { setShowForm("cable"); }
-          else if (item.kind === "lead") { setLeadForm({ customer_name: "", mobile_primary: "", package_name: "", service_charge: null, otc: null, notes: "", latitude: lat, longitude: lng }); setShowForm("lead"); }
+          else if (item.kind === "lead") { navigate(`/leads?lat=${lat}&lng=${lng}`); }
         };
         menu.appendChild(btn);
       }
@@ -2037,38 +2016,6 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
                 {cutForm.id && <button className="btn-danger" onClick={() => { deleteCut(cutForm.id!); setShowForm(null); }}>Delete</button>}
                 <button className="btn-secondary" onClick={() => setShowForm(null)}>Cancel</button>
                 <button className="btn-primary" onClick={saveCut}>Save</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Lead form */}
-      {showForm === "lead" && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setShowForm(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="mb-4 text-lg font-bold">Add Lead from Map</h2>
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div><label className="label">Customer Name *</label><input className="input" value={leadForm.customer_name} onChange={(e) => setLeadForm({ ...leadForm, customer_name: e.target.value })} required /></div>
-                <div><label className="label">Mobile Primary *</label><input className="input" value={leadForm.mobile_primary} onChange={(e) => setLeadForm({ ...leadForm, mobile_primary: e.target.value })} required /></div>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div><label className="label">Package</label><input className="input" value={leadForm.package_name} onChange={(e) => setLeadForm({ ...leadForm, package_name: e.target.value })} placeholder="e.g. 30Mbps" /></div>
-                <div><label className="label">MRC (৳)</label><input type="number" min={0} className="input" value={leadForm.service_charge ?? ""} onChange={(e) => setLeadForm({ ...leadForm, service_charge: e.target.value ? Number(e.target.value) : null })} /></div>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div><label className="label">OTC (৳)</label><input type="number" min={0} className="input" value={leadForm.otc ?? ""} onChange={(e) => setLeadForm({ ...leadForm, otc: e.target.value ? Number(e.target.value) : null })} /></div>
-                <div></div>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div><label className="label">Latitude</label><input type="number" step="any" className="input" value={leadForm.latitude ?? ""} onChange={(e) => setLeadForm({ ...leadForm, latitude: e.target.value ? Number(e.target.value) : null })} /></div>
-                <div><label className="label">Longitude</label><input type="number" step="any" className="input" value={leadForm.longitude ?? ""} onChange={(e) => setLeadForm({ ...leadForm, longitude: e.target.value ? Number(e.target.value) : null })} /></div>
-              </div>
-              <div><label className="label">Notes</label><textarea className="input" rows={2} value={leadForm.notes} onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })} /></div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button className="btn-secondary" onClick={() => setShowForm(null)}>Cancel</button>
-                <button className="btn-primary" onClick={saveLead}>Save</button>
               </div>
             </div>
           </div>

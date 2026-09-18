@@ -352,7 +352,15 @@ export default function Leads() {
   const [userPerf, setUserPerf] = useState<UserLeadPerformance[]>([]);
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<Partial<Lead> | null>(null);
+  const [modal, setModal] = useState<Partial<Lead> | null>(() => {
+    const p = new URLSearchParams(window.location.search);
+    const lat = p.get("lat"), lng = p.get("lng");
+    if (lat && lng) {
+      window.history.replaceState({}, "", window.location.pathname);
+      return { status: "new", priority: "normal", lead_source: "other", latitude: Number(lat), longitude: Number(lng) };
+    }
+    return null;
+  });
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [wards, setWards] = useState<string[]>([]);
   const [packages, setPackages] = useState<string[]>([]);
