@@ -5,6 +5,7 @@ import { SubscriberSummary } from "../api/types";
 import SubscriberLink from "../components/SubscriberLink";
 import MacCell from "../components/MacCell";
 import StatusBadge from "../components/StatusBadge";
+import TagBadge from "../components/TagBadge";
 import { RemoteAccessButton } from "../components/RemoteAccess";
 import { Pagination, usePagination } from "../components/Pagination";
 
@@ -111,6 +112,7 @@ export default function Subscribers() {
               <th className="th">Name</th>
               <th className="th">Current MAC</th>
               <th className="th">Status</th>
+              <th className="th">Tag</th>
               <th className="th">Remote/ACS</th>
               <th className="th">RX / TX</th>
               <th className="th">MAC changes</th>
@@ -146,6 +148,9 @@ export default function Subscribers() {
                 <td className="td"><MacCell mac={s.last_mac} vendor={s.mac_vendor} /></td>
                 <td className="td">
                   <StatusBadge status={s.status} />
+                </td>
+                <td className="td">
+                  <TagBadge tag={s.tag} />
                 </td>
                 <td className="td">
                   <div className="flex flex-col items-start gap-1" onClick={(e) => e.stopPropagation()}>
@@ -189,7 +194,7 @@ export default function Subscribers() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td className="td" colSpan={9}>
+                <td className="td" colSpan={10}>
                   {loading ? "Loading…" : tab === "connected"
                     ? "No connected subscribers. Subscribers appear here once their PPPoE session is active."
                     : tab === "disconnected"

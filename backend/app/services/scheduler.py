@@ -103,6 +103,7 @@ def get_scheduler_status() -> list[dict[str, Any]]:
         {"id": "mac_vendor_sync", "name": "MAC Vendor Sync", "desc": "Update MAC vendor OUI database from external API"},
         {"id": "hrm_user_sync", "name": "HRM User Sync", "desc": "Sync employees from HRM to Nexus users"},
         {"id": "cleanup_stale_scans", "name": "Stale Scan Cleanup", "desc": "Auto-fail scans stuck >10 min"},
+        {"id": "subscriber_tags", "name": "Subscriber Tags", "desc": "Tag subscribers from MikroTik firewall address-lists (multi/suspect)"},
     ]
     for jdef in jobs_def:
         job = _scheduler.get_job(jdef["id"])
@@ -159,6 +160,17 @@ async def _scan_all_mikrotiks() -> None:
         _finish_job("scan_mikrotiks", True)
     except Exception as exc:
         _finish_job("scan_mikrotiks", False, str(exc)[:500])
+
+
+async def _refresh_subscriber_tags() -> None:
+    _track_job("subscriber_tags")
+    try:
+        async with SessionLocal() as session:
+            from .subscriber_tag import collect_and_tag
+            await collect_and_tag(session)
+        _finish_job("subscriber_tags", True)
+    except Exception as exc:
+        _finish_job("subscriber_tags", False, str(exc)[:500])
 
 
 async def _collect_all_telemetry() -> None:
@@ -486,6 +498,15 @@ async def start_scheduler() -> AsyncIOScheduler:
             id="scan_mikrotiks",
             replace_existing=True,
             misfire_grace_time=30,
+        )
+        # Subscriber tags run after MikroTik scan (offset by 60s)
+        scheduler.add_job(
+            _refresh_subscriber_tags,
+            IntervalTrigger(seconds=settings.scan_mikrotik_interval),
+            id="subscriber_tags",
+            replace_existing=True,
+            misfire_grace_time=30,
+            next_run_time=utcnow() + timedelta(seconds=60),
         )
     if settings.bind_interval > 0:
         scheduler.add_job(

@@ -5,6 +5,7 @@ import { AcsDevice, AcsWifiStatus, canOps, RemoteAccess, SubscriberProfile, Traf
 import { useUserRole } from "../lib/role";
 import { fmtTime, fmtTimeShort } from "../lib/time";
 import StatusBadge from "../components/StatusBadge";
+import TagBadge from "../components/TagBadge";
 import ActionResultBanner from "../components/ActionResultBanner";
 import WarningBanner from "../components/WarningBanner";
 import PhotoGallery from "../components/PhotoGallery";
@@ -745,6 +746,7 @@ export default function SubscriberProfilePage() {
         <Link to="/subscribers" className="mr-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">←</Link>
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">{profile.subscriber}</h1>
         <StatusBadge status={profile.status} />
+        <TagBadge tag={profile.tag} />
         {profile.last_seen && <span className="text-xs text-slate-400">last seen {fmtTimeShort(profile.last_seen)}</span>}
       </div>
 

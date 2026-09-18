@@ -522,7 +522,12 @@ Search across ONUs, OLTs, and Mikrotiks.
 
 List subscribers sourced from MikroTik PPPoE secrets. Every secret synced by the periodic scan appears immediately, regardless of whether a PPPoE session is active or an ONU is bound.  
 **Query:** `q=<search>`, `status=connected|disconnected|disabled`, `sort=subscriber|status`, `order=asc|desc`, `limit=500`  
-**Response fields include:** `connected` (bool — active PPPoE session), `onu_binded` (bool — has matching ONU), `disabled` (bool — billing expired)
+**Response fields include:** `connected` (bool — active PPPoE session), `onu_binded` (bool — has matching ONU), `disabled` (bool — billing expired), `tag` (string — comma-separated: multi, suspect)
+
+#### POST `/api/subscribers/tags/refresh`
+
+Refresh subscriber tags from MikroTik firewall address-lists. Reads 'multi' and 'suspect' lists from all enabled MikroTik devices, matches IPs to active PPPoE sessions, and tags matching subscribers.  
+**Response:** `{ ok: true, devices: [{ name, multi_ips, suspect_ips, tagged_multi, tagged_suspect, errors }] }`
 
 #### POST `/api/subscribers/remote/probe`
 

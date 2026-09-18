@@ -1034,6 +1034,7 @@ class Subscriber(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     service: Mapped[str] = mapped_column(String(64), default="")
     profile: Mapped[str] = mapped_column(String(128), default="")
+    tag: Mapped[str] = mapped_column(String(256), default="")  # comma-separated: multi,suspect
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

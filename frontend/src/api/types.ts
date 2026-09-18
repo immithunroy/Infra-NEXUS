@@ -478,6 +478,7 @@ export interface SubscriberSummary {
   disabled: boolean;
   connected: boolean;
   onu_binded: boolean;
+  tag: string;
   acs_device_id: number | null;
   rx_power: number | null;
   tx_power: number | null;
@@ -502,6 +503,7 @@ export interface SubscriberProfile {
   can_edit_gps: boolean;
   down_reason: string;
   status: string;
+  tag: string;
   acs_device_id: number | null;
   address: string;
   gps_lat: number | null;

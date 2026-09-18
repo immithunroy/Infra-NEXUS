@@ -301,6 +301,7 @@ async def list_subscribers(
                 disabled=is_disabled,
                 connected=is_connected,
                 onu_binded=onu_bind,
+                tag=s.tag or "",
                 acs_device_id=acs_by_onu.get(o.id) if o else None,
                 rx_power=rx_power,
                 tx_power=tx_power,
@@ -311,6 +312,31 @@ async def list_subscribers(
             )
         )
     return out
+
+
+@router.post("/tags/refresh")
+async def refresh_subscriber_tags(db: AsyncSession = Depends(get_db)):
+    """Refresh subscriber tags from MikroTik firewall address-lists.
+
+    Reads 'multi' and 'suspect' lists from all enabled MikroTik devices,
+    matches IPs to active PPPoE sessions, and tags matching subscribers.
+    """
+    from ..services.subscriber_tag import collect_and_tag
+    results = await collect_and_tag(db)
+    return {
+        "ok": True,
+        "devices": [
+            {
+                "name": r.device_name,
+                "multi_ips": r.multi_ips,
+                "suspect_ips": r.suspect_ips,
+                "tagged_multi": r.tagged_multi,
+                "tagged_suspect": r.tagged_suspect,
+                "errors": r.errors,
+            }
+            for r in results
+        ],
+    }
 
 
 @router.post("/remote/probe")
@@ -629,6 +655,14 @@ async def subscriber_profile(
     if onu is None:
         raise HTTPException(status_code=404, detail="Subscriber not found")
 
+    # Fetch tag from subscribers table
+    sub_record = (
+        await db.execute(
+            select(Subscriber).where(Subscriber.pppoe_username == subscriber)
+        )
+    ).scalar_one_or_none()
+    sub_tag = sub_record.tag if sub_record else ""
+
     role = user_role(user)
     can_edit = role in ("admin", "global_write")
     if not can_edit:
@@ -681,6 +715,7 @@ async def subscriber_profile(
         can_edit_gps=can_edit,
         down_reason=onu.down_reason or "",
         status=display_status(state, onu.bound, onu.down_reason or ""),
+        tag=sub_tag,
         acs_device_id=acs_by_onu.get(onu.id),
         address=onu.address,
         gps_lat=onu.gps_lat,

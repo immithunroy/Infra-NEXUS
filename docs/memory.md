@@ -355,3 +355,20 @@ tar -czf photos_$(date +%Y%m%d).tar.gz /app/uploads/approval-photos/
 4. `list_subscribers` checks both `Onu.subscriber` (backward compat) and `onu_subscribers` for `onu_binded` status
 
 **Impact:** All subscribers behind the same ONU now correctly show `onu_binded = true` and the OLT/PORT column links to the ONU profile.
+
+### 7.3 Subscriber Tags from MikroTik Firewall Address-Lists
+
+**Date:** 2026-09-18
+
+**Decision:** Added subscriber tagging system that reads 'multi' and 'suspect' address lists from MikroTik and tags matching subscribers.
+
+**Problem:** Operators maintain firewall address-lists on MikroTik to flag subscribers using multiple routers (`multi`) or suspected of overusage (`suspect`). These flags need to be visible in the web UI.
+
+**Solution:**
+1. `MikrotikDriver.collect_firewall_address_lists()` fetches `/ip/firewall/address-list`
+2. `subscriber_tag.py` service matches IPs to active PPPoE sessions
+3. `subscribers.tag` column stores comma-separated tags (e.g., "multi,suspect")
+4. Scheduled job runs with MikroTik scan interval
+5. Manual refresh via `POST /api/subscribers/tags/refresh`
+
+**Impact:** Tagged subscribers show "Multi Router" and/or "Suspect" badges in subscriber list and profile.

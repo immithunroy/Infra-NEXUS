@@ -589,6 +589,7 @@ class SubscriberSummary(BaseModel):
     disabled: bool = False
     connected: bool = False
     onu_binded: bool = False
+    tag: str = ""
     acs_device_id: int | None = None
     rx_power: float | None = None
     tx_power: float | None = None
@@ -627,6 +628,7 @@ class SubscriberProfile(BaseModel):
     can_edit_gps: bool = False
     down_reason: str = ""
     status: str = ""
+    tag: str = ""
     acs_device_id: int | None = None
     address: str = ""
     gps_lat: float | None = None

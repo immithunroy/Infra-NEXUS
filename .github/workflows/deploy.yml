@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Deploy to production server
         uses: appleboy/ssh-action@v1
@@ -14,6 +15,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 12m
           script: |
             set -e
             cd /opt/infra-nexus
@@ -22,23 +24,19 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo ">>> Stopping existing containers..."
-            docker compose down --remove-orphans
-
-            echo ">>> Building Docker images..."
-            docker compose build --no-cache
+            echo ">>> Building Docker images (with cache)..."
+            docker compose build
 
             echo ">>> Starting containers..."
-            docker compose up -d
-
-            echo ">>> Cleaning up old images..."
-            docker image prune -f
-            docker builder prune -af --filter 'until=24h'
+            docker compose up -d --remove-orphans
 
             echo ">>> Waiting for backend health..."
-            sleep 10
+            sleep 15
 
             echo ">>> Checking container status..."
             docker compose ps
+
+            echo ">>> Cleaning up old images..."
+            docker image prune -f
 
             echo ">>> Deploy complete!"

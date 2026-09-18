@@ -11,6 +11,7 @@
 - **Google Map right-click "Add Lead"** — new context menu item navigates to `/leads?lat=X&lng=Y`, auto-opens lead creation modal with coordinates pre-filled
 - **Multi-subscriber ONU support** — new `onu_subscribers` table (many-to-many: ONU ↔ Subscriber); `mac_binding.py` now populates it for all PPPoE sessions sharing the same MAC; `list_subscribers` checks both `Onu.subscriber` and `onu_subscribers` for `onu_binded` status
 - **Subscriber list OLT/PORT column clickable** — clicking OLT name or PON port navigates to ONU profile when `onu_id > 0`
+- **Subscriber tags from MikroTik firewall address-lists** — reads 'multi' and 'suspect' lists from all enabled MikroTik devices, matches IPs to active PPPoE sessions, tags matching subscribers; `tag` column on `subscribers` table; `POST /api/subscribers/tags/refresh` endpoint; scheduled job runs with MikroTik scan interval; frontend TagBadge component displays tags in subscriber list and profile
 
 ### Changed
 - **Lead form label "Service Charge" renamed to "MRC"** — in modal, table header, detail view, and KPI label ("MRC Revenue")
@@ -19,9 +20,11 @@
 
 ### Database
 - New table `onu_subscribers` — many-to-many: ONU ↔ PPPoE subscriber (supports multiple subscribers behind one ONU via switch)
+- `subscribers` table: new `tag` column (VARCHAR(256), comma-separated tags: multi, suspect)
 
 ### API
-- `GET /api/subscribers` — new params: `status=connected|disconnected|disabled`, `sort=subscriber|status`; new response fields: `connected` (bool), `onu_binded` (bool)
+- `GET /api/subscribers` — new params: `status=connected|disconnected|disabled`, `sort=subscriber|status`; new response fields: `connected` (bool), `onu_binded` (bool), `tag` (string)
+- `POST /api/subscribers/tags/refresh` — trigger manual refresh of subscriber tags from MikroTik firewall address-lists
 
 ---
 

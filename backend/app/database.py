@@ -80,6 +80,7 @@ async def init_db() -> None:
                 disabled BOOLEAN DEFAULT FALSE,
                 service VARCHAR(64) DEFAULT '',
                 profile VARCHAR(128) DEFAULT '',
+                tag VARCHAR(256) DEFAULT '',
                 last_synced_at TIMESTAMPTZ,
                 first_seen_at TIMESTAMPTZ DEFAULT NOW(),
                 last_seen_at TIMESTAMPTZ,
@@ -92,6 +93,7 @@ async def init_db() -> None:
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_username ON subscribers (pppoe_username)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_mikrotik ON subscribers (mikrotik_device_id)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_subscribers_deleted ON subscribers (is_deleted)"))
+        await conn.execute(text("ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS tag VARCHAR(256) DEFAULT ''"))
         # Settings table (key-value store for runtime configuration)
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS settings (

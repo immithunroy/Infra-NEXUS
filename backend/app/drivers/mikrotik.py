@@ -54,12 +54,14 @@ class BgpSessionInfo:
 
 
 @dataclass
+class FirewallAddressList:
+    list_name: str
+    address: str
+    comment: str = ""
+
+
+@dataclass
 class BgpRouteInfo:
-    prefix: str = ""
-    nexthop: str = ""
-    metric: int = 0
-    community: str = ""
-    received: bool = True
 
 
 class MikrotikDriver:
@@ -185,6 +187,37 @@ class MikrotikDriver:
             except Exception:
                 pass
         return sessions, advertisements
+
+    def _collect_firewall_address_lists(self, list_names: list[str]) -> list[dict]:
+        """Fetch /ip/firewall/address-list entries for given list names."""
+        api = self._connect()
+        try:
+            all_entries = list(api("/ip/firewall/address-list/print"))
+        finally:
+            try:
+                api.close()
+            except Exception:
+                pass
+        return [e for e in all_entries if e.get("list", "") in list_names]
+
+    async def collect_firewall_address_lists(self, list_names: list[str]) -> list[FirewallAddressList]:
+        """Return firewall address-list entries for specified lists.
+
+        Common lists: 'multi' (multi-router), 'suspect' (overusage suspect).
+        """
+        try:
+            raw = await asyncio.to_thread(self._collect_firewall_address_lists, list_names)
+        except Exception as exc:
+            raise DriverError(f"Firewall address-list collection failed: {exc}") from exc
+
+        entries: list[FirewallAddressList] = []
+        for row in raw:
+            entries.append(FirewallAddressList(
+                list_name=str(row.get("list", "")),
+                address=str(row.get("address", "")),
+                comment=str(row.get("comment", "")),
+            ))
+        return entries
 
     async def collect_bgp(self) -> tuple[list[BgpSessionInfo], int, int]:
         """Return (BGP sessions, total prefix count, established count).

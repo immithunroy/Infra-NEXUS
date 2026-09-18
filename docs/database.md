@@ -37,6 +37,7 @@ erDiagram
     onus ||--o{ acs_devices : registered
     onus ||--o{ tickets : linked
     onus ||--o{ onu_subscribers : has_many
+    subscribers ||--o{ ppp_active_entries : has
     
     cables ||--o{ cable_segments : has
     cables ||--o{ splices : cable_a
@@ -296,7 +297,26 @@ erDiagram
 
 **Purpose:** Many-to-many relationship between ONUs and PPPoE subscribers. Supports multiple subscribers behind one ONU (via switch). Populated by `mac_binding.py` when a MAC matches an ONU and multiple PPPoE sessions share that MAC.
 
-### 2.13 `scan_logs`
+### 2.13 `subscribers`
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PK, auto-increment | Subscriber ID |
+| `pppoe_username` | VARCHAR(128) | UNIQUE, indexed | PPPoE username |
+| `mikrotik_device_id` | INTEGER | FK → mikrotik_devices.id, nullable, indexed | Source MikroTik device |
+| `disabled` | BOOLEAN | DEFAULT false | Billing disabled |
+| `service` | VARCHAR(64) | DEFAULT '' | Service type |
+| `profile` | VARCHAR(128) | DEFAULT '' | PPPoE profile |
+| `tag` | VARCHAR(256) | DEFAULT '' | Comma-separated tags: multi, suspect |
+| `last_synced_at` | TIMESTAMPTZ | nullable | Last MikroTik sync |
+| `first_seen_at` | TIMESTAMPTZ | SERVER DEFAULT now() | First seen |
+| `last_seen_at` | TIMESTAMPTZ | nullable | Last seen |
+| `is_deleted` | BOOLEAN | DEFAULT false | Soft delete |
+| `deleted_at` | TIMESTAMPTZ | nullable | Deletion timestamp |
+| `created_at` | TIMESTAMPTZ | SERVER DEFAULT now() | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | SERVER DEFAULT now() | Last update |
+
+### 2.14 `scan_logs`
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
