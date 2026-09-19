@@ -15,6 +15,8 @@
   - Cloudflare R2 cloud upload (optional, configurable via UI)
   - Daily scheduler job at 02:00 BDT (before OLT config save)
   - Download as ZIP
+  - **Per-dataset export** — download individual datasets (tj_splitter, cable_routes, subscribers_onu) as JSON or Excel
+  - **Subscribers backup enriched with ONU GPS** — `subscribers_onu__subscribers` includes `gps_lat`, `gps_lng`, `gps_accuracy`, `address`, `phone`, `email`, `landmark` joined from linked ONU (primary via `Onu.subscriber`, fallback via `onu_subscribers` junction)
   - Backend: `backup_records` table, `backup.py` API + service, R2 integration via boto3
   - Frontend: `BackupRestore.tsx` component integrated into Settings → Backup & Restore tab
 
