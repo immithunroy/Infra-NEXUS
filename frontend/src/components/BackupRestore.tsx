@@ -246,9 +246,10 @@ export default function BackupRestore() {
             onChange={(e) => setExportBackupId(e.target.value)}
             className="input py-1 text-xs max-w-xs"
           >
-            {backups.filter(b => b.local_status === "completed").map((b) => (
-              <option key={b.backup_id} value={b.backup_id}>
-                {formatTime(b.created_at)} — {b.total_records.toLocaleString()} records
+            {backups.length === 0 && <option value="">No backups available</option>}
+            {backups.map((b) => (
+              <option key={b.backup_id} value={b.backup_id} disabled={b.local_status !== "completed"}>
+                {formatTime(b.created_at)} — {b.total_records.toLocaleString()} records{b.local_status !== "completed" ? " (files deleted)" : ""}
               </option>
             ))}
           </select>
