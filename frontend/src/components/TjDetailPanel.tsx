@@ -79,12 +79,13 @@ export function CoreSelect({ coreCount, value, onChange, occupiedCores, spareCor
 export default function TjDetailPanel({ tj, cables, splitters, splices, onClose, onSpliceChange, writeOk, onAddSplitter, onEditSplitter, onDelete }: { tj: TjBox; cables: Cable[]; splitters: Splitter[]; splices: any[]; onClose: () => void; onSpliceChange: () => void; writeOk: boolean; onAddSplitter?: () => void; onEditSplitter?: (sp: Splitter) => void; onDelete?: () => void }) {
   const hostedSplitters = useMemo(() => splitters.filter((s) => s.tj_box_id === tj.id), [splitters, tj.id]);
   const connectedCables = useMemo(() => cables.filter((c) => {
+    if (c.src_tj_id === tj.id || c.dst_tj_id === tj.id) return true;
     if (!c.segments?.length) return false;
     return c.segments.some((s) =>
       Math.abs(s.start_lat - tj.lat) < 0.001 && Math.abs(s.start_lng - tj.lng) < 0.001 ||
       Math.abs(s.end_lat - tj.lat) < 0.001 && Math.abs(s.end_lng - tj.lng) < 0.001
     );
-  }), [cables, tj.lat, tj.lng]);
+  }), [cables, tj.id, tj.lat, tj.lng]);
   const tjSplices = useMemo(() => splices.filter((sp) => sp.tj_id === tj.id), [splices, tj.id]);
   const [showSpliceForm, setShowSpliceForm] = useState(false);
   const [editSplice, setEditSplice] = useState<any>(null);
