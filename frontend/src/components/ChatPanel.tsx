@@ -146,7 +146,7 @@ export default function ChatPanel({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[400px] h-[600px] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
+    <div className="fixed bottom-6 right-2 z-50 w-[400px] h-[600px] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-brand-600 text-white">
         <div className="flex items-center gap-2">
