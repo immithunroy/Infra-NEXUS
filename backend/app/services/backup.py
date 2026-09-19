@@ -317,9 +317,21 @@ async def create_backup(trigger: str = "manual") -> dict:
             if staging_parent.exists() and not any(staging_parent.iterdir()):
                 staging_parent.rmdir()
 
-            # Determine cloud status
+            # Determine cloud status — check env vars first, then DB settings
             cloud_status = "disabled"
-            if settings.r2_endpoint and settings.r2_bucket_name:
+            r2_endpoint = settings.r2_endpoint
+            r2_bucket = settings.r2_bucket_name
+            r2_access_key = settings.r2_access_key_id
+            r2_secret = settings.r2_secret_access_key
+            if not r2_endpoint:
+                r2_endpoint = await _load_setting(db, "r2_endpoint")
+            if not r2_bucket:
+                r2_bucket = await _load_setting(db, "r2_bucket_name")
+            if not r2_access_key:
+                r2_access_key = await _load_setting(db, "r2_access_key_id")
+            if not r2_secret:
+                r2_secret = await _load_setting(db, "r2_secret_access_key")
+            if r2_endpoint and r2_bucket:
                 cloud_status = "pending"
 
             # Create DB record
@@ -383,13 +395,25 @@ async def _upload_to_r2(backup_id: str, backup_dir: Path, file_details: list[dic
     """Upload backup files to Cloudflare R2."""
     settings = get_settings()
     try:
+        # Read R2 settings from DB (fallback to env vars)
+        async with SessionLocal() as db:
+            r2_endpoint = settings.r2_endpoint or await _load_setting(db, "r2_endpoint")
+            r2_bucket = settings.r2_bucket_name or await _load_setting(db, "r2_bucket_name")
+            r2_access_key = settings.r2_access_key_id or await _load_setting(db, "r2_access_key_id")
+            r2_secret = settings.r2_secret_access_key or await _load_setting(db, "r2_secret_access_key")
+            r2_region = settings.r2_region
+
+        if not r2_endpoint or not r2_bucket:
+            logger.warning("R2 upload skipped: endpoint or bucket not configured")
+            return
+
         import boto3
         s3 = boto3.client(
             "s3",
-            endpoint_url=settings.r2_endpoint,
-            aws_access_key_id=settings.r2_access_key_id,
-            aws_secret_access_key=settings.r2_secret_access_key,
-            region_name=settings.r2_region,
+            endpoint_url=r2_endpoint,
+            aws_access_key_id=r2_access_key,
+            aws_secret_access_key=r2_secret,
+            region_name=r2_region,
         )
         date_parts = backup_id.split("_")[1][:8]  # YYYYMMDD
         year, month, day = date_parts[:4], date_parts[4:6], date_parts[6:8]
@@ -399,13 +423,13 @@ async def _upload_to_r2(backup_id: str, backup_dir: Path, file_details: list[dic
             if not local_path.exists():
                 continue
             key = f"backups/{year}/{month}/{day}/{backup_id}/{finfo['filename']}"
-            s3.upload_file(str(local_path), settings.r2_bucket_name, key)
+            s3.upload_file(str(local_path), r2_bucket, key)
 
         # Upload manifest
         manifest_path = backup_dir / "manifest.json"
         if manifest_path.exists():
             key = f"backups/{year}/{month}/{day}/{backup_id}/manifest.json"
-            s3.upload_file(str(manifest_path), settings.r2_bucket_name, key)
+            s3.upload_file(str(manifest_path), r2_bucket, key)
 
         async with SessionLocal() as db:
             rec = (await db.execute(
@@ -550,22 +574,29 @@ async def delete_backup(backup_id: str, cloud: bool = False) -> dict:
         deleted.append("local")
 
     # Delete from R2
-    if cloud and settings.r2_endpoint and settings.r2_bucket_name:
+    async with SessionLocal() as db:
+        r2_endpoint = settings.r2_endpoint or await _load_setting(db, "r2_endpoint")
+        r2_bucket = settings.r2_bucket_name or await _load_setting(db, "r2_bucket_name")
+        r2_access_key = settings.r2_access_key_id or await _load_setting(db, "r2_access_key_id")
+        r2_secret = settings.r2_secret_access_key or await _load_setting(db, "r2_secret_access_key")
+        r2_region = settings.r2_region
+
+    if cloud and r2_endpoint and r2_bucket:
         try:
             import boto3
             s3 = boto3.client(
                 "s3",
-                endpoint_url=settings.r2_endpoint,
-                aws_access_key_id=settings.r2_access_key_id,
-                aws_secret_access_key=settings.r2_secret_access_key,
-                region_name=settings.r2_region,
+                endpoint_url=r2_endpoint,
+                aws_access_key_id=r2_access_key,
+                aws_secret_access_key=r2_secret,
+                region_name=r2_region,
             )
             date_parts = backup_id.split("_")[1][:8]
             year, month, day = date_parts[:4], date_parts[4:6], date_parts[6:8]
             prefix = f"backups/{year}/{month}/{day}/{backup_id}/"
-            objects = s3.list_objects_v2(Bucket=settings.r2_bucket_name, Prefix=prefix)
+            objects = s3.list_objects_v2(Bucket=r2_bucket, Prefix=prefix)
             for obj in objects.get("Contents", []):
-                s3.delete_object(Bucket=settings.r2_bucket_name, Key=obj["Key"])
+                s3.delete_object(Bucket=r2_bucket, Key=obj["Key"])
             deleted.append("cloud")
         except Exception:
             pass
