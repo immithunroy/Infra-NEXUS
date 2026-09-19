@@ -31,11 +31,23 @@ export default function ChatPanel({ onClose }: Props) {
     try {
       const data = await chatApi.getSessions();
       setSessions(Array.isArray(data) ? data : []);
+      // Auto-restore last active session
+      if (!activeSession) {
+        const lastId = chatApi.getLastSessionId();
+        if (lastId) {
+          const found = (Array.isArray(data) ? data : []).find((s) => s.id === lastId);
+          if (found) {
+            await loadMessages(lastId);
+            return;
+          }
+        }
+      }
     } catch { /* ignore */ }
   };
 
   const loadMessages = async (sessionId: number) => {
     setActiveSession(sessionId);
+    chatApi.setLastSessionId(sessionId);
     setShowSessions(false);
     setLoading(true);
     try {
@@ -53,6 +65,7 @@ export default function ChatPanel({ onClose }: Props) {
       const session = await chatApi.createSession();
       setSessions((prev) => [session, ...prev]);
       setActiveSession(session.id);
+      chatApi.setLastSessionId(session.id);
       setMessages([]);
       setShowSessions(false);
       inputRef.current?.focus();
@@ -72,6 +85,7 @@ export default function ChatPanel({ onClose }: Props) {
         setSessions((prev) => [session, ...prev]);
         sessionId = session.id;
         setActiveSession(sessionId);
+        chatApi.setLastSessionId(sessionId);
       } catch { return; }
     }
 

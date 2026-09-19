@@ -135,6 +135,8 @@ export async function uploadPhoto(
 // AI Chat API
 // ---------------------------------------------------------------------------
 
+const LAST_SESSION_KEY = "nexus_chat_last_session";
+
 export const chatApi = {
   getConfig: () => api.get<import("./types").ChatConfig>("/chat/config"),
   updateConfig: (cfg: { provider?: string; model?: string; api_key?: string }) =>
@@ -146,4 +148,9 @@ export const chatApi = {
   sendMessage: (id: number, content: string) =>
     api.post<import("./types").ChatMessage>(`/chat/sessions/${id}/messages`, { content }),
   deleteSession: (id: number) => api.del(`/chat/sessions/${id}`),
+  getLastSessionId: (): number | null => {
+    const v = localStorage.getItem(LAST_SESSION_KEY);
+    return v ? Number(v) || null : null;
+  },
+  setLastSessionId: (id: number) => localStorage.setItem(LAST_SESSION_KEY, String(id)),
 };
