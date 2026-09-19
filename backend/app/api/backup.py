@@ -1,10 +1,12 @@
 """Backup & Restore API router."""
+import io
 import json
 import shutil
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,9 +94,8 @@ async def api_download_backup_file(
         )
     else:
         # Multiple tables — create temp zip of all dataset files
-        import io
         buf = io.BytesIO()
-        with __import__("zipfile").ZipFile(buf, "w", __import__("zipfile").ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for table_name, _model in ds_def["tables"]:
                 fname = f"{dataset}__{table_name}.{ext}"
                 fpath = backup_dir / fname
@@ -102,10 +103,10 @@ async def api_download_backup_file(
                     zf.write(fpath, fname)
         buf.seek(0)
         zip_name = f"{dataset}.{ext}.zip"
-        return FileResponse(
+        return StreamingResponse(
             buf,
             media_type="application/zip",
-            filename=zip_name,
+            headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
         )
 
 
