@@ -1569,7 +1569,7 @@ function GoogleMapInner({ apiKey }: { apiKey: string }) {
         {/* Fullscreen button */}
         <button
           onClick={() => setIsFullscreen(!isFullscreen)}
-          className="absolute bottom-4 right-4 z-[999] flex items-center gap-1.5 rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-700"
+          className="absolute bottom-4 left-4 z-[999] flex items-center gap-1.5 rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-700"
           title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
         >
           {isFullscreen ? (
