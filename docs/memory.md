@@ -281,11 +281,29 @@
 
 ### 5.3 Backup Strategy
 
-```bash
-# Database backup
-docker compose exec db pg_dump -U olt infra_nexus > backup_$(date +%Y%m%d).sql
+**Built-in Backup & Restore** (Settings → Backup & Restore):
 
-# Photo backup
+```bash
+# API endpoints (admin only)
+POST /api/backup          # Create manual backup
+GET  /api/backup          # List all backups
+POST /api/backup/restore/{backup_id}  # Restore from backup
+GET  /api/backup/download/{backup_id} # Download as ZIP
+DELETE /api/backup/{backup_id}        # Delete backup
+
+# Datasets: tj_splitter, users, cable_routes, devices, network_infra,
+#           subscribers_onu, tickets, leads, acs, bgp, system, chats
+```
+
+- **Schedule**: Daily at 02:00 BDT (before OLT config save at 03:00)
+- **Storage**: `/app/backups/{date}/{backup_id}/` (Docker volume `nexus_backups`)
+- **Format**: JSON + Excel for each table. Manifest with checksum.
+- **Restore**: Creates safety backup automatically before restore. Supports selective dataset restore.
+- **Cloud**: Cloudflare R2 upload (optional, configure via UI)
+
+**Legacy manual backup** (still valid):
+```bash
+docker compose exec db pg_dump -U olt infra_nexus > backup_$(date +%Y%m%d).sql
 tar -czf photos_$(date +%Y%m%d).tar.gz /app/uploads/approval-photos/
 ```
 

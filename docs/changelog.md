@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-09-19
+
+### Added
+- **Backup & Restore module** — full backup/restore system under Settings → Backup & Restore
+  - 12 datasets covering all 37 tables (TJ/Splitters, Users/Roles, Cable Routes, Devices, Network Infra, Subscribers/ONUs, Tickets, Leads, ACS, BGP, System Config, AI Chats)
+  - JSON + Excel export per table with manifest and checksum
+  - Selective restore by dataset
+  - Safety backup auto-created before restore
+  - Cloudflare R2 cloud upload (optional, configurable via UI)
+  - Daily scheduler job at 02:00 BDT (before OLT config save)
+  - Download as ZIP
+  - Backend: `backup_records` table, `backup.py` API + service, R2 integration via boto3
+  - Frontend: `BackupRestore.tsx` component integrated into Settings → Backup & Restore tab
+
 ## 2026-09-18
 
 ### Added
