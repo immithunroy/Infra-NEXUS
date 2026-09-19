@@ -243,12 +243,49 @@ async def create_backup(trigger: str = "manual") -> dict:
         staging_dir.mkdir(parents=True, exist_ok=True)
 
         async with SessionLocal() as db:
+            # Pre-fetch ONU lookup for subscriber enrichment (GPS, address, etc.)
+            onu_by_subscriber: dict[str, Onu] = {}
+            onu_by_junction: dict[str, int] = {}
+            if "subscribers_onu" in DATASETS:
+                all_onus = (await db.execute(
+                    select(Onu).where(Onu.subscriber != "")
+                )).scalars().all()
+                for o in all_onus:
+                    onu_by_subscriber[o.subscriber] = o
+                junction_rows = (await db.execute(
+                    select(OnuSubscriber)
+                )).scalars().all()
+                for j in junction_rows:
+                    if j.pppoe_username not in onu_by_subscriber:
+                        onu_by_junction[j.pppoe_username] = j.onu_id
+
             for ds_name, ds_def in DATASETS.items():
                 for table_name, model in ds_def["tables"]:
                     try:
                         columns = _table_columns(model)
                         rows = (await db.execute(select(model))).scalars().all()
                         records = [_row_to_dict(r, columns) for r in rows]
+
+                        # Enrich subscribers with ONU GPS/profile fields
+                        if ds_name == "subscribers_onu" and table_name == "subscribers":
+                            gps_fields = ["gps_lat", "gps_lng", "gps_accuracy",
+                                          "address", "phone", "email", "landmark"]
+                            columns = columns + gps_fields
+                            onu_cache: dict[str, Onu | None] = {}
+                            for rec in records:
+                                username = rec.get("pppoe_username", "")
+                                if username not in onu_cache:
+                                    onu_obj = onu_by_subscriber.get(username)
+                                    if onu_obj is None:
+                                        onu_id = onu_by_junction.get(username)
+                                        if onu_id is not None:
+                                            onu_obj = (await db.execute(
+                                                select(Onu).where(Onu.id == onu_id)
+                                            )).scalars().first()
+                                    onu_cache[username] = onu_obj
+                                onu_obj = onu_cache[username]
+                                for f in gps_fields:
+                                    rec[f] = getattr(onu_obj, f, None) if onu_obj else None
                         record_count = len(records)
                         total_records += record_count
 
