@@ -3,6 +3,7 @@ import { useTheme } from "../theme";
 import { api, downloadFile } from "../api/client";
 import { useUserRole } from "../lib/role";
 import ActionResultBanner from "../components/ActionResultBanner";
+import BackupRestore from "../components/BackupRestore";
 import { setTimezone, fmtTimeInZone, getTimezone } from "../lib/time";
 
 type Tab = "general" | "users" | "backup" | "google" | "communication" | "ai_chat";
@@ -342,48 +343,7 @@ export default function Settings() {
 
       {/* ═══ BACKUP & RESTORE ═══ */}
       {tab === "backup" && (
-        <div className="space-y-4">
-          <section className="card p-5">
-            <h2 className="mb-4 text-sm font-bold text-slate-900 dark:text-white">Export Data</h2>
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm text-slate-700 dark:text-slate-300">Export Fiber Network</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">Download cables, TJ boxes, splitters, splices as Excel</div>
-                </div>
-                <button className="btn-primary px-3 py-1.5 text-xs" onClick={handleExport}>Export</button>
-              </div>
-              <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm text-slate-700 dark:text-slate-300">Export Subscribers</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">All subscribers with address, PPPoE, MAC history, router brand</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="btn-primary px-3 py-1.5 text-xs" onClick={() => handleExportUsers("xlsx")}>Excel</button>
-                    <button className="btn-primary px-3 py-1.5 text-xs" onClick={() => handleExportUsers("json")}>JSON</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="card p-5">
-            <h2 className="mb-4 text-sm font-bold text-slate-900 dark:text-white">Import Data</h2>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-sm text-slate-700 dark:text-slate-300">Import Fiber Network</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Upload Excel file to import or update fiber data</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleImport(e.target.files[0]); }} />
-                <button className="btn-primary px-3 py-1.5 text-xs" onClick={() => fileRef.current?.click()} disabled={importing}>
-                  {importing ? "Importing..." : "Import"}
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
+        <BackupRestore />
       )}
 
       {/* ═══ GOOGLE MAP API ═══ */}

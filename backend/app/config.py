@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     mac_vendor_sync_interval: int = 86400  # seconds (24h)
     photo_upload_dir: str = "/app/uploads/field-photos"
 
+    backup_dir: str = "/app/backups"
+    r2_endpoint: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = ""
+    r2_region: str = "auto"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

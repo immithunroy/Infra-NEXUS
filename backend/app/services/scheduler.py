@@ -396,6 +396,19 @@ async def _write_all_olts_retry() -> None:
         logger.info("OLT write all retry skipped — no failures at 01:00")
 
 
+async def _daily_backup():
+    """Create a daily backup at 02:00 BDT."""
+    try:
+        from .backup import create_backup
+        result = await create_backup(trigger="scheduled")
+        logger.info("Daily backup completed: %s (%d files, %d records)",
+                     result.get("backup_id", "?"),
+                     result.get("total_files", 0),
+                     result.get("total_records", 0))
+    except Exception as exc:
+        logger.error("Daily backup failed: %s", exc)
+
+
 async def _cleanup_tj_reservations():
     """Expire old TJ ID reservations and delete stale records."""
     from sqlalchemy import update, delete
@@ -552,6 +565,15 @@ async def start_scheduler() -> AsyncIOScheduler:
         _write_all_olts,
         CronTrigger(hour=3, minute=0),
         id="olt_write_all",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
+    # Daily backup — 02:00 BDT (before OLT config save)
+    scheduler.add_job(
+        _daily_backup,
+        CronTrigger(hour=2, minute=0),
+        id="daily_backup",
         replace_existing=True,
         misfire_grace_time=300,
     )

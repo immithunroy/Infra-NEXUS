@@ -1112,3 +1112,24 @@ class ChatMessage(Base):
     sql_query: Mapped[str | None] = mapped_column(Text, nullable=True)
     row_count: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BackupRecord(Base):
+    __tablename__ = "backup_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    backup_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/completed/failed
+    trigger: Mapped[str] = mapped_column(String(20), default="manual")  # manual/scheduled
+    app_version: Mapped[str] = mapped_column(String(32), default="")
+    total_files: Mapped[int] = mapped_column(default=0)
+    total_records: Mapped[int] = mapped_column(default=0)
+    total_size_bytes: Mapped[int] = mapped_column(default=0)
+    checksum: Mapped[str] = mapped_column(String(128), default="")
+    local_status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/completed/failed
+    cloud_status: Mapped[str] = mapped_column(String(20), default="disabled")  # disabled/pending/completed/failed
+    file_details: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of file info
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
