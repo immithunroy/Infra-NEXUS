@@ -753,6 +753,7 @@ export default function FiberMap() {
     const results = tjBoxes.map((tj) => {
       const distanceM = haversine(lat, lng, tj.lat, tj.lng);
       const connectedCables = cables.filter((c) =>
+        c.src_tj_id === tj.id || c.dst_tj_id === tj.id ||
         c.segments?.some((s) =>
           (Math.abs(s.start_lat - tj.lat) < 0.001 && Math.abs(s.start_lng - tj.lng) < 0.001) ||
           (Math.abs(s.end_lat - tj.lat) < 0.001 && Math.abs(s.end_lng - tj.lng) < 0.001)
