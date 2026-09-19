@@ -22,7 +22,7 @@ from ..database import SessionLocal
 from ..models import (
     BackupRecord, Cable, CableCut, CableSegment, FiberLoop, FiberApprovalRequest,
     FieldPhoto, MacEntry, MacVendor, MikrotikDevice, Noc, Onu, OnuDownEvent,
-    OnuMacHistory, OnuOutage, OnuSubscriber, OnuTelemetry, OltDevice, OltHealth,
+    OnuMacHistory, OnuOutage, OnuSubscriber, OnuTelemetry, OLTDevice, OltHealth,
     OltWriteLog, PortArea, Pop, PppActiveEntry, Role, ScanLog, Setting,
     SchedulerJobState, SwitchDevice, SwitchPort, Subscriber, Ticket, TicketActivity,
     TicketComment, TicketTemplate, TjBox, TjIdReservation, Splitter, Splice,
@@ -64,7 +64,7 @@ DATASETS = {
     "devices": {
         "label": "Devices",
         "tables": [
-            ("olt_devices", OltDevice),
+            ("olt_devices", OLTDevice),
             ("mikrotik_devices", MikrotikDevice),
             ("switch_devices", SwitchDevice),
             ("switch_ports", SwitchPort),
