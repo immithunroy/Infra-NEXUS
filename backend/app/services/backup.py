@@ -308,7 +308,9 @@ async def create_backup(trigger: str = "manual") -> dict:
             total_size += manifest_path.stat().st_size
 
             # Move staging → final
-            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup_dir.parent.mkdir(parents=True, exist_ok=True)
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)
             shutil.move(str(staging_dir), str(backup_dir))
             # Clean up empty staging parent
             staging_parent = staging_dir.parent
