@@ -127,7 +127,7 @@ export default function BackupRestore() {
     setDeleting(backupId);
     setMsg(null);
     try {
-      await api.delete(`/backup/${backupId}?cloud=${cloud}`);
+      await api.del(`/backup/${backupId}?cloud=${cloud}`);
       setMsg({ ok: true, text: "Backup deleted." });
       loadData();
     } catch (e: any) {
