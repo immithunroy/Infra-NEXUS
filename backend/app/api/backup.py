@@ -60,6 +60,55 @@ async def api_download_backup(backup_id: str, _user=Depends(require_admin)):
     )
 
 
+@router.get("/download/{backup_id}/file")
+async def api_download_backup_file(
+    backup_id: str,
+    dataset: str = Query(..., description="Dataset name (e.g. tj_splitter)"),
+    format: str = Query("json", description="File format: json or xlsx"),
+    _user=Depends(require_admin),
+):
+    """Download a single dataset file (JSON or Excel) from a backup."""
+    settings = get_settings()
+    backup_dir = download_backup(backup_id)
+    if not backup_dir or not backup_dir.exists():
+        raise HTTPException(status_code=404, detail="Backup not found")
+
+    ds_def = DATASETS.get(dataset)
+    if not ds_def:
+        raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset}")
+
+    ext = "json" if format == "json" else "xlsx"
+    filename = f"{dataset}__{ds_def['tables'][0][0]}.{ext}"
+
+    # For multi-table datasets, zip all table files for the dataset
+    if len(ds_def["tables"]) == 1:
+        file_path = backup_dir / filename
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+        return FileResponse(
+            file_path,
+            media_type="application/octet-stream",
+            filename=filename,
+        )
+    else:
+        # Multiple tables — create temp zip of all dataset files
+        import io
+        buf = io.BytesIO()
+        with __import__("zipfile").ZipFile(buf, "w", __import__("zipfile").ZIP_DEFLATED) as zf:
+            for table_name, _model in ds_def["tables"]:
+                fname = f"{dataset}__{table_name}.{ext}"
+                fpath = backup_dir / fname
+                if fpath.exists():
+                    zf.write(fpath, fname)
+        buf.seek(0)
+        zip_name = f"{dataset}.{ext}.zip"
+        return FileResponse(
+            buf,
+            media_type="application/zip",
+            filename=zip_name,
+        )
+
+
 @router.post("/restore/{backup_id}")
 async def api_restore_backup(
     backup_id: str,

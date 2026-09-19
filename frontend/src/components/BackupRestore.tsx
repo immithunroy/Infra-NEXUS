@@ -43,6 +43,12 @@ function formatTime(iso: string | null): string {
   }
 }
 
+const EXPORT_DATASETS = [
+  { key: "tj_splitter", label: "TJ Boxes & Splitters", description: "TJ/SC boxes, splitters, splices" },
+  { key: "cable_routes", label: "Cable Routes", description: "Cables, segments, loops, cuts" },
+  { key: "subscribers_onu", label: "Subscribers & ONUs", description: "Subscribers, ONUs, MAC bindings" },
+];
+
 export default function BackupRestore() {
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [datasets, setDatasets] = useState<BackupDataset[]>([]);
@@ -54,6 +60,7 @@ export default function BackupRestore() {
   const [selectedBackup, setSelectedBackup] = useState<string | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState<string | null>(null);
   const [selectedDatasets, setSelectedDatasets] = useState<Set<string>>(new Set());
+  const [exportBackupId, setExportBackupId] = useState<string>("");
   const [cloudSettings, setCloudSettings] = useState({
     r2_endpoint: "",
     r2_bucket_name: "",
@@ -76,6 +83,9 @@ export default function BackupRestore() {
       setBackups(bList);
       setDatasets(dList);
       setCloudSettings(cSettings);
+      if (bList.length > 0 && !exportBackupId) {
+        setExportBackupId(bList[0].backup_id);
+      }
     } catch (e: any) {
       setMsg({ ok: false, text: e?.response?.data?.detail || "Failed to load backup data" });
     } finally {
@@ -156,6 +166,29 @@ export default function BackupRestore() {
     }
   };
 
+  const handleDownloadDataset = async (dataset: string, format: string) => {
+    if (!exportBackupId) return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/backup/download/${exportBackupId}/file?dataset=${dataset}&format=${format}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^";\n]+)"?/);
+      const filename = filenameMatch ? filenameMatch[1] : `${dataset}.${format === "json" ? "json" : "xlsx"}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setMsg({ ok: false, text: e?.message || "Download failed" });
+    }
+  };
+
   const handleSaveCloudSettings = async () => {
     setCloudMsg(null);
     try {
@@ -199,6 +232,50 @@ export default function BackupRestore() {
               ) : "Create Backup"}
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* Export by Dataset */}
+      <section className="card p-5">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-1">Export by Dataset</h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Download individual dataset files (JSON or Excel) from a backup</p>
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <label className="text-xs text-slate-600 dark:text-slate-400">From backup:</label>
+          <select
+            value={exportBackupId}
+            onChange={(e) => setExportBackupId(e.target.value)}
+            className="input py-1 text-xs max-w-xs"
+          >
+            {backups.filter(b => b.local_status === "completed").map((b) => (
+              <option key={b.backup_id} value={b.backup_id}>
+                {formatTime(b.created_at)} — {b.total_records.toLocaleString()} records
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {EXPORT_DATASETS.map((ds) => (
+            <div key={ds.key} className="rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+              <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1">{ds.label}</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">{ds.description}</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleDownloadDataset(ds.key, "json")}
+                  disabled={!exportBackupId}
+                  className="flex-1 rounded bg-blue-50 px-2 py-1.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40 transition-colors"
+                >
+                  JSON
+                </button>
+                <button
+                  onClick={() => handleDownloadDataset(ds.key, "xlsx")}
+                  disabled={!exportBackupId}
+                  className="flex-1 rounded bg-green-50 px-2 py-1.5 text-[11px] font-medium text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 transition-colors"
+                >
+                  Excel
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
